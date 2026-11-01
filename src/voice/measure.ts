@@ -67,11 +67,27 @@ export interface MeasureInfo {
   formantFrames: number;
   /** of the frames well under the voice inside the speech, the share that still has a pitch (music under the talk raises it) */
   gapTonal: number;
+  /** 高さと大きさの動き（`contour: true` の時だけ。セリフ真似で使う） */
+  contour?: Contour;
 }
+
+/**
+ * 1 つのセリフの、高さと大きさの動き（話しはじめから話し終わりまで、CONTOUR_STEP 秒ごと）。
+ * 高さは 100 Hz を 0 とした半音（声の無い所は NaN）、大きさはその音の大きい所（95%）を 0 とした dB（-40 まで）。
+ */
+export interface Contour {
+  step: number;
+  pitch: Float32Array;
+  level: Float32Array;
+}
+/** 動きの 1 こま（秒） */
+export const CONTOUR_STEP = 0.02;
 
 export interface MeasureOptions {
   /** the least voiced speech (seconds, default MIN_VOICED_SECONDS) */
   minVoicedSeconds?: number;
+  /** 高さと大きさの動き（Contour）も返す */
+  contour?: boolean;
 }
 
 export type Measured = { ok: true; features: Features; info: MeasureInfo } | { ok: false; reason: MeasureFail; info: Partial<MeasureInfo> };
@@ -1059,8 +1075,9 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   const rMid = Math.max(1e-6, median(matches));
   const hnrDb = 10 * Math.log10(rMid / (1 - rMid));
 
-  // (formants from fewer than 1 s of frames are left out: too few to trust)
-  const enoughF = F1.length >= 100;
+  // (formants from fewer than 0.3 s of frames are left out: too few to trust. Their spread needs 1 s)
+  const enoughF = F1.length >= 30;
+  const enoughSpread = F1.length >= 100;
   const spreadSt = (v: number[]) => 12 * Math.log2(quantileOf(v, 0.9) / quantileOf(v, 0.1));
   const raw2: Record<string, number> = {
     pitch: f0Hz,
@@ -1070,10 +1087,10 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     f1: enoughF ? median(F1) : NaN,
     f2: enoughF ? median(F2) : NaN,
     f3: enoughF ? median(F3) : NaN,
-    f4: F4.length >= 100 ? median(F4) : NaN,
+    f4: F4.length >= 50 ? median(F4) : NaN,
     formantSpacing: enoughF ? median(dF) : NaN,
-    f1Range: enoughF ? spreadSt(F1) : NaN,
-    f2Range: enoughF ? spreadSt(F2) : NaN,
+    f1Range: enoughSpread ? spreadSt(F1) : NaN,
+    f2Range: enoughSpread ? spreadSt(F2) : NaN,
     b1: enoughF ? median(B1) : NaN,
     b2: enoughF ? median(B2) : NaN,
     centroid: centroidHz,
@@ -1084,8 +1101,8 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     // (the mean, not the median: the moves between sounds are what it is about, and they are a small part of the frames)
     mfccDelta: mfccSteps.length >= 50 ? mfccSteps.reduce((x, y) => x + y, 0) / mfccSteps.length : NaN,
     hnr: hnrDb,
-    cpp: cpps.length >= 50 ? median(cpps) : NaN,
-    h1h2: h12.length >= 50 ? median(h12) : NaN,
+    cpp: cpps.length >= 30 ? median(cpps) : NaN,
+    h1h2: h12.length >= 30 ? median(h12) : NaN,
     jitter,
     shimmer,
     rate,
@@ -1099,5 +1116,28 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     tilt: tiltDb,
   };
   const features = Object.fromEntries(FEATURE_KEYS.map((k) => [k, roundFeature(k, raw2[k])])) as Features;
-  return { ok: true, features, info: info1 };
+  if (!opts.contour) return { ok: true, features, info: info1 };
+
+  /* セリフの高さと大きさの動き（話しはじめから話し終わりまで、2 枠ずつ） */
+  const k = Math.round((CONTOUR_STEP * RATE) / HOP);
+  const first = speech[0]![0],
+    last = speech[speech.length - 1]![1];
+  const nC = Math.max(1, Math.ceil((last - first + 1) / k));
+  const pitch = new Float32Array(nC),
+    lv = new Float32Array(nC);
+  for (let c = 0; c < nC; c++) {
+    let sum = 0,
+      cnt = 0,
+      top = -Infinity;
+    for (let f = first + c * k; f < Math.min(last + 1, first + (c + 1) * k); f++) {
+      if (isVs(f)) {
+        sum += st[f]!;
+        cnt++;
+      }
+      top = Math.max(top, level[f]!);
+    }
+    pitch[c] = cnt ? Math.round((sum / cnt) * 100) / 100 : NaN;
+    lv[c] = Math.round(Math.max(-40, Math.min(0, top - loudDb)) * 10) / 10;
+  }
+  return { ok: true, features, info: { ...info1, contour: { step: CONTOUR_STEP, pitch, level: lv } } };
 }

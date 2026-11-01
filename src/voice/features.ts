@@ -169,3 +169,21 @@ export function roundFeature(key: FeatureKey, v: number | null | undefined): num
   const r = Math.round(v * k) / k;
   return Object.is(r, -0) ? 0 : r;
 }
+
+/* ---- 一言から測る時: 項目ごとに、1 回に要る声の長さ ---- */
+/** 一言（声 0.4 秒ほど。話して 1 秒ほど）から測る */
+export const ONE_LINE_SECONDS = 0.4;
+/** 抑揚・口の開きの幅などは、1 回で声 3 秒から（短いと、言った言葉で大きく揺れる） */
+export const FEW_SECONDS = 3;
+/** 速さと間は、1 回で声 8 秒から（続けて話さないと測れない） */
+export const LONG_SECONDS = 8;
+const NEED_FEW: readonly FeatureKey[] = ['pitchRange', 'pitchSkew', 'pitchMotion', 'f1Range', 'f2Range', 'mfccDelta', 'levelRange', 'slopeMid'];
+const NEED_LONG: readonly FeatureKey[] = ['rate', 'rateVar', 'pauseShare', 'pauseLen', 'runLen', 'rhythm', 'voicedShare'];
+/** その項目に、1 回で要る声（秒） */
+export function needOf(k: FeatureKey): number {
+  return NEED_LONG.includes(k) ? LONG_SECONDS : NEED_FEW.includes(k) ? FEW_SECONDS : ONE_LINE_SECONDS;
+}
+/** 声の長さが足りない項目を null にした写し */
+export function forLength(f: Features, voicedSeconds: number): Features {
+  return Object.fromEntries(FEATURE_KEYS.map((k) => [k, voicedSeconds >= needOf(k) ? f[k] : null])) as Features;
+}

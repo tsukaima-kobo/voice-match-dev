@@ -79,7 +79,8 @@ export interface MimicScore {
 export function mimicScore(target: Features, mine: Features): MimicScore | null {
   const d = differences(target, mine);
   if (d.length < MIN_ITEMS) return null;
-  const s = d.reduce((acc, x) => acc + Math.min(Math.abs(x.z), CLIP) ** 2, 0);
+  // (with fewer items, as if the missing ones were off by the same: a short take must not score higher for leaving items out)
+  const s = (d.reduce((acc, x) => acc + Math.min(Math.abs(x.z), CLIP) ** 2, 0) * SCORED_KEYS.length) / d.length;
   return { score: Math.round(100 * Math.exp(-s / SCORE_SCALE)), used: d.length };
 }
 

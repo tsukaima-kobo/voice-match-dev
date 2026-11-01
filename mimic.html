@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>声真似の点数｜voice-twin</title>
-    <meta name="description" content="お手本の声を聞かせてから真似して話すと、声の高さ・響き・速さなど 45 項目で比べて、近さの点数と直し方を出します。音は端末の中だけで数字にして、どこにも送りません。" />
+    <meta name="description" content="お手本のセリフを聞かせてから真似して言うと、抑揚・タイミング・声の質で比べて、近さの点数と直し方を出します。セリフ 1 つから。音は端末の中だけで数字にして、どこにも送りません。" />
     <meta name="theme-color" content="#f7f6fd" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0f0d1c" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0478f'/%3E%3Cstop offset='.55' stop-color='%237a4dff'/%3E%3Cstop offset='1' stop-color='%2362d8ec'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='14' fill='url(%23g)'/%3E%3C/svg%3E" />
@@ -21,8 +21,8 @@
           <div class="hero-copy">
             <p class="eyebrow">声真似練習場</p>
             <h1><span class="grad">声真似</span>の点数</h1>
-            <p class="lead">お手本の声を聞かせてから、真似して話してください。声の高さ・響き・速さなど 45 項目で比べて、近さの点数と、近づけるための直し方を出します。</p>
-            <ul class="chips"><li>登録なし</li><li>お手本の音も、あなたの声も送らない・残さない</li></ul>
+            <p class="lead">お手本のセリフを聞かせてから、真似して言ってください。セリフ 1 つなら、抑揚とタイミングまで 2 本の線で重ねて比べます。長めの声なら、声の高さ・響き・速さなど 45 項目で比べます。</p>
+            <ul class="chips"><li>セリフ 1 つから</li><li>登録なし</li><li>お手本の音も、あなたの声も送らない・残さない</li></ul>
           </div>
           <div class="orb-wrap">
             <div class="orb" id="orb" aria-hidden="true"></div>
@@ -36,7 +36,7 @@
           <div class="step-head"><span class="step-no" aria-hidden="true">1</span><h2 id="ref-title">お手本を聞かせる</h2></div>
 
           <div id="ref-pick" class="pick">
-            <p class="hint">BGM・効果音・ほかの人の声が入っていない所を選んでください。声が 8 秒以上いります。短いセリフは、いくつか続けて聞かせてください。</p>
+            <p class="hint">BGM・効果音・ほかの人の声が入っていない所を選んでください。セリフ 1 つ（「おはようございます」くらいから）でも、長めの声でもかまいません。セリフ 1 つなら、抑揚とタイミングまで比べる「セリフ真似」になります。</p>
             <div class="sources" role="group" aria-label="お手本の聞かせ方">
               <button type="button" id="ref-mic">マイクで聞かせる</button>
               <button type="button" id="ref-tab" hidden>ほかのタブの音を取る</button>
@@ -70,6 +70,7 @@
             <button type="button" id="ref-change" hidden>お手本を変える</button>
           </div>
           <p class="ref-summary" id="ref-summary" hidden></p>
+          <p class="hint" id="reg-short" hidden></p>
           <details class="register" id="register" hidden>
             <summary>この声をサイトに登録する（ログインなし・だれでも）</summary>
             <div class="register-body">
@@ -105,8 +106,9 @@
 
         <section class="stage step" id="mim" data-state="locked" aria-labelledby="mim-title">
           <div class="step-head"><span class="step-no" aria-hidden="true">2</span><h2 id="mim-title">真似して話す</h2></div>
-          <p class="hint">お手本と同じセリフでも、下のお題をお手本の声で話してもかまいません。声が 8 秒以上いります（最大 35 秒）。</p>
-          <div class="topic">
+          <p class="line-hint" id="line-hint" hidden>お手本と<strong>同じセリフ</strong>を、お手本のように言ってください。</p>
+          <div class="topic" id="topic-box">
+            <p class="hint">お手本と同じセリフでも、下のお題をお手本の声で話してもかまいません（最大 35 秒）。</p>
             <p class="topic-label" id="topic-label">お題</p>
             <p class="topic-text" id="topic-text"></p>
             <div class="topic-actions">
@@ -136,9 +138,25 @@
                 <p class="score-label" id="score-label"></p>
                 <p class="score-word" id="score-word"></p>
                 <p class="best" id="best"></p>
+                <div class="subscores" id="subscores" hidden>
+                  <div class="sub" id="sub-into"><span>抑揚</span><i aria-hidden="true"></i><b></b></div>
+                  <div class="sub" id="sub-timing"><span>タイミング</span><i aria-hidden="true"></i><b></b></div>
+                  <div class="sub" id="sub-voice"><span>声の質</span><i aria-hidden="true"></i><b></b></div>
+                </div>
               </div>
             </div>
           </div>
+          <figure class="line-box card" id="line-box" hidden>
+            <figcaption class="line-head">
+              <span class="line-title">抑揚の重なり</span>
+              <span class="legend"><span><i class="swatch ref" aria-hidden="true"></i>お手本</span><span><i class="swatch mine" aria-hidden="true"></i>あなた（お手本の時間に合わせて）</span></span>
+            </figcaption>
+            <div class="line-frame">
+              <span class="axis hi">高い</span><span class="axis lo">低い</span>
+              <div class="line-chart" id="line-chart"></div>
+            </div>
+            <p class="line-foot"><span>0 秒</span><span>下の山はお手本の声の大きさ</span><span id="line-seconds"></span></p>
+          </figure>
           <header class="section-head">
             <p class="kicker">01 直し方</p>
             <h2>近づけるには</h2>
@@ -150,7 +168,7 @@
           </header>
           <p class="legend"><span><i class="dot ref" aria-hidden="true"></i>お手本</span><span><i class="dot" aria-hidden="true"></i>あなた</span></p>
           <div class="groups" id="compare"></div>
-          <p class="empty">点数と直し方は、自分で変えやすい 12 項目（高さ・抑揚・響き・息・柔らかさ・力・速さ・間・強弱）で出します。音色やゆらぎは表にだけ出します。点数は今のところの目安で、本物の声で確かめたら目盛りを見直します。声から性別や年齢は判断しません。</p>
+          <p class="empty">声の質の点と直し方は、自分で変えやすい 12 項目（高さ・抑揚・響き・息・柔らかさ・力・速さ・間・強弱）で出します。短い声では、測れた項目だけで比べます（「—」の項目）。セリフ真似の点数は、抑揚 4・タイミング 2.5・声の質 3.5 の割合で合わせます。点数は今のところの目安で、本物の声で確かめたら目盛りを見直します。声から性別や年齢は判断しません。</p>
         </section>
       </main>
       <footer class="site-foot">

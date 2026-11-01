@@ -1,4 +1,7 @@
 // 声真似の点数のページ（mimic.html）: お手本を選ぶか聞かせる → 数字にする → 真似して話す → 近さの点数と直し方。
+// お手本が 1 つのセリフ（話しはじめから終わりまで LINE_MAX_SECONDS 以内）なら「セリフ真似」: 高さと大きさの動き（Contour）も持ち、
+// 同じセリフを真似した声と、抑揚・タイミング（mimic/line.ts）と声の質（mimic.ts）で比べ、2 本の線を重ねた図を出す。
+// それより長いお手本と、このサイトで測ったお手本は「声全体」: 声の数字だけで比べる。どちらも一言（声 0.4 秒）から。
 // 声のページ（index.html）の結果から `?target=<ID>` で来た時は、その声をお手本にする。
 // 音（お手本も利用者の声も）はメモリーの中だけ。数字にしたらすぐ捨てる。どこにも送らない、端末にも残さない。
 // お手本の数字もメモリーの中だけで、ページを閉じれば消える（localStorage なども使わない）。
@@ -10,7 +13,10 @@ import { measureVoice, type MeasureFail } from '../voice/measure.ts';
 import { LONG_MAX_SECONDS, measureLong } from '../voice/combine.ts';
 import { createWave, type Wave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
-import { FEATURE_BY_KEY, formatFeature, type Features } from '../voice/features.ts';
+import { FEATURE_BY_KEY, forLength, formatFeature, LONG_SECONDS, ONE_LINE_SECONDS, type Features } from '../voice/features.ts';
+import type { Contour, Measured } from '../voice/measure.ts';
+import { compareLines, LINE_MAX_SECONDS, lineScore } from '../mimic/line.ts';
+import { drawLineChart } from './line-chart.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { adviceFor, differences, mimicScore, scoreWord } from '../mimic/mimic.ts';
 import { ENTRY_BY_ID, PROFILES } from '../data/load.ts';
@@ -21,10 +27,12 @@ import { SUBMIT_FORM } from '../submit/config.ts';
 /** 聞く長さの最大（秒） */
 const LISTEN_MAX = 35;
 /** 「聞かせ終えた」「話し終えた」を押せるまで（秒） */
-const REF_DONE_AFTER = 8;
-const MIM_DONE_AFTER = 10;
-/** 要る声（秒） */
-const MIN_VOICED = 8;
+const REF_DONE_AFTER = 1;
+const MIM_DONE_AFTER = 1;
+/** 声の登録に要る声（秒。壁 ① と同じ） */
+const REG_MIN_VOICED = LONG_SECONDS;
+/** 雑音の床が分からない短いファイル（声だけを切り出した物）は、前後に無音を足して測り直す（その時は登録しない） */
+const PAD_FILE_MAX_SECONDS = 15;
 /** お手本の音声ファイルの大きさの上限 */
 const FILE_MAX_BYTES = 20 * 1024 * 1024;
 /** 音声ファイルは、この速さで読む（measure.ts もこの速さにしてから測る） */
@@ -150,6 +158,10 @@ interface Target {
   features: Features;
   name: string;
   reg?: { source: Source; quality: { voicedSeconds: number; gapTonal: number; snrDb: number } };
+  /** セリフ真似の時だけ: お手本の高さと大きさの動き */
+  contour?: Contour;
+  /** 利用者が聞かせたお手本の声（秒）。このサイトで測ったお手本は無し */
+  voicedSeconds?: number;
 }
 let target: Target | null = null;
 let refKind: 'mic' | 'tab' = 'mic';
@@ -172,6 +184,9 @@ function showRef(next: RefState, text: string, bad = false): void {
   ref.change.hidden = next !== 'ready';
   ref.summary.hidden = next !== 'ready';
   reg.box.hidden = !(next === 'ready' && target?.reg);
+  const short = next === 'ready' && target?.voicedSeconds !== undefined && !target.reg;
+  regShort.hidden = !short;
+  if (short) regShort.textContent = `この声をサイトに登録するには、声が ${REG_MIN_VOICED} 秒以上いります（今は ${target!.voicedSeconds!.toFixed(1)} 秒）。セリフをいくつか続けて聞かせると、登録もできます。`;
 }
 
 async function refListen(kind: 'mic' | 'tab'): Promise<void> {
@@ -189,8 +204,8 @@ async function refListen(kind: 'mic' | 'tab'): Promise<void> {
     showRef(
       'listening',
       kind === 'mic'
-        ? `お手本を流して、マイクに聞かせてください。音が聞こえたら数えはじめます。${REF_DONE_AFTER} 秒すぎたら「聞かせ終えた」を押せます（最大 ${LISTEN_MAX} 秒）。`
-        : `選んだタブで、お手本を再生してください。音が来てから ${LISTEN_MAX} 秒で止まります。早く終える時は、このページに戻って「聞かせ終えた」を押してください。`,
+        ? `お手本を流して、マイクに聞かせてください。音が聞こえたら数えはじめます。セリフ 1 つでもかまいません。流し終えたら「聞かせ終えた」を押してください（最大 ${LISTEN_MAX} 秒）。`
+        : `選んだタブで、お手本を再生してください。セリフ 1 つなら、言い終わったら動画を止めて、このページで「聞かせ終えた」を押してください（音が来てから ${LISTEN_MAX} 秒で止まります）。`,
     );
   } catch (e) {
     if (my !== refToken) return;
@@ -209,17 +224,29 @@ function refFinish(): void {
   }
   showRef('analysing', '数字にしています…');
   setTimeout(() => {
-    const m = measureVoice(got.pcm, got.rate, { minVoicedSeconds: MIN_VOICED });
+    const m = measureVoice(got.pcm, got.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true });
     got.pcm.fill(0);
     if (!m.ok) {
       showRef('failed', failText(m.reason, m.info.voicedSeconds, true), true);
       return;
     }
-    setTarget(m.features, ref.name.value.trim(), `声 ${m.info.voicedSeconds.toFixed(1)} 秒分`, {
-      source: refKind,
-      quality: { voicedSeconds: m.info.voicedSeconds, gapTonal: m.info.gapTonal, snrDb: m.info.loudDb - m.info.floorDb },
-    });
-  }, 30);
+    targetFrom(m, refKind, false);
+  }, 120);
+}
+
+/** 測ったお手本から Target を作る（セリフ 1 つなら動きも。登録は声が足りて、無音を足していない時だけ） */
+function targetFrom(m: Extract<Measured, { ok: true }>, source: Source, padded: boolean): void {
+  const i = m.info;
+  const line = i.contour && i.speechSeconds <= LINE_MAX_SECONDS ? i.contour : undefined;
+  const canReg = !padded && i.voicedSeconds >= REG_MIN_VOICED;
+  setTarget(
+    forLength(m.features, i.voicedSeconds),
+    ref.name.value.trim(),
+    line ? `セリフ ${i.speechSeconds.toFixed(1)} 秒` : `声 ${i.voicedSeconds.toFixed(1)} 秒分`,
+    canReg ? { source, quality: { voicedSeconds: i.voicedSeconds, gapTonal: i.gapTonal, snrDb: i.loudDb - i.floorDb } } : undefined,
+    line,
+    i.voicedSeconds,
+  );
 }
 
 function refCancel(): void {
@@ -262,8 +289,32 @@ async function refFromFile(f: File): Promise<void> {
     if (my === refToken) showRef('failed', 'このファイルは読めませんでした。mp3・m4a・wav などの音声ファイルを選んでください。', true);
     return;
   }
+  const secs = sound.pcm.length / sound.rate;
+  if (secs <= 40) {
+    // (a short file: measured at once, with its pitch and loudness over time for a line)
+    await new Promise((r) => setTimeout(r, 0));
+    let m = measureVoice(sound.pcm, sound.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true });
+    let padded = false;
+    if (!m.ok && m.reason === 'noisy' && secs <= PAD_FILE_MAX_SECONDS) {
+      // (a clip cut to the voice has no quiet part to tell the noise by: try again with quiet on both sides)
+      const pad = Math.round(sound.rate * 0.3);
+      const x = new Float32Array(sound.pcm.length + 2 * pad);
+      x.set(sound.pcm, pad);
+      m = measureVoice(x, sound.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true });
+      x.fill(0);
+      padded = true;
+    }
+    sound.pcm.fill(0);
+    if (my !== refToken) return;
+    if (!m.ok) {
+      showRef('failed', failText(m.reason, m.info.voicedSeconds, true), true);
+      return;
+    }
+    targetFrom(m, 'file', padded);
+    return;
+  }
   const m = await measureLong(sound.pcm, sound.rate, {
-    minVoicedSeconds: MIN_VOICED,
+    minVoicedSeconds: ONE_LINE_SECONDS,
     onProgress: (done, total) => {
       if (total > 1 && my === refToken) ref.status.textContent = `数字にしています… ${done} / ${total}`;
     },
@@ -275,19 +326,25 @@ async function refFromFile(f: File): Promise<void> {
     return;
   }
   const part = m.seconds >= LONG_MAX_SECONDS ? `最初の ${LONG_MAX_SECONDS / 60} 分のうち、声 ${m.voicedSeconds.toFixed(1)} 秒分` : `声 ${m.voicedSeconds.toFixed(1)} 秒分`;
-  setTarget(m.features, ref.name.value.trim(), part, { source: 'file', quality: { voicedSeconds: m.voicedSeconds, gapTonal: m.gapTonal, snrDb: m.snrDb } });
+  const canReg = m.voicedSeconds >= REG_MIN_VOICED;
+  setTarget(forLength(m.features, m.voicedSeconds), ref.name.value.trim(), part, canReg ? { source: 'file', quality: { voicedSeconds: m.voicedSeconds, gapTonal: m.gapTonal, snrDb: m.snrDb } } : undefined, undefined, m.voicedSeconds);
 }
 
-function setTarget(features: Features, name: string, from: string, regInfo?: Target['reg']): void {
-  target = { features, name, ...(regInfo ? { reg: regInfo } : {}) };
+function setTarget(features: Features, name: string, from: string, regInfo?: Target['reg'], contour?: Contour, voicedSeconds?: number): void {
+  target = { features, name, ...(regInfo ? { reg: regInfo } : {}), ...(contour ? { contour } : {}), ...(voicedSeconds !== undefined ? { voicedSeconds } : {}) };
   resetRegister(name);
   best = 0;
   tries = 0;
   $('result').hidden = true;
   const f = features;
-  ref.summary.textContent = `${name ? `「${name}」をお手本にしました` : 'お手本を測りました'}（${from}）。声の高さ ${formatFeature('pitch', f.pitch)}・抑揚 ${formatFeature('pitchRange', f.pitchRange)}・速さ ${formatFeature('rate', f.rate)}。`;
-  showRef('ready', 'お手本の準備ができました。次は、真似して話してください。');
-  showMim('idle', '「真似して話す」を押して、お手本のように話してください。');
+  const who = name ? `「${name}」` : '';
+  ref.summary.textContent = contour
+    ? `${who ? `${who}のセリフ` : 'セリフ'}をお手本にしました（${from}）。セリフ真似: 抑揚とタイミングまで比べます。声の高さ ${formatFeature('pitch', f.pitch)}。`
+    : `${who ? `${who}をお手本にしました` : 'お手本を測りました'}（${from}）。声の高さ ${formatFeature('pitch', f.pitch)}・抑揚 ${formatFeature('pitchRange', f.pitchRange)}・速さ ${formatFeature('rate', f.rate)}。`;
+  topicBox.hidden = !!contour;
+  lineHint.hidden = !contour;
+  showRef('ready', contour ? 'お手本の準備ができました。次は、同じセリフを真似して言ってください。' : 'お手本の準備ができました。次は、真似して話してください。');
+  showMim('idle', contour ? '「真似して話す」を押して、お手本と同じセリフを言ってください。' : '「真似して話す」を押して、お手本のように話してください。');
 }
 
 ref.mic.addEventListener('click', () => void refListen('mic'));
@@ -307,6 +364,7 @@ ref.change.addEventListener('click', () => {
   showMim('locked', '先にお手本を聞かせてください。');
 });
 /* お手本の声をサイトに登録する（アキネーター方式。壁 ① をここで確かめ、送るのは利用者が Google フォームで） */
+const regShort = $('reg-short');
 const reg = {
   box: $<HTMLDetailsElement>('register'),
   name: $<HTMLInputElement>('reg-name'),
@@ -382,6 +440,8 @@ if (PROFILES.length) {
 }
 
 /* ---- 2. 真似 ---- */
+const topicBox = $('topic-box');
+const lineHint = $('line-hint');
 const topic = { label: $('topic-label'), text: $('topic-text'), next: $<HTMLButtonElement>('topic-next'), read: $<HTMLButtonElement>('topic-read') };
 let prompt: string | null = nextPrompt(null);
 let reading = false;
@@ -442,7 +502,7 @@ async function mimStart(): Promise<void> {
       return;
     }
     mimTake.begin(m);
-    showMim('listening', `お手本のように話してください。${MIM_DONE_AFTER} 秒すぎたら「話し終えた」を押せます（最大 ${LISTEN_MAX} 秒）。`);
+    showMim('listening', target.contour ? 'お手本と同じセリフを、お手本のように言ってください。言い終えたら「話し終えた」を押してください。' : `お手本のように話してください。一言でもかまいませんが、長く話すほど多くの項目で比べられます（最大 ${LISTEN_MAX} 秒）。`);
   } catch (e) {
     if (my !== mimToken) return;
     mimTake.stop();
@@ -460,20 +520,20 @@ function mimFinish(): void {
   }
   showMim('analysing', '数字にしています…');
   setTimeout(() => {
-    const m = measureVoice(got.pcm, got.rate, { minVoicedSeconds: MIN_VOICED });
+    const m = measureVoice(got.pcm, got.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: !!target?.contour });
     got.pcm.fill(0);
     if (!target) return;
     if (!m.ok) {
       showMim('failed', failText(m.reason, m.info.voicedSeconds, false), true);
       return;
     }
-    if (!render(target, m.features)) {
+    if (!render(target, forLength(m.features, m.info.voicedSeconds), m.info.contour)) {
       showMim('failed', 'お手本と比べられる項目がありませんでした。お手本か声を測り直してください。', true);
       return;
     }
     showMim('done', '測りました。結果は下にあります。');
     $('result').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-  }, 30);
+  }, 120);
 }
 
 function mimCancel(): void {
@@ -507,8 +567,8 @@ function failText(reason: MeasureFail, voiced: number | undefined, model: boolea
       return model ? 'お手本の音が大きすぎて、割れていました。音量を少し下げてください。' : '声が大きすぎて、音が割れていました。マイクから少し離れてください。';
     case 'short':
       return model
-        ? `お手本の声を ${v} 秒分しか測れませんでした（${MIN_VOICED} 秒以上いります）。セリフをいくつか続けて聞かせてください。`
-        : `声を ${v} 秒分しか測れませんでした（${MIN_VOICED} 秒以上いります）。ささやかずに、もう少し長く話してください。`;
+        ? `お手本の声を ${v} 秒分しか測れませんでした。声がはっきり聞こえるセリフを、1 つ以上流してください。`
+        : `声を ${v} 秒分しか測れませんでした。「おはようございます」くらいの長さで、ささやかずに言ってください。`;
     default:
       return 'うまく数字にできませんでした。もう一度試してください。';
   }
@@ -538,25 +598,47 @@ function showScore(score: number): void {
   };
   requestAnimationFrame(step);
 }
-function render(t: { features: Features; name: string }, mine: Features): boolean {
-  const s = mimicScore(t.features, mine);
-  if (!s) return false;
+function render(t: Target, mine: Features, mineContour?: Contour): boolean {
+  const voice = mimicScore(t.features, mine);
+  const line = t.contour && mineContour ? compareLines(t.contour, mineContour) : null;
+  if (!voice && !line) return false;
+  const score = line ? lineScore(line, voice?.score ?? null) : voice!.score;
   tries++;
   const before = best;
-  best = Math.max(best, s.score);
-  $('score-label').textContent = `${t.name ? `「${t.name}」` : 'お手本'}との近さ`;
-  showScore(s.score);
-  $('score-word').textContent = scoreWord(s.score);
-  $('best').textContent = tries === 1 ? '' : s.score > before ? `最高点を更新しました（${tries} 回目）` : `このお手本での最高は ${best} 点です（${tries} 回目）`;
+  best = Math.max(best, score);
+  $('score-label').textContent = `${t.name ? `「${t.name}」` : 'お手本'}との近さ${line ? '（セリフ真似）' : ''}`;
+  showScore(score);
+  $('score-word').textContent = scoreWord(score);
+  $('best').textContent = tries === 1 ? '' : score > before ? `最高点を更新しました（${tries} 回目）` : `このお手本での最高は ${best} 点です（${tries} 回目）`;
+
+  // (line: the three parts of the score, and the two pitch lines one over the other)
+  const subs = $('subscores');
+  subs.hidden = !line;
+  $('line-box').hidden = !line;
+  if (line) {
+    const part = (id: string, v: number | null) => {
+      const e = $(id);
+      e.style.setProperty('--v', String(v ?? 0));
+      e.querySelector('b')!.textContent = v === null ? '—' : String(v);
+    };
+    part('sub-into', line.intonation);
+    part('sub-timing', line.timing);
+    part('sub-voice', voice?.score ?? null);
+    drawLineChart($('line-chart'), t.contour!, line.warped);
+    $('line-seconds').textContent = `${line.refSeconds.toFixed(1)} 秒`;
+  }
 
   const diffs = differences(t.features, mine);
   const list = $('advice');
   list.replaceChildren();
-  const tips = adviceFor(diffs, 3);
-  if (!tips.length) list.append(el('li', undefined, 'ほぼそろっています。次は、セリフの言い回しや語尾も寄せてみてください。'));
-  for (const tip of tips) {
+  const tips: { text: string; why?: string }[] = [];
+  for (const tip of (line?.tips ?? []).slice(0, 2)) tips.push({ text: tip.text });
+  for (const tip of adviceFor(diffs, 3)) tips.push({ text: tip.text, why: `（${FEATURE_BY_KEY[tip.key].name}: お手本 ${formatFeature(tip.key, t.features[tip.key])}・あなた ${formatFeature(tip.key, mine[tip.key])}）` });
+  if (!tips.length) list.append(el('li', undefined, line ? 'ほぼそろっています。次は、声の出し方の細かい所（息・響き）も寄せてみてください。' : 'ほぼそろっています。次は、セリフ 1 つをお手本にして、言い回しや語尾も寄せてみてください。'));
+  for (const tip of tips.slice(0, 3)) {
     const li = el('li');
-    li.append(el('strong', undefined, tip.text), el('span', 'why', `（${FEATURE_BY_KEY[tip.key].name}: お手本 ${formatFeature(tip.key, t.features[tip.key])}・あなた ${formatFeature(tip.key, mine[tip.key])}）`));
+    li.append(el('strong', undefined, tip.text));
+    if (tip.why) li.append(el('span', 'why', tip.why));
     list.append(li);
   }
 
