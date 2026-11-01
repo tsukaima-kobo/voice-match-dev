@@ -4,6 +4,7 @@
 // 入るのは数字・名前・所属や作品名・公式ページのリンク・測り方と測れた声の質だけ。音は入らない。送った人の情報も入らない。
 import { FEATURE_BY_KEY, FEATURE_KEYS, roundFeature, type FeatureKey, type Features } from '../voice/features.ts';
 import { MEASURE_VERSION } from '../voice/measure.ts';
+import { t } from '../i18n.ts';
 
 /** 送る内容の頭（フォームの回答の中から見つけるため） */
 export const CODE_PREFIX = 'voice-twin:';
@@ -167,48 +168,48 @@ export interface Problem {
 /** 壁 ①: 送る内容を確かめる。問題が無ければ空の配列 */
 export function checkSubmission(s: Submission): Problem[] {
   const out: Problem[] = [];
-  if (s.m !== MEASURE_VERSION) out.push({ kind: 'version', text: `測り方の版が違います（${s.m}。今は ${MEASURE_VERSION}）。ページを読み直して、測り直してください。` });
+  if (s.m !== MEASURE_VERSION) out.push({ kind: 'version', text: t(`測り方の版が違います（${s.m}。今は ${MEASURE_VERSION}）。ページを読み直して、測り直してください。`, `It was measured with another version (${s.m}; now ${MEASURE_VERSION}). Reload the page and measure again.`) });
   if (s.f.length !== FEATURE_KEYS.length) {
-    out.push({ kind: 'shape', text: '数字の数が合いません。' });
+    out.push({ kind: 'shape', text: t('数字の数が合いません。', 'The number of values does not match.') });
     return out;
   }
-  if (!s.ok) out.push({ kind: 'consent', text: '「公開されている声で、一般の人の声ではない」に印をつけてください。' });
+  if (!s.ok) out.push({ kind: 'consent', text: t('「公開されている声で、一般の人の声ではない」に印をつけてください。', 'Tick “this is a public voice, not a private person’s”.') });
   const name = s.n.trim();
-  if (!name || [...name].length > LIMITS.name || /[\u0000-\u001f\u007f]/.test(name) || /https?:|www\./i.test(name)) out.push({ kind: 'name', text: `名前は 1〜${LIMITS.name} 文字で、URL を入れないでください。` });
-  if (s.g !== undefined && ([...s.g].length > LIMITS.group || /[\u0000-\u001f\u007f]/.test(s.g) || /https?:/i.test(s.g))) out.push({ kind: 'group', text: `所属・作品名は ${LIMITS.group} 文字までで、URL を入れないでください。` });
+  if (!name || [...name].length > LIMITS.name || /[\u0000-\u001f\u007f]/.test(name) || /https?:|www\./i.test(name)) out.push({ kind: 'name', text: t(`名前は 1〜${LIMITS.name} 文字で、URL を入れないでください。`, `The name must be 1–${LIMITS.name} characters, without a URL.`) });
+  if (s.g !== undefined && ([...s.g].length > LIMITS.group || /[\u0000-\u001f\u007f]/.test(s.g) || /https?:/i.test(s.g))) out.push({ kind: 'group', text: t(`所属・作品名は ${LIMITS.group} 文字までで、URL を入れないでください。`, `The agency or title must be up to ${LIMITS.group} characters, without a URL.`) });
   const linkProblem = checkLink(s.l);
   if (linkProblem) out.push({ kind: 'link', text: linkProblem });
-  if (!(s.q.vs >= LIMITS.minVoiced)) out.push({ kind: 'quality', text: `測れた声が ${LIMITS.minVoiced} 秒に足りません。` });
-  if (!(s.q.gt <= LIMITS.maxGapTonal)) out.push({ kind: 'quality', text: '声の間に音楽が続いています。BGM の無い所で測り直してください。' });
-  if (!(s.q.snr >= LIMITS.minSnr)) out.push({ kind: 'quality', text: '声のほかの音が大きすぎます。静かな所で測り直してください。' });
+  if (!(s.q.vs >= LIMITS.minVoiced)) out.push({ kind: 'quality', text: t(`測れた声が ${LIMITS.minVoiced} 秒に足りません。`, `Less than ${LIMITS.minVoiced} s of voice was measured.`) });
+  if (!(s.q.gt <= LIMITS.maxGapTonal)) out.push({ kind: 'quality', text: t('声の間に音楽が続いています。BGM の無い所で測り直してください。', 'Music keeps playing between the words. Measure again from a part without BGM.') });
+  if (!(s.q.snr >= LIMITS.minSnr)) out.push({ kind: 'quality', text: t('声のほかの音が大きすぎます。静かな所で測り直してください。', 'Other sounds are too loud. Measure again somewhere quiet.') });
   const f = featuresOf(s);
   const missing = REQUIRED.filter((k) => f[k] === null);
-  if (missing.length) out.push({ kind: 'missing', text: `測れなかった項目があります（${missing.map((k) => FEATURE_BY_KEY[k].name).join('・')}）。` });
+  if (missing.length) out.push({ kind: 'missing', text: t(`測れなかった項目があります（${missing.map((k) => FEATURE_BY_KEY[k].name).join('・')}）。`, `Some items could not be measured (${missing.map((k) => FEATURE_BY_KEY[k].name).join(', ')}).`) });
   const bad = FEATURE_KEYS.filter((k) => {
     const v = f[k];
     if (v === null) return false;
     const [lo, hi] = PLAUSIBLE[k];
     return !Number.isFinite(v) || v < lo || v > hi || roundFeature(k, v) !== v;
   });
-  if (bad.length) out.push({ kind: 'range', text: `ありえない数字があります（${bad.map((k) => FEATURE_BY_KEY[k].name).join('・')}）。` });
+  if (bad.length) out.push({ kind: 'range', text: t(`ありえない数字があります（${bad.map((k) => FEATURE_BY_KEY[k].name).join('・')}）。`, `Some values are impossible (${bad.map((k) => FEATURE_BY_KEY[k].name).join(', ')}).`) });
   const fs = [f.f1, f.f2, f.f3, f.f4].filter((x): x is number => x !== null);
-  if (fs.some((x, i) => i > 0 && !(x > fs[i - 1]!))) out.push({ kind: 'order', text: 'フォルマントの順番がおかしい数字です。' });
+  if (fs.some((x, i) => i > 0 && !(x > fs[i - 1]!))) out.push({ kind: 'order', text: t('フォルマントの順番がおかしい数字です。', 'The formants are out of order.') });
   return out;
 }
 
 /** 公式ページのリンクの確かめ（https・人の名前の入らない普通の住所・短縮 URL でない）。問題が無ければ null */
 export function checkLink(link: string): string | null {
-  if (!link || link.length > LIMITS.link) return `公式ページの URL を入れてください（${LIMITS.link} 文字まで）。`;
+  if (!link || link.length > LIMITS.link) return t(`公式ページの URL を入れてください（${LIMITS.link} 文字まで）。`, `Enter the URL of an official page (up to ${LIMITS.link} characters).`);
   let u: URL;
   try {
     u = new URL(link);
   } catch {
-    return '公式ページの URL の形になっていません。';
+    return t('公式ページの URL の形になっていません。', 'This is not a URL of a page.');
   }
-  if (u.protocol !== 'https:') return 'URL は https:// で始まる物にしてください。';
-  if (u.username || u.password) return 'URL にユーザー名やパスワードを入れないでください。';
+  if (u.protocol !== 'https:') return t('URL は https:// で始まる物にしてください。', 'The URL must start with https://.');
+  if (u.username || u.password) return t('URL にユーザー名やパスワードを入れないでください。', 'Do not put a user name or password in the URL.');
   const host = u.hostname.toLowerCase();
-  if (!host.includes('.') || /^[\d.]+$/.test(host) || host.includes(':') || host === 'localhost') return '公式ページの URL にしてください。';
-  if (SHORTENERS.some((s) => host === s || host.endsWith(`.${s}`))) return '短縮 URL は使えません。元の URL を入れてください。';
+  if (!host.includes('.') || /^[\d.]+$/.test(host) || host.includes(':') || host === 'localhost') return t('公式ページの URL にしてください。', 'Use the URL of an official page.');
+  if (SHORTENERS.some((s) => host === s || host.endsWith(`.${s}`))) return t('短縮 URL は使えません。元の URL を入れてください。', 'Short links cannot be used. Enter the original URL.');
   return null;
 }

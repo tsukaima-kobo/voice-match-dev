@@ -7,6 +7,7 @@
 //   大きさ  … 強さ: 声の力で形の大きさと線の太さ／強弱の幅で脈の大きさ
 // 測っていない項目（一言だけの時の、速さと間など）の層は、点線で薄く描く（話すほど、かたちがそろう）。
 import { displayValue, FEATURE_BY_KEY, formatFeature, type FeatureKey, type Features } from '../voice/features.ts';
+import { lang, t } from '../i18n.ts';
 
 export type ShapeLayer = 'shape' | 'core' | 'mist' | 'orbit' | 'size';
 export interface ShapeItem {
@@ -15,56 +16,74 @@ export interface ShapeItem {
   name?: string;
   fig: string;
 }
-export const SHAPE_LAYERS: readonly { key: ShapeLayer; name: string; items: readonly ShapeItem[] }[] = [
+/** 日本語と英語の言葉の組（今の言葉で読むのは text()） */
+type Pair = readonly [string, string];
+const L = (ja: string, en: string): Pair => [ja, en];
+const RAW_LAYERS: readonly { key: ShapeLayer; name: Pair; items: readonly { key: FeatureKey; name?: Pair; fig: Pair }[] }[] = [
   {
     key: 'shape',
-    name: '形',
+    name: L('形', 'Shape'),
     items: [
-      { key: 'pitch', fig: '全体の色と縦の伸び。高い声ほど縦に伸びて桃色に、低い声ほど横に広がって水色になります。' },
-      { key: 'pitchRange', fig: 'ふちと線のうねりの大きさ。抑揚が大きいほど、大きくうねります。' },
-      { key: 'pitchSkew', fig: '上下のふくらみ。上に広い声ほど上が、下に広い声ほど下がふくらみます。' },
-      { key: 'pitchMotion', fig: '線が芯から外へ流れる速さ。高さがよく動く声ほど、速く流れます。' },
+      { key: 'pitch', fig: L('全体の色と縦の伸び。高い声ほど縦に伸びて桃色に、低い声ほど横に広がって水色になります。', 'The overall colour and height. A higher voice stretches up and turns pink; a lower voice spreads sideways and turns light blue.') },
+      { key: 'pitchRange', fig: L('ふちと線のうねりの大きさ。抑揚が大きいほど、大きくうねります。', 'How much the edge and the lines wave. The more intonation, the bigger the waves.') },
+      { key: 'pitchSkew', fig: L('上下のふくらみ。上に広い声ほど上が、下に広い声ほど下がふくらみます。', 'The bulge at the top or bottom. A voice that spreads upward bulges at the top; one that spreads downward, at the bottom.') },
+      { key: 'pitchMotion', fig: L('線が芯から外へ流れる速さ。高さがよく動く声ほど、速く流れます。', 'How fast the lines flow outward from the core. The more the pitch moves, the faster they flow.') },
     ],
   },
   {
     key: 'core',
-    name: '芯と模様',
+    name: L('芯と模様', 'Core and pattern'),
     items: [
-      { key: 'f1', fig: '光る芯の上下。口を大きく開ける響きほど、芯が下にきます（点線の上下）。' },
-      { key: 'f2', fig: '光る芯の左右。舌が前に出る響きほど、芯が右にきます（点線の左右）。' },
-      { key: 'formantSpacing', fig: '線の間隔。響きの間隔が広いほど、線が少なく、間が広くなります。' },
-      { key: 'centroid', fig: 'ふちのうねりの細かさと、光る星。明るい声ほど、うねりが細かく、星が多く強くなります。' },
-      { key: 'mfcc2', name: '音色', fig: '指紋の模様そのものと、まわりを包む光のリボン。リボンは音色（MFCC 1〜13）から計算した響きの山と谷で、上が低い音、下が高い音です。外へふくらむ所ほど、その高さの音が強く響いています。' },
+      { key: 'f1', fig: L('光る芯の上下。口を大きく開ける響きほど、芯が下にきます（点線の上下）。', 'The glowing core, up or down. The wider the mouth opens, the lower the core sits (along the dotted line).') },
+      { key: 'f2', fig: L('光る芯の左右。舌が前に出る響きほど、芯が右にきます（点線の左右）。', 'The glowing core, left or right. The further forward the tongue, the further right the core sits (along the dotted line).') },
+      { key: 'formantSpacing', fig: L('線の間隔。響きの間隔が広いほど、線が少なく、間が広くなります。', 'The spacing of the lines. The wider the formant spacing, the fewer and wider apart the lines.') },
+      { key: 'centroid', fig: L('ふちのうねりの細かさと、光る星。明るい声ほど、うねりが細かく、星が多く強くなります。', 'The fineness of the edge waves, and the shining stars. The brighter the voice, the finer the waves and the more and brighter the stars.') },
+      { key: 'mfcc2', name: L('音色', 'Timbre'), fig: L('指紋の模様そのものと、まわりを包む光のリボン。リボンは音色（MFCC 1〜13）から計算した響きの山と谷で、上が低い音、下が高い音です。外へふくらむ所ほど、その高さの音が強く響いています。', 'The fingerprint pattern itself, and the ribbon of light around it. The ribbon is the peaks and valleys of the sound worked out from the timbre (MFCC 1–13): low sounds at the top, high sounds at the bottom. Where it bulges out, that part of the sound rings strongest.') },
     ],
   },
   {
     key: 'mist',
-    name: '霞と線',
+    name: L('霞と線', 'Haze and lines'),
     items: [
-      { key: 'hnr', fig: 'まわりの霞と、ふわっと出ては消える霞の粒。息が多い声ほど霞と粒が広がり、線が淡くなります。' },
-      { key: 'h1h2', fig: '線のぼけ。柔らかい声ほど、線がぼけて光がにじみます。' },
-      { key: 'jitter', fig: '線の切れ目と、星の粒のまたたき。高さがゆらぐ声ほど、線があちこちで切れ、まわりの星の粒が速くまたたきます。' },
-      { key: 'shimmer', fig: 'ふちのまわりに散る、星のような小さな粒と、線のまだら。大きさがゆらぐ（かすれた）声ほど、粒が増えて広く散ります。' },
+      { key: 'hnr', fig: L('まわりの霞と、ふわっと出ては消える霞の粒。息が多い声ほど霞と粒が広がり、線が淡くなります。', 'The haze around it, and the soft specks that appear and fade in it. The breathier the voice, the wider the haze and specks, and the paler the lines.') },
+      { key: 'h1h2', fig: L('線のぼけ。柔らかい声ほど、線がぼけて光がにじみます。', 'The blur of the lines. The softer the voice, the more the lines blur and glow.') },
+      { key: 'jitter', fig: L('線の切れ目と、星の粒のまたたき。高さがゆらぐ声ほど、線があちこちで切れ、まわりの星の粒が速くまたたきます。', 'Breaks in the lines, and the twinkling of the star specks. The more the pitch wobbles, the more the lines break and the faster the specks twinkle.') },
+      { key: 'shimmer', fig: L('ふちのまわりに散る、星のような小さな粒と、線のまだら。大きさがゆらぐ（かすれた）声ほど、粒が増えて広く散ります。', 'Tiny star-like specks scattered around the edge, and patchy lines. The more the loudness wobbles (a husky voice), the more specks and the wider they scatter.') },
     ],
   },
   {
     key: 'orbit',
-    name: '外の輪',
+    name: L('外の輪', 'Outer ring'),
     items: [
-      { key: 'rate', fig: '外の輪の粒の数と、回る速さ。速く話すほど、粒が多く速く回ります。' },
-      { key: 'pauseShare', fig: '外の輪の 3 つのすき間。間が多いほど、すき間が広がります。' },
-      { key: 'rhythm', fig: '粒の大きさと並びのムラ。リズムにムラがあるほど、粒がそろいません。' },
+      { key: 'rate', fig: L('外の輪の粒の数と、回る速さ。速く話すほど、粒が多く速く回ります。', 'The number of beads on the outer ring, and how fast it turns. The faster you speak, the more beads and the faster they turn.') },
+      { key: 'pauseShare', fig: L('外の輪の 3 つのすき間。間が多いほど、すき間が広がります。', 'The three gaps in the outer ring. The more pauses, the wider the gaps.') },
+      { key: 'rhythm', fig: L('粒の大きさと並びのムラ。リズムにムラがあるほど、粒がそろいません。', 'Uneven sizes and spacing of the beads. The more uneven the rhythm, the less even the beads.') },
     ],
   },
   {
     key: 'size',
-    name: '大きさ',
+    name: L('大きさ', 'Size'),
     items: [
-      { key: 'tilt', fig: '全体の大きさと線の太さ。力強い声ほど、大きく太くなります（点線の円）。' },
-      { key: 'levelRange', fig: 'ゆっくり脈打つ幅。強弱が大きいほど、大きく脈打ちます（2 つの点線の円の間）。' },
+      { key: 'tilt', fig: L('全体の大きさと線の太さ。力強い声ほど、大きく太くなります（点線の円）。', 'The overall size and line thickness. The more powerful the voice, the bigger and thicker (the dotted circle).') },
+      { key: 'levelRange', fig: L('ゆっくり脈打つ幅。強弱が大きいほど、大きく脈打ちます（2 つの点線の円の間）。', 'How much it slowly pulses. The wider the dynamics, the bigger the pulse (between the two dotted circles).') },
     ],
   },
 ];
+
+/** 図の 5 つの層と項目（name・fig は今の言葉で） */
+export const SHAPE_LAYERS: readonly { key: ShapeLayer; name: string; items: readonly ShapeItem[] }[] = RAW_LAYERS.map((l) => ({
+  key: l.key,
+  get name() {
+    return t(...l.name);
+  },
+  items: l.items.map((i) => ({
+    key: i.key,
+    ...(i.name ? { get name() { return t(...i.name!); } } : {}),
+    get fig() {
+      return t(...i.fig);
+    },
+  })),
+}));
 
 /** 図に使う値（0〜1。測っていない項目は null） */
 export type ShapeParams = Record<string, number | null>;
@@ -82,15 +101,18 @@ export function shapeParams(f: Features): ShapeParams {
 
 /** 目盛りの位置から、5 段の言葉（例: やや高い） */
 export function levelWord(key: FeatureKey, v: number | null): string {
-  if (v === null) return 'まだ測っていません';
+  if (v === null) return t('まだ測っていません', 'not measured yet');
   const d = FEATURE_BY_KEY[key];
   const x = displayValue(key, v);
   if (d.low === '−' || d.high === '+') return '';
-  if (x < 0.2) return `かなり${d.low}`;
-  if (x < 0.4) return `やや${d.low}`;
-  if (x <= 0.6) return 'ふつう';
-  if (x <= 0.8) return `やや${d.high}`;
-  return `かなり${d.high}`;
+  const en = lang === 'en';
+  const lo = en ? d.low.toLowerCase() : d.low,
+    hi = en ? d.high.toLowerCase() : d.high;
+  if (x < 0.2) return en ? `very ${lo}` : `かなり${lo}`;
+  if (x < 0.4) return en ? `fairly ${lo}` : `やや${lo}`;
+  if (x <= 0.6) return en ? 'average' : 'ふつう';
+  if (x <= 0.8) return en ? `fairly ${hi}` : `やや${hi}`;
+  return en ? `very ${hi}` : `かなり${hi}`;
 }
 
 /* ---- 描く ---- */
@@ -387,7 +409,7 @@ export function createShapeView(canvas: HTMLCanvasElement): ShapeView {
   return {
     set(f) {
       params = shapeParams(f);
-      canvas.setAttribute('aria-label', `声のかたちの図。${SHAPE_LAYERS.flatMap((l) => l.items.filter((i) => !i.key.startsWith('mfcc')).map((i) => `${FEATURE_BY_KEY[i.key].name} ${formatFeature(i.key, f[i.key])}`)).join('、')}`);
+      canvas.setAttribute('aria-label', `${t('声のかたちの図。', 'The shape of the voice. ')}${SHAPE_LAYERS.flatMap((l) => l.items.filter((i) => !i.key.startsWith('mfcc')).map((i) => `${FEATURE_BY_KEY[i.key].name} ${formatFeature(i.key, f[i.key])}`)).join(t('、', ', '))}`);
       wake();
     },
     focus(l) {
@@ -406,7 +428,7 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
   const note = document.createElement('p');
   note.className = 'shape-note';
   note.setAttribute('aria-live', 'polite');
-  const REST = '名前を押すと、図のその部分が光ります。';
+  const REST = t('名前を押すと、図のその部分が光ります。', 'Press a name to light up that part of the figure.');
   note.textContent = REST;
   let current: string | null = null;
   const buttons: HTMLButtonElement[] = [];
@@ -421,9 +443,9 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
     const parts = values.map(({ who, f }) => {
       const w = item.key.startsWith('mfcc') ? '' : levelWord(item.key, f[item.key]);
       const num = item.key.startsWith('mfcc') ? '' : formatFeature(item.key, f[item.key]);
-      return `${values.length > 1 ? `${who} ` : ''}${num}${w ? `（${w}）` : ''}`.trim();
+      return `${values.length > 1 ? `${who} ` : ''}${num}${w ? t(`（${w}）`, ` (${w})`) : ''}`.trim();
     });
-    b.textContent = `${name}${parts.some(Boolean) ? ` ${parts.filter(Boolean).join('・')}` : ''}`;
+    b.textContent = `${name}${parts.some(Boolean) ? ` ${parts.filter(Boolean).join(t('・', ' · '))}` : ''}`;
     note.replaceChildren(b, ' ', item.fig);
     if (sticky) current = item.key;
   };

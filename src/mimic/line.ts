@@ -6,6 +6,7 @@
 // 4. 直し方: 出だし・真ん中・語尾のどこで、上げすぎ・下げすぎか。長さが違えば、速く・ゆっくり。
 // 幅（2 半音など）は暫定。本物の声で、同じ人が同じセリフを 2 回言った時のずれが分かったら見直す。
 import type { Contour } from '../voice/measure.ts';
+import { t } from '../i18n.ts';
 
 /** セリフとして比べる長さの上限（話しはじめから話し終わりまで、秒）。これより長いお手本は声全体で比べる */
 export const LINE_MAX_SECONDS = 12;
@@ -144,21 +145,22 @@ export function compareLines(ref: Contour, mine: Contour): LineResult | null {
   const timing = Math.round(100 * Math.exp(-((lenLog / LENGTH_WIDTH) ** 2)) * Math.exp(-((meanDrift / DRIFT_WIDTH) ** 2)));
 
   const tips: LineTip[] = [];
-  const parts: [string, number, number][] = [
-    ['出だし', 0, 0.3],
-    ['真ん中', 0.3, 0.7],
-    ['語尾', 0.7, 1.01],
+  const parts: [string, string, number, number][] = [
+    ['出だし', 'the start', 0, 0.3],
+    ['真ん中', 'the middle', 0.3, 0.7],
+    ['語尾', 'the ending', 0.7, 1.01],
   ];
-  for (const [name, lo, hi] of parts) {
+  for (const [name, nameEn, lo, hi] of parts) {
     const ds = diffs.filter((x) => x.at >= lo && x.at < hi).map((x) => x.d);
     if (ds.length < 5) continue;
     const mean = ds.reduce((a, b) => a + b, 0) / ds.length;
     if (Math.abs(mean) <= TIP_SEMITONES) continue;
-    tips.push({ text: mean < 0 ? `${name}をもっと上げる` : `${name}をもっと下げる`, size: Math.abs(mean) / TIP_SEMITONES });
+    tips.push({ text: mean < 0 ? t(`${name}をもっと上げる`, `Raise ${nameEn} more`) : t(`${name}をもっと下げる`, `Lower ${nameEn} more`), size: Math.abs(mean) / TIP_SEMITONES });
   }
   const ratio = mineSeconds / refSeconds;
-  if (ratio > TIP_LENGTH) tips.push({ text: `もう少し速く言う（お手本 ${refSeconds.toFixed(1)} 秒・あなた ${mineSeconds.toFixed(1)} 秒）`, size: ratio / TIP_LENGTH });
-  else if (ratio < 1 / TIP_LENGTH) tips.push({ text: `もう少しゆっくり言う（お手本 ${refSeconds.toFixed(1)} 秒・あなた ${mineSeconds.toFixed(1)} 秒）`, size: 1 / ratio / TIP_LENGTH });
+  const secs = t(`（お手本 ${refSeconds.toFixed(1)} 秒・あなた ${mineSeconds.toFixed(1)} 秒）`, ` (model ${refSeconds.toFixed(1)} s, you ${mineSeconds.toFixed(1)} s)`);
+  if (ratio > TIP_LENGTH) tips.push({ text: t('もう少し速く言う', 'Say it a little faster') + secs, size: ratio / TIP_LENGTH });
+  else if (ratio < 1 / TIP_LENGTH) tips.push({ text: t('もう少しゆっくり言う', 'Say it a little more slowly') + secs, size: 1 / ratio / TIP_LENGTH });
   tips.sort((a, b) => b.size - a.size || (a.text < b.text ? -1 : 1));
   return { intonation, timing, warped, refSeconds, mineSeconds, tips };
 }

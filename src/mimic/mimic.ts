@@ -5,6 +5,7 @@
 // 幅と 30 は、本物の声で「同じ人が 2 回話した時」のずれが分かったら見直す（2026-11-01、目安は同じ人で 80 点台）。
 // 同じ数字なら、どの端末でも同じ点数。
 import { FEATURE_BY_KEY, type FeatureKey, type Features } from '../voice/features.ts';
+import { lang, t } from '../i18n.ts';
 
 /** 点数と直し方に使う項目 */
 export const SCORED_KEYS = ['pitch', 'pitchRange', 'f1', 'f2', 'formantSpacing', 'centroid', 'hnr', 'h1h2', 'tilt', 'rate', 'pauseShare', 'levelRange'] as const satisfies readonly FeatureKey[];
@@ -33,7 +34,7 @@ export const SCORE_SCALE = 30;
 export const MIN_ITEMS = 6;
 
 /** 項目を上げる時・下げる時の言葉（数字が大きくなる向きが up） */
-export const ADVICE: Record<ScoredKey, { up: string; down: string }> = {
+const ADVICE_JA: Record<ScoredKey, { up: string; down: string }> = {
   pitch: { up: '声をもう少し高く', down: '声をもう少し低く' },
   pitchRange: { up: '抑揚をもっと大きく', down: '抑揚を控えめに、平らに' },
   f1: { up: '口をもう少し大きく開ける', down: '口の開きを小さめに' },
@@ -47,6 +48,22 @@ export const ADVICE: Record<ScoredKey, { up: string; down: string }> = {
   pauseShare: { up: '間をもっと取る', down: '間を詰めて話す' },
   levelRange: { up: '強弱をもっとつける', down: '大きさを一定に' },
 };
+const ADVICE_EN: Record<ScoredKey, { up: string; down: string }> = {
+  pitch: { up: 'Raise your pitch a little', down: 'Lower your pitch a little' },
+  pitchRange: { up: 'Use more intonation', down: 'Flatten your intonation' },
+  f1: { up: 'Open your mouth a little wider', down: 'Open your mouth a little less' },
+  f2: { up: 'Bring your tongue forward for a brighter resonance', down: 'Round your lips a little for a darker resonance' },
+  formantSpacing: { up: 'Lift the corners of your mouth and raise your throat a little', down: 'Purse your lips and lower your throat a little' },
+  centroid: { up: 'Make the resonance brighter', down: 'Make the resonance darker and calmer' },
+  hnr: { up: 'Use less breath for a clearer voice', down: 'Add some breath, close to a whisper' },
+  h1h2: { up: 'Relax for a softer, airier voice', down: 'Firm up for a pressed, focused voice' },
+  tilt: { up: 'Put more power into your voice', down: 'Take some power out of your voice' },
+  rate: { up: 'Speak faster', down: 'Speak more slowly' },
+  pauseShare: { up: 'Take more pauses', down: 'Close up the pauses' },
+  levelRange: { up: 'Vary your loudness more', down: 'Keep your loudness steady' },
+};
+/** 項目を上げる時・下げる時の言葉（数字が大きくなる向きが up。今の言葉で） */
+export const ADVICE = new Proxy(ADVICE_JA, { get: (o, k) => (lang === 'en' ? ADVICE_EN : o)[k as ScoredKey] }) as Record<ScoredKey, { up: string; down: string }>;
 
 export interface Difference {
   key: ScoredKey;
@@ -99,9 +116,9 @@ export function adviceFor(diffs: readonly Difference[], n = 3): { key: ScoredKey
 
 /** 点数の言葉（暫定） */
 export function scoreWord(score: number): string {
-  if (score >= 90) return 'そっくり';
-  if (score >= 75) return 'かなり近い';
-  if (score >= 55) return '近い';
-  if (score >= 35) return '少し近い';
-  return 'まだ遠い';
+  if (score >= 90) return t('そっくり', 'Spot on');
+  if (score >= 75) return t('かなり近い', 'Very close');
+  if (score >= 55) return t('近い', 'Close');
+  if (score >= 35) return t('少し近い', 'Getting there');
+  return t('まだ遠い', 'Still far');
 }

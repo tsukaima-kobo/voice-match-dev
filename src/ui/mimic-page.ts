@@ -24,7 +24,8 @@ import { mountShapes } from './voiceprint.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { adviceFor, differences, mimicScore, scoreWord } from '../mimic/mimic.ts';
 import { ENTRY_BY_ID, PROFILES } from '../data/load.ts';
-import { nextPrompt, READING } from '../prompts/prompts.ts';
+import { nextPromptIndex, promptText, readingText } from '../prompts/prompts.ts';
+import { mountLang, onLang, t } from '../i18n.ts';
 import { checkSubmission, encodeSubmission, makeSubmission, type Source } from '../submit/code.ts';
 import { SUBMIT_FORM } from '../submit/config.ts';
 
@@ -49,6 +50,10 @@ const FILE_RATE = 16000;
 const START_RMS = 0.003;
 
 const $ = <E extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as E;
+mountLang({ ja: '声真似の点数｜voice-twin', en: 'Voice-mimic score | voice-twin' });
+/** 案内の文（今の言葉で作る関数。切り替えた時に作り直す） */
+type Msg = () => string;
+const M = (ja: string, en: string): Msg => () => t(ja, en);
 /** 声の玉（お手本と真似の両方で使う。見た目だけ） */
 const orb = createOrb($('orb'));
 const ORB_MODE: Record<string, OrbMode> = { listening: 'listening', analysing: 'analysing', ready: 'done', done: 'done' };
@@ -106,7 +111,7 @@ class Take {
   private readonly tick = (): void => {
     const sec = this.rate ? this.got / this.rate : 0;
     this.ui.fill.style.width = `${Math.min(100, (sec / LISTEN_MAX) * 100)}%`;
-    this.ui.sec.textContent = `${Math.floor(sec)} / ${LISTEN_MAX} 秒`;
+    this.ui.sec.textContent = t(`${Math.floor(sec)} / ${LISTEN_MAX} 秒`, `${Math.floor(sec)} / ${LISTEN_MAX} s`);
     orb.progress(sec / LISTEN_MAX);
     this.ui.done.disabled = sec < this.doneAfter;
     this.ui.wave.draw(true);
@@ -192,13 +197,19 @@ let refKind: 'mic' | 'tab' = 'mic';
 let best = 0;
 let tries = 0;
 
-function showRef(next: RefState, text: string, bad = false): void {
+let refMsg: Msg = () => '',
+  refBad = false,
+  mimMsg: Msg = () => '',
+  mimBad = false;
+function showRef(next: RefState, msg: Msg, bad = false): void {
   refState = next;
+  refMsg = msg;
+  refBad = bad;
   ref.stage.dataset.state = next;
   refLive.mode(next === 'listening' ? 'listening' : next === 'analysing' && refAnalysingMic ? 'analysing' : 'off');
   orb.mode(ORB_MODE[next] ?? 'idle');
   lockMics();
-  ref.status.textContent = text;
+  ref.status.textContent = msg();
   ref.status.classList.toggle('bad', bad);
   const busy = next === 'asking' || next === 'listening' || next === 'analysing';
   ref.pick.hidden = next === 'ready';
@@ -212,14 +223,17 @@ function showRef(next: RefState, text: string, bad = false): void {
   reg.box.hidden = !(next === 'ready' && target?.reg);
   const short = next === 'ready' && target?.voicedSeconds !== undefined && !target.reg;
   regShort.hidden = !short;
-  if (short) regShort.textContent = `この声をサイトに登録するには、声が ${REG_MIN_VOICED} 秒以上いります（今は ${target!.voicedSeconds!.toFixed(1)} 秒）。セリフをいくつか続けて聞かせると、登録もできます。`;
+  if (short) regShort.textContent = t(`この声をサイトに登録するには、声が ${REG_MIN_VOICED} 秒以上いります（今は ${target!.voicedSeconds!.toFixed(1)} 秒）。セリフをいくつか続けて聞かせると、登録もできます。`, `To add this voice to the site, ${REG_MIN_VOICED} s of voice is needed (now ${target!.voicedSeconds!.toFixed(1)} s). Play several lines in a row to be able to add it.`);
+  ref.done.textContent = t('聞かせ終えた', 'Done');
+  ref.cancel.textContent = t('やめる', 'Stop');
+  ref.change.textContent = t('お手本を変える', 'Change the model');
 }
 
 async function refListen(kind: 'mic' | 'tab'): Promise<void> {
   const my = ++refToken;
   refKind = kind;
   refTake.drop();
-  showRef('asking', kind === 'mic' ? 'マイクの許可を待っています…' : '共有するタブを選んでください…');
+  showRef('asking', kind === 'mic' ? M('マイクの許可を待っています…', 'Waiting for microphone permission…') : M('共有するタブを選んでください…', 'Choose the tab to share…'));
   try {
     const m = kind === 'mic' ? await openMic(refTake.onChunk, () => refFinish(), mics.get()) : await openTabAudio(refTake.onChunk, () => refFinish());
     if (my !== refToken || refState !== 'asking') {
@@ -228,18 +242,24 @@ async function refListen(kind: 'mic' | 'tab'): Promise<void> {
     }
     refTake.begin(m);
     if (kind === 'mic') void mics.refresh();
-    showRef(
-      'listening',
+    const label = m.label ?? '';
+    showRef('listening', () =>
       kind === 'mic'
-        ? `お手本を流して、マイクに聞かせてください。音が聞こえたら数えはじめます。セリフ 1 つでもかまいません。流し終えたら「聞かせ終えた」を押してください（最大 ${LISTEN_MAX} 秒）。${m.label ? `マイク: ${m.label}` : ''}`
-        : `選んだタブで、お手本を再生してください。セリフ 1 つなら、言い終わったら動画を止めて、このページで「聞かせ終えた」を押してください（音が来てから ${LISTEN_MAX} 秒で止まります）。`,
+        ? t(
+            `お手本を流して、マイクに聞かせてください。音が聞こえたら数えはじめます。セリフ 1 つでもかまいません。流し終えたら「聞かせ終えた」を押してください（最大 ${LISTEN_MAX} 秒）。${label ? `マイク: ${label}` : ''}`,
+            `Play the model to the microphone. Counting starts when sound is heard. A single line is fine. Press “Done” when it ends (up to ${LISTEN_MAX} s).${label ? ` Microphone: ${label}` : ''}`,
+          )
+        : t(
+            `選んだタブで、お手本を再生してください。セリフ 1 つなら、言い終わったら動画を止めて、このページで「聞かせ終えた」を押してください（音が来てから ${LISTEN_MAX} 秒で止まります）。`,
+            `Play the model in the chosen tab. For a single line, pause the video when it ends and press “Done” on this page (it stops ${LISTEN_MAX} s after the sound starts).`,
+          ),
     );
   } catch (e) {
     if (my !== refToken) return;
     refTake.stop();
     refTake.drop();
     if ((e as { name?: string } | null)?.name === 'MicGoneError') mics.reset();
-    showRef('failed', kind === 'mic' ? micErrorText(e) : tabErrorText(e), true);
+    showRef('failed', () => (kind === 'mic' ? micErrorText(e) : tabErrorText(e)), true);
   }
 }
 
@@ -247,17 +267,17 @@ function refFinish(): void {
   if (refState !== 'listening') return;
   const got = refTake.take();
   if (!got) {
-    showRef('failed', 'お手本の音が届きませんでした。音量を上げて、もう一度試してください。', true);
+    showRef('failed', M('お手本の音が届きませんでした。音量を上げて、もう一度試してください。', 'No sound from the model reached the page. Turn the volume up and try again.'), true);
     return;
   }
   refAnalysingMic = true;
-  showRef('analysing', 'お手本を計算しています…');
+  showRef('analysing', M('お手本を計算しています…', 'Working out the model…'));
   const my = refToken;
   void Promise.all([measureAsync(got.pcm, got.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true }), refLive.analysing(ANALYSE_MS)]).then(([m]) => {
     refAnalysingMic = false;
     if (my !== refToken || refState !== 'analysing') return;
     if (!m.ok) {
-      showRef('failed', failText(m.reason, m.info.voicedSeconds, true), true);
+      showRef('failed', () => failText(m.reason, m.info.voicedSeconds, true), true);
       return;
     }
     targetFrom(m, refKind, false);
@@ -272,7 +292,7 @@ function targetFrom(m: Extract<Measured, { ok: true }>, source: Source, padded: 
   setTarget(
     forLength(m.features, i.voicedSeconds),
     ref.name.value.trim(),
-    line ? `セリフ ${i.speechSeconds.toFixed(1)} 秒` : `声 ${i.voicedSeconds.toFixed(1)} 秒分`,
+    line ? M(`セリフ ${i.speechSeconds.toFixed(1)} 秒`, `a ${i.speechSeconds.toFixed(1)} s line`) : M(`声 ${i.voicedSeconds.toFixed(1)} 秒分`, `${i.voicedSeconds.toFixed(1)} s of voice`),
     canReg ? { source, quality: { voicedSeconds: i.voicedSeconds, gapTonal: i.gapTonal, snrDb: i.loudDb - i.floorDb } } : undefined,
     line,
     i.voicedSeconds,
@@ -283,7 +303,7 @@ function refCancel(): void {
   refToken++;
   refTake.stop();
   refTake.drop();
-  showRef('idle', 'やめました。音は捨てました。');
+  showRef('idle', M('やめました。音は捨てました。', 'Stopped. The sound was thrown away.'));
 }
 
 async function decodeFile(f: File): Promise<{ pcm: Float32Array; rate: number }> {
@@ -307,16 +327,16 @@ async function decodeFile(f: File): Promise<{ pcm: Float32Array; rate: number }>
 
 async function refFromFile(f: File): Promise<void> {
   if (f.size > FILE_MAX_BYTES) {
-    showRef('failed', 'ファイルが大きすぎます（20 MB まで）。使いたい所だけを切り出したファイルにしてください。', true);
+    showRef('failed', M('ファイルが大きすぎます（20 MB まで）。使いたい所だけを切り出したファイルにしてください。', 'The file is too big (up to 20 MB). Cut out just the part you want to use.'), true);
     return;
   }
   const my = ++refToken;
-  showRef('analysing', 'ファイルを読んでいます…');
+  showRef('analysing', M('ファイルを読んでいます…', 'Reading the file…'));
   let sound: { pcm: Float32Array; rate: number };
   try {
     sound = await decodeFile(f);
   } catch {
-    if (my === refToken) showRef('failed', 'このファイルは読めませんでした。mp3・m4a・wav などの音声ファイルを選んでください。', true);
+    if (my === refToken) showRef('failed', M('このファイルは読めませんでした。mp3・m4a・wav などの音声ファイルを選んでください。', 'This file could not be read. Choose a sound file such as mp3, m4a or wav.'), true);
     return;
   }
   const secs = sound.pcm.length / sound.rate;
@@ -337,7 +357,7 @@ async function refFromFile(f: File): Promise<void> {
     sound.pcm.fill(0);
     if (my !== refToken) return;
     if (!m.ok) {
-      showRef('failed', failText(m.reason, m.info.voicedSeconds, true), true);
+      showRef('failed', () => failText(m.reason, m.info.voicedSeconds, true), true);
       return;
     }
     targetFrom(m, 'file', padded);
@@ -346,35 +366,41 @@ async function refFromFile(f: File): Promise<void> {
   const m = await measureLong(sound.pcm, sound.rate, {
     minVoicedSeconds: ONE_LINE_SECONDS,
     onProgress: (done, total) => {
-      if (total > 1 && my === refToken) ref.status.textContent = `数字にしています… ${done} / ${total}`;
+      if (total > 1 && my === refToken) ref.status.textContent = t(`数字にしています… ${done} / ${total}`, `Measuring… ${done} / ${total}`);
     },
   });
   sound.pcm.fill(0);
   if (my !== refToken) return;
   if (!m.ok) {
-    showRef('failed', failText(m.reason, m.voicedSeconds, true), true);
+    showRef('failed', () => failText(m.reason, m.voicedSeconds, true), true);
     return;
   }
-  const part = m.seconds >= LONG_MAX_SECONDS ? `最初の ${LONG_MAX_SECONDS / 60} 分のうち、声 ${m.voicedSeconds.toFixed(1)} 秒分` : `声 ${m.voicedSeconds.toFixed(1)} 秒分`;
+  const part = m.seconds >= LONG_MAX_SECONDS ? M(`最初の ${LONG_MAX_SECONDS / 60} 分のうち、声 ${m.voicedSeconds.toFixed(1)} 秒分`, `${m.voicedSeconds.toFixed(1)} s of voice in the first ${LONG_MAX_SECONDS / 60} min`) : M(`声 ${m.voicedSeconds.toFixed(1)} 秒分`, `${m.voicedSeconds.toFixed(1)} s of voice`);
   const canReg = m.voicedSeconds >= REG_MIN_VOICED;
   setTarget(forLength(m.features, m.voicedSeconds), ref.name.value.trim(), part, canReg ? { source: 'file', quality: { voicedSeconds: m.voicedSeconds, gapTonal: m.gapTonal, snrDb: m.snrDb } } : undefined, undefined, m.voicedSeconds);
 }
 
-function setTarget(features: Features, name: string, from: string, regInfo?: Target['reg'], contour?: Contour, voicedSeconds?: number): void {
+/** お手本のまとめの文（言葉を切り替えた時に出し直す） */
+let summaryMsg: Msg = () => '';
+function setTarget(features: Features, name: string, from: Msg, regInfo?: Target['reg'], contour?: Contour, voicedSeconds?: number): void {
   target = { features, name, ...(regInfo ? { reg: regInfo } : {}), ...(contour ? { contour } : {}), ...(voicedSeconds !== undefined ? { voicedSeconds } : {}) };
   resetRegister(name);
   best = 0;
   tries = 0;
   $('result').hidden = true;
   const f = features;
-  const who = name ? `「${name}」` : '';
-  ref.summary.textContent = contour
-    ? `${who ? `${who}のセリフ` : 'セリフ'}をお手本にしました（${from}）。セリフ真似: 抑揚とタイミングまで比べます。声の高さ ${formatFeature('pitch', f.pitch)}。`
-    : `${who ? `${who}をお手本にしました` : 'お手本を測りました'}（${from}）。声の高さ ${formatFeature('pitch', f.pitch)}・抑揚 ${formatFeature('pitchRange', f.pitchRange)}・速さ ${formatFeature('rate', f.rate)}。`;
+  summaryMsg = () => {
+    const ja = name ? `「${name}」` : '';
+    const en = name ? `“${name}”` : '';
+    return contour
+      ? t(`${ja ? `${ja}のセリフ` : 'セリフ'}をお手本にしました（${from()}）。セリフ真似: 抑揚とタイミングまで比べます。声の高さ ${formatFeature('pitch', f.pitch)}。`, `${en ? `A line by ${en}` : 'A line'} is the model (${from()}). Line mimic: intonation and timing are compared too. Pitch ${formatFeature('pitch', f.pitch)}.`)
+      : t(`${ja ? `${ja}をお手本にしました` : 'お手本を測りました'}（${from()}）。声の高さ ${formatFeature('pitch', f.pitch)}・抑揚 ${formatFeature('pitchRange', f.pitchRange)}・速さ ${formatFeature('rate', f.rate)}。`, `${en ? `${en} is the model` : 'The model was measured'} (${from()}). Pitch ${formatFeature('pitch', f.pitch)}, intonation ${formatFeature('pitchRange', f.pitchRange)}, rate ${formatFeature('rate', f.rate)}.`);
+  };
+  ref.summary.textContent = summaryMsg();
   topicBox.hidden = !!contour;
   lineHint.hidden = !contour;
-  showRef('ready', contour ? 'お手本の準備ができました。次は、同じセリフを真似して言ってください。' : 'お手本の準備ができました。次は、真似して話してください。');
-  showMim('idle', contour ? '「真似して話す」を押して、お手本と同じセリフを言ってください。' : '「真似して話す」を押して、お手本のように話してください。');
+  showRef('ready', contour ? M('お手本の準備ができました。次は、同じセリフを真似して言ってください。', 'The model is ready. Next, say the same line, imitating it.') : M('お手本の準備ができました。次は、真似して話してください。', 'The model is ready. Next, talk imitating it.'));
+  showMim('idle', contour ? M('「真似して話す」を押して、お手本と同じセリフを言ってください。', 'Press “Imitate” and say the same line as the model.') : M('「真似して話す」を押して、お手本のように話してください。', 'Press “Imitate” and talk like the model.'));
 }
 
 ref.mic.addEventListener('click', () => void refListen('mic'));
@@ -390,8 +416,8 @@ ref.cancel.addEventListener('click', refCancel);
 ref.change.addEventListener('click', () => {
   target = null;
   $('result').hidden = true;
-  showRef('idle', 'お手本の聞かせ方を選んでください。');
-  showMim('locked', '先にお手本を聞かせてください。');
+  showRef('idle', M('お手本の聞かせ方を選んでください。', 'Choose how to play the model.'));
+  showMim('locked', M('先にお手本を聞かせてください。', 'Play the model first.'));
 });
 /* お手本の声をサイトに登録する（アキネーター方式。壁 ① をここで確かめ、送るのは利用者が Google フォームで） */
 const regShort = $('reg-short');
@@ -432,14 +458,16 @@ reg.make.addEventListener('click', () => {
   if (SUBMIT_FORM.url) {
     reg.form.hidden = false;
     reg.form.href = SUBMIT_FORM.entry ? `${SUBMIT_FORM.url}?usp=pp_url&entry.${SUBMIT_FORM.entry}=${encodeURIComponent(code)}` : SUBMIT_FORM.url;
-    reg.howto.textContent = SUBMIT_FORM.entry ? '「フォームを開く」で、送る内容が入ったフォームが開きます。そのまま送信してください。' : '「コピー」してから「フォームを開く」で、送る内容を貼って送信してください。';
+    howtoMsg = SUBMIT_FORM.entry ? M('「フォームを開く」で、送る内容が入ったフォームが開きます。そのまま送信してください。', '“Open the form” opens it with the entry filled in. Just send it.') : M('「コピー」してから「フォームを開く」で、送る内容を貼って送信してください。', 'Press “Copy”, then “Open the form”, paste the entry and send it.');
   } else {
     reg.form.hidden = true;
-    reg.howto.textContent = '登録の受け付けは準備中です。もうしばらくお待ちください。';
+    howtoMsg = M('登録の受け付けは準備中です。もうしばらくお待ちください。', 'Adding voices is not open yet. Please wait a little longer.');
   }
+  reg.howto.textContent = howtoMsg();
 });
+let howtoMsg: Msg = () => '';
 reg.copy.addEventListener('click', () => {
-  const done = () => (reg.copy.textContent = 'コピーしました');
+  const done = () => (reg.copy.textContent = t('コピーしました', 'Copied'));
   navigator.clipboard?.writeText(reg.code.value).then(done, () => {
     reg.code.select();
   }) ?? reg.code.select();
@@ -455,12 +483,12 @@ ref.catalog.addEventListener('change', () => {
   const p = byLabel.get(ref.catalog.value.trim());
   if (!p) return;
   ref.catalog.value = '';
-  setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, 'このサイトで測った代表値');
+  setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, M('このサイトで測った代表値', 'a voice measured by this site'));
 });
 if (tabAudioSupported()) ref.tab.hidden = ref.tabNote.hidden = false;
 if (PROFILES.length) {
   ref.catalogBox.hidden = false;
-  $('ref-catalog-count').textContent = `${PROFILES.length} 件`;
+  $('ref-catalog-count').textContent = t(`${PROFILES.length} 件`, `${PROFILES.length}`);
   const list = $('ref-catalog-list');
   for (const label of [...byLabel.keys()].sort((a, b) => a.localeCompare(b, 'ja'))) {
     const o = document.createElement('option');
@@ -473,17 +501,18 @@ if (PROFILES.length) {
 const topicBox = $('topic-box');
 const lineHint = $('line-hint');
 const topic = { label: $('topic-label'), text: $('topic-text'), next: $<HTMLButtonElement>('topic-next'), read: $<HTMLButtonElement>('topic-read') };
-let prompt: string | null = nextPrompt(null);
+let prompt = nextPromptIndex(null);
 let reading = false;
 function showTopic(): void {
-  topic.label.textContent = reading ? '決まった文（お手本の声で読んでください）' : 'お題（お手本の声で話してください）';
-  topic.text.textContent = reading ? READING : prompt!;
+  topic.label.textContent = reading ? t('決まった文（お手本の声で読んでください）', 'Set text (read it in the model’s voice)') : t('お題（お手本の声で話してください）', 'Prompt (talk in the model’s voice)');
+  topic.text.textContent = reading ? readingText() : promptText(prompt);
   topic.text.classList.toggle('reading', reading);
-  topic.read.textContent = reading ? 'お題にもどす' : '決まった文を読む';
+  topic.read.textContent = reading ? t('お題にもどす', 'Back to prompts') : t('決まった文を読む', 'Read a set text');
+  topic.next.textContent = t('次のお題', 'Next prompt');
 }
 topic.next.addEventListener('click', () => {
   reading = false;
-  prompt = nextPrompt(prompt);
+  prompt = nextPromptIndex(prompt);
   showTopic();
 });
 topic.read.addEventListener('click', () => {
@@ -506,17 +535,21 @@ type MimState = 'locked' | 'idle' | 'asking' | 'listening' | 'analysing' | 'done
 let mimState: MimState = 'locked';
 let mimToken = 0;
 
-function showMim(next: MimState, text: string, bad = false): void {
+function showMim(next: MimState, msg: Msg, bad = false): void {
   mimState = next;
+  mimMsg = msg;
+  mimBad = bad;
   mim.stage.dataset.state = next;
   mimLive.mode(next === 'listening' ? 'listening' : next === 'analysing' ? 'analysing' : 'off');
   orb.mode(ORB_MODE[next] ?? 'idle');
   lockMics();
-  mim.status.textContent = text;
+  mim.status.textContent = msg();
   mim.status.classList.toggle('bad', bad);
   mim.start.hidden = !(next === 'locked' || next === 'idle' || next === 'failed' || next === 'done');
   mim.start.disabled = next === 'locked';
-  mim.start.textContent = next === 'done' ? 'もう一度真似する' : '真似して話す';
+  mim.start.textContent = next === 'done' ? t('もう一度真似する', 'Imitate again') : t('真似して話す', 'Imitate');
+  mim.done.textContent = t('話し終えた', 'Done');
+  mim.cancel.textContent = t('やめる', 'Stop');
   mim.done.hidden = next !== 'listening';
   mim.cancel.hidden = !(next === 'listening' || next === 'asking');
   ref.change.disabled = next === 'asking' || next === 'listening' || next === 'analysing';
@@ -527,7 +560,7 @@ async function mimStart(): Promise<void> {
   if (!target) return;
   const my = ++mimToken;
   mimTake.drop();
-  showMim('asking', 'マイクの許可を待っています…');
+  showMim('asking', M('マイクの許可を待っています…', 'Waiting for microphone permission…'));
   try {
     const m = await openMic(mimTake.onChunk, () => mimFinish(), mics.get());
     if (my !== mimToken || mimState !== 'asking') {
@@ -536,14 +569,20 @@ async function mimStart(): Promise<void> {
     }
     mimTake.begin(m);
     void mics.refresh();
-    const on = m.label ? `マイク: ${m.label}` : '';
-    showMim('listening', target.contour ? `お手本と同じセリフを、お手本のように言ってください。言い終えたら「話し終えた」を押してください。${on}` : `お手本のように話してください。一言でもかまいませんが、長く話すほど多くの項目で比べられます（最大 ${LISTEN_MAX} 秒）。${on}`);
+    const label = m.label ?? '';
+    const isLine = !!target.contour;
+    showMim('listening', () => {
+      const on = label ? t(`マイク: ${label}`, ` Microphone: ${label}`) : '';
+      return isLine
+        ? t(`お手本と同じセリフを、お手本のように言ってください。言い終えたら「話し終えた」を押してください。`, 'Say the same line as the model, imitating it. Press “Done” when you finish.') + on
+        : t(`お手本のように話してください。一言でもかまいませんが、長く話すほど多くの項目で比べられます（最大 ${LISTEN_MAX} 秒）。`, `Talk like the model. A single phrase is fine, but the longer you talk, the more items are compared (up to ${LISTEN_MAX} s).`) + on;
+    });
   } catch (e) {
     if (my !== mimToken) return;
     mimTake.stop();
     mimTake.drop();
     if ((e as { name?: string } | null)?.name === 'MicGoneError') mics.reset();
-    showMim('failed', micErrorText(e), true);
+    showMim('failed', () => micErrorText(e), true);
   }
 }
 
@@ -551,22 +590,22 @@ function mimFinish(): void {
   if (mimState !== 'listening' || !target) return;
   const got = mimTake.take();
   if (!got) {
-    showMim('failed', '声が届きませんでした。もう一度試してください。', true);
+    showMim('failed', M('声が届きませんでした。もう一度試してください。', 'No voice reached the page. Please try again.'), true);
     return;
   }
-  showMim('analysing', '計算しています…');
+  showMim('analysing', M('計算しています…', 'Working it out…'));
   const my = mimToken;
   void Promise.all([measureAsync(got.pcm, got.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: !!target.contour }), mimLive.analysing(ANALYSE_MS)]).then(([m]) => {
     if (my !== mimToken || mimState !== 'analysing' || !target) return;
     if (!m.ok) {
-      showMim('failed', failText(m.reason, m.info.voicedSeconds, false), true);
+      showMim('failed', () => failText(m.reason, m.info.voicedSeconds, false), true);
       return;
     }
     if (!render(target, forLength(m.features, m.info.voicedSeconds), m.info.contour)) {
-      showMim('failed', 'お手本と比べられる項目がありませんでした。お手本か声を測り直してください。', true);
+      showMim('failed', M('お手本と比べられる項目がありませんでした。お手本か声を測り直してください。', 'No item could be compared with the model. Measure the model or your voice again.'), true);
       return;
     }
-    showMim('done', '測りました。結果は下にあります。');
+    showMim('done', M('測りました。結果は下にあります。', 'Measured. The result is below.'));
     $('result').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   });
 }
@@ -575,7 +614,7 @@ function mimCancel(): void {
   mimToken++;
   mimTake.stop();
   mimTake.drop();
-  showMim(target ? 'idle' : 'locked', 'やめました。音は捨てました。');
+  showMim(target ? 'idle' : 'locked', M('やめました。音は捨てました。', 'Stopped. The sound was thrown away.'));
 }
 
 mim.start.addEventListener('click', () => void mimStart());
@@ -593,19 +632,19 @@ function failText(reason: MeasureFail, voiced: number | undefined, model: boolea
   const v = (voiced ?? 0).toFixed(1);
   switch (reason) {
     case 'silent':
-      return model ? 'お手本の音が聞こえませんでした。音量を上げるか、マイクの近くで流してください。' : '声が聞こえませんでした。マイクが消音になっていないか、使うマイクが合っているか確かめてください。';
+      return model ? t('お手本の音が聞こえませんでした。音量を上げるか、マイクの近くで流してください。', 'The model could not be heard. Turn the volume up or play it closer to the microphone.') : t('声が聞こえませんでした。マイクが消音になっていないか、使うマイクが合っているか確かめてください。', 'No voice was heard. Check that the microphone is not muted and that the right one is chosen.');
     case 'quiet':
-      return model ? 'お手本の音が小さくて測れませんでした。音量を上げてください。' : '声が小さくて測れませんでした。マイクに少し近づいて話してください。';
+      return model ? t('お手本の音が小さくて測れませんでした。音量を上げてください。', 'The model was too quiet to measure. Turn the volume up.') : t('声が小さくて測れませんでした。マイクに少し近づいて話してください。', 'The voice was too quiet to measure. Move a little closer to the microphone.');
     case 'noisy':
-      return model ? 'お手本に、声のほかの音（BGM・効果音・雑音）が多くて測れませんでした。声だけの所を選んでください。' : 'まわりの音が大きくて、声とうまく分けられませんでした。静かな所で、もう一度話してください。';
+      return model ? t('お手本に、声のほかの音（BGM・効果音・雑音）が多くて測れませんでした。声だけの所を選んでください。', 'The model has too many other sounds (BGM, effects, noise). Choose a part with the voice alone.') : t('まわりの音が大きくて、声とうまく分けられませんでした。静かな所で、もう一度話してください。', 'The surroundings were too loud to separate the voice. Try again somewhere quiet.');
     case 'clipped':
-      return model ? 'お手本の音が大きすぎて、割れていました。音量を少し下げてください。' : '声が大きすぎて、音が割れていました。マイクから少し離れてください。';
+      return model ? t('お手本の音が大きすぎて、割れていました。音量を少し下げてください。', 'The model was so loud that it distorted. Turn the volume down a little.') : t('声が大きすぎて、音が割れていました。マイクから少し離れてください。', 'The voice was so loud that it distorted. Move a little away from the microphone.');
     case 'short':
       return model
-        ? `お手本の声を ${v} 秒分しか測れませんでした。声がはっきり聞こえるセリフを、1 つ以上流してください。`
-        : `声を ${v} 秒分しか測れませんでした。「おはようございます」くらいの長さで、ささやかずに言ってください。`;
+        ? t(`お手本の声を ${v} 秒分しか測れませんでした。声がはっきり聞こえるセリフを、1 つ以上流してください。`, `Only ${v} s of the model’s voice was measured. Play at least one line where the voice is clear.`)
+        : t(`声を ${v} 秒分しか測れませんでした。「おはようございます」くらいの長さで、ささやかずに言ってください。`, `Only ${v} s of voice was measured. Say at least a short phrase, like “good morning everyone”, without whispering.`);
     default:
-      return 'うまく数字にできませんでした。もう一度試してください。';
+      return t('うまく数字にできませんでした。もう一度試してください。', 'It could not be measured. Please try again.');
   }
 }
 
@@ -633,18 +672,31 @@ function showScore(score: number): void {
   };
   requestAnimationFrame(step);
 }
-function render(t: Target, mine: Features, mineContour?: Contour): boolean {
-  const voice = mimicScore(t.features, mine);
-  const line = t.contour && mineContour ? compareLines(t.contour, mineContour) : null;
+/** 出している結果（言葉を切り替えた時に出し直すため） */
+let shown: { tg: Target; mine: Features; mineContour?: Contour; score: number; before: number } | null = null;
+function render(tg: Target, mine: Features, mineContour?: Contour): boolean {
+  const voice = mimicScore(tg.features, mine);
+  const line = tg.contour && mineContour ? compareLines(tg.contour, mineContour) : null;
   if (!voice && !line) return false;
   const score = line ? lineScore(line, voice?.score ?? null) : voice!.score;
   tries++;
   const before = best;
   best = Math.max(best, score);
-  $('score-label').textContent = `${t.name ? `「${t.name}」` : 'お手本'}との近さ${line ? '（セリフ真似）' : ''}`;
+  shown = { tg, mine, ...(mineContour ? { mineContour } : {}), score, before };
   showScore(score);
+  paint();
+  $('result').hidden = false;
+  return true;
+}
+/** 結果の言葉と図（今の言葉で。点数の数えあがりはしない） */
+function paint(): void {
+  if (!shown) return;
+  const { tg, mine, mineContour, score, before } = shown;
+  const voice = mimicScore(tg.features, mine);
+  const line = tg.contour && mineContour ? compareLines(tg.contour, mineContour) : null;
+  $('score-label').textContent = t(`${tg.name ? `「${tg.name}」` : 'お手本'}との近さ${line ? '（セリフ真似）' : ''}`, `Closeness to ${tg.name ? `“${tg.name}”` : 'the model'}${line ? ' (line mimic)' : ''}`);
   $('score-word').textContent = scoreWord(score);
-  $('best').textContent = tries === 1 ? '' : score > before ? `最高点を更新しました（${tries} 回目）` : `このお手本での最高は ${best} 点です（${tries} 回目）`;
+  $('best').textContent = tries === 1 ? '' : score > before ? t(`最高点を更新しました（${tries} 回目）`, `New best! (try ${tries})`) : t(`このお手本での最高は ${best} 点です（${tries} 回目）`, `Your best with this model is ${best} (try ${tries})`);
 
   // (line: the three parts of the score, and the two pitch lines one over the other)
   const subs = $('subscores');
@@ -659,17 +711,21 @@ function render(t: Target, mine: Features, mineContour?: Contour): boolean {
     part('sub-into', line.intonation);
     part('sub-timing', line.timing);
     part('sub-voice', voice?.score ?? null);
-    drawLineChart($('line-chart'), t.contour!, line.warped);
-    $('line-seconds').textContent = `${line.refSeconds.toFixed(1)} 秒`;
+    drawLineChart($('line-chart'), tg.contour!, line.warped);
+    $('line-seconds').textContent = t(`${line.refSeconds.toFixed(1)} 秒`, `${line.refSeconds.toFixed(1)} s`);
   }
 
-  const diffs = differences(t.features, mine);
+  const diffs = differences(tg.features, mine);
   const list = $('advice');
   list.replaceChildren();
   const tips: { text: string; why?: string }[] = [];
   for (const tip of (line?.tips ?? []).slice(0, 2)) tips.push({ text: tip.text });
-  for (const tip of adviceFor(diffs, 3)) tips.push({ text: tip.text, why: `（${FEATURE_BY_KEY[tip.key].name}: お手本 ${formatFeature(tip.key, t.features[tip.key])}・あなた ${formatFeature(tip.key, mine[tip.key])}）` });
-  if (!tips.length) list.append(el('li', undefined, line ? 'ほぼそろっています。次は、声の出し方の細かい所（息・響き）も寄せてみてください。' : 'ほぼそろっています。次は、セリフ 1 つをお手本にして、言い回しや語尾も寄せてみてください。'));
+  for (const tip of adviceFor(diffs, 3))
+    tips.push({
+      text: tip.text,
+      why: t(`（${FEATURE_BY_KEY[tip.key].name}: お手本 ${formatFeature(tip.key, tg.features[tip.key])}・あなた ${formatFeature(tip.key, mine[tip.key])}）`, ` (${FEATURE_BY_KEY[tip.key].name}: model ${formatFeature(tip.key, tg.features[tip.key])}, you ${formatFeature(tip.key, mine[tip.key])})`),
+    });
+  if (!tips.length) list.append(el('li', undefined, line ? t('ほぼそろっています。次は、声の出し方の細かい所（息・響き）も寄せてみてください。', 'Nearly matched. Next, try matching the finer points too (breath and resonance).') : t('ほぼそろっています。次は、セリフ 1 つをお手本にして、言い回しや語尾も寄せてみてください。', 'Nearly matched. Next, use a single line as the model and match the phrasing and endings too.')));
   for (const tip of tips.slice(0, 3)) {
     const li = el('li');
     li.append(el('strong', undefined, tip.text));
@@ -678,25 +734,33 @@ function render(t: Target, mine: Features, mineContour?: Contour): boolean {
   }
 
   mountShapes($('shapes'), $('shape-guide'), [
-    { who: 'お手本', ...(t.name ? { sub: t.name } : {}), f: t.features },
-    { who: 'あなた', sub: `${tries} 回目`, f: mine },
+    { who: t('お手本', 'Model'), ...(tg.name ? { sub: tg.name } : {}), f: tg.features },
+    { who: t('あなた', 'You'), sub: t(`${tries} 回目`, `Try ${tries}`), f: mine },
   ]);
 
   renderGroups($('compare'), (d) => {
-    const a = t.features[d.key],
+    const a = tg.features[d.key],
       b = mine[d.key];
     const value = el('div', 'value two');
-    value.append(el('span', undefined, `お手本 ${formatFeature(d.key, a)}`), el('span', undefined, `あなた ${formatFeature(d.key, b)}`));
+    value.append(el('span', undefined, t(`お手本 ${formatFeature(d.key, a)}`, `Model ${formatFeature(d.key, a)}`)), el('span', undefined, t(`あなた ${formatFeature(d.key, b)}`, `You ${formatFeature(d.key, b)}`)));
     return itemRow(d, [{ value: a, cls: 'ref' }, { value: b }], value);
   });
-  $('result').hidden = false;
-  return true;
 }
 
-showRef('idle', 'お手本の聞かせ方を選んでください。');
-showMim('locked', '先にお手本を聞かせてください。');
+showRef('idle', M('お手本の聞かせ方を選んでください。', 'Choose how to play the model.'));
+showMim('locked', M('先にお手本を聞かせてください。', 'Play the model first.'));
 {
   const wanted = new URLSearchParams(location.search).get('target');
   const p = wanted ? PROFILES.find((x) => x.id === wanted) : undefined;
-  if (p) setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, 'このサイトで測った代表値');
+  if (p) setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, M('このサイトで測った代表値', 'a voice measured by this site'));
 }
+
+onLang(() => {
+  showRef(refState, refMsg, refBad);
+  showMim(mimState, mimMsg, mimBad);
+  showTopic();
+  if (target) ref.summary.textContent = summaryMsg();
+  if (!reg.out.hidden) reg.howto.textContent = howtoMsg();
+  if (PROFILES.length) $('ref-catalog-count').textContent = t(`${PROFILES.length} 件`, `${PROFILES.length}`);
+  if (!$('result').hidden) paint();
+});

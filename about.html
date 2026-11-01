@@ -8,102 +8,103 @@
     <meta name="theme-color" content="#f7f6fd" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0f0d1c" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0478f'/%3E%3Cstop offset='.55' stop-color='%237a4dff'/%3E%3Cstop offset='1' stop-color='%2362d8ec'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='14' fill='url(%23g)'/%3E%3C/svg%3E" />
+    <script src="./lang.js"></script>
     <link rel="stylesheet" href="/src/ui/base.css" />
   </head>
   <body>
     <div class="page">
       <header class="site">
         <a class="logo" href="./"><i class="logo-orb" aria-hidden="true"></i>voice<span>-</span>twin</a>
-        <nav aria-label="ページ"><a href="./">声をくらべる</a><a href="./mimic.html">声真似の点数</a><a href="./about.html" aria-current="page">しくみと約束</a></nav>
+        <nav aria-label="ページ" data-en-aria-label="Pages"><a href="./"><span lang="ja">声をくらべる</span><span lang="en">Compare</span></a><a href="./mimic.html"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a><a href="./about.html" aria-current="page"><span lang="ja">しくみと約束</span><span lang="en">How it works</span></a></nav>
       </header>
       <main>
         <section class="doc-hero">
-          <p class="eyebrow">voice-twin について</p>
-          <h1><span class="grad">しくみ</span>と約束</h1>
-          <p class="lead">声をどう測り、どう比べるか。音を送らない・残さない約束と、データの削除のお願いの窓口です。</p>
+          <p class="eyebrow"><span lang="ja">voice-twin について</span><span lang="en">About voice-twin</span></p>
+          <h1><span lang="ja"><span class="grad">しくみ</span>と約束</span><span lang="en"><span class="grad">How it works</span> and our promises</span></h1>
+          <p class="lead"><span lang="ja">声をどう測り、どう比べるか。音を送らない・残さない約束と、データの削除のお願いの窓口です。</span><span lang="en">How voices are measured and compared, our promise never to send or keep sound, and where to ask for data to be removed.</span></p>
         </section>
         <div class="doc-layout">
-        <nav class="toc" aria-label="このページの中">
-          <a href="#promise">約束</a>
-          <a href="#match">近い声のさがし方</a>
-          <a href="#mimic">声真似の点数</a>
-          <a href="#items">測る項目</a>
-          <a href="#voices">このサイトで測った声</a>
-          <a href="#register">声の登録</a>
-          <a href="#removal">データの削除のお願い</a>
+        <nav class="toc" aria-label="このページの中" data-en-aria-label="On this page">
+          <a href="#promise"><span lang="ja">約束</span><span lang="en">Promises</span></a>
+          <a href="#match"><span lang="ja">近い声のさがし方</span><span lang="en">Finding close voices</span></a>
+          <a href="#mimic"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a>
+          <a href="#items"><span lang="ja">測る項目</span><span lang="en">What is measured</span></a>
+          <a href="#voices"><span lang="ja">このサイトで測った声</span><span lang="en">Voices measured by this site</span></a>
+          <a href="#register"><span lang="ja">声の登録</span><span lang="en">Adding voices</span></a>
+          <a href="#removal"><span lang="ja">データの削除のお願い</span><span lang="en">Removal requests</span></a>
         </nav>
         <div class="doc">
 
         <section id="promise" class="card reveal wide">
-          <h2><span class="no">01</span>約束</h2>
+          <h2><span class="no">01</span><span lang="ja">約束</span><span lang="en">Promises</span></h2>
           <ul class="promises">
-            <li><strong>音を送らない・残さない</strong>お手本の音も、あなたの声も、この端末の中だけで数字にして、すぐに捨てます。どこにも送らず、保存もしません。お手本の数字も、ページを閉じると消えます。</li>
-            <li><strong>使うのは押した時だけ</strong>マイクやほかのタブの音は、ボタンを押した時だけ使い、終わったらすぐ止めます。「ほかのマイクを選ぶ」を押した時は、マイクの名前の一覧を出すためだけに許可を求め、すぐ止めます（音は受けません）。選んだマイクは、そのタブを閉じるまで覚えます。ほかのタブの音は、ブラウザーの共有の画面であなたが選んだタブの音だけを使い、映像は使いません。</li>
-            <li><strong>外に何も読みに行かない</strong>このサイトは、外のサーバーに何も読みに行きません（フォント・解析の道具も使いません）。</li>
-            <li><strong>性別や年齢を判断しない</strong>声から性別や年齢を判断しません。測るのは、声の音の性質だけです。</li>
+            <li><span lang="ja"><strong>音を送らない・残さない</strong>お手本の音も、あなたの声も、この端末の中だけで数字にして、すぐに捨てます。どこにも送らず、保存もしません。お手本の数字も、ページを閉じると消えます。</span><span lang="en"><strong>Sound is never sent or kept</strong>Both the model’s sound and your voice are turned into numbers on this device only, then thrown away at once. Nothing is sent anywhere or stored. The model’s numbers are gone when you close the page.</span></li>
+            <li><span lang="ja"><strong>使うのは押した時だけ</strong>マイクやほかのタブの音は、ボタンを押した時だけ使い、終わったらすぐ止めます。「ほかのマイクを選ぶ」を押した時は、マイクの名前の一覧を出すためだけに許可を求め、すぐ止めます（音は受けません）。選んだマイクは、そのタブを閉じるまで覚えます。ほかのタブの音は、ブラウザーの共有の画面であなたが選んだタブの音だけを使い、映像は使いません。選んだ言葉（JP / EN）だけは、この端末に覚えます。</span><span lang="en"><strong>Used only when you press</strong>The microphone or another tab’s sound is used only after you press a button, and stops as soon as it is done. “Choose another mic” asks for permission only to list the microphones’ names, then stops at once (no sound is taken). The chosen microphone is remembered until you close the tab. For another tab, only the sound of the tab you pick in the browser’s sharing screen is used, never the picture. Only your choice of language (JP / EN) is remembered on this device.</span></li>
+            <li><span lang="ja"><strong>外に何も読みに行かない</strong>このサイトは、外のサーバーに何も読みに行きません（フォント・解析の道具も使いません）。</span><span lang="en"><strong>Nothing is loaded from outside</strong>This site loads nothing from other servers (no web fonts, no analytics).</span></li>
+            <li><span lang="ja"><strong>性別や年齢を判断しない</strong>声から性別や年齢を判断しません。測るのは、声の音の性質だけです。</span><span lang="en"><strong>No guessing of gender or age</strong>Gender and age are never guessed from a voice. Only the qualities of the sound are measured.</span></li>
           </ul>
         </section>
 
         <section id="match" class="card reveal">
-          <h2><span class="no">02</span>近い声のさがし方</h2>
-          <p>一言話すと、声を測って、このサイトで事前に測った声の中から、近い順に 5 つ出します。ふだんの声でも、声真似でもかまいません。あなたは何も登録しません。</p>
+          <h2><span class="no">02</span><span lang="ja">近い声のさがし方</span><span lang="en">Finding close voices</span></h2>
+          <p><span lang="ja">一言話すと、声を測って、このサイトで事前に測った声の中から、近い順に 5 つ出します。ふだんの声でも、声真似でもかまいません。あなたは何も登録しません。</span><span lang="en">Say a phrase and your voice is measured; the five closest among the voices this site measured in advance are shown. Your usual voice or an impression both work. You never sign up for anything.</span></p>
           <ul>
-            <li><strong>一言から</strong>: 声が 0.4 秒ほど（「おはようございます」くらい）あれば測れます。一言では、声の高さ・響き・音色・声の質で比べます。</li>
-            <li><strong>リアルタイム解析</strong>: 話している間、声の成分の図（スペクトログラム）・声の高さの線・高さや明るさなどの数字・測れるようになった項目を、その場で計算して見せます。結果の数字は、話し終えた後に、もう一度きちんと測った物です（計算は画面とは別の処理で行い、終わったら音を捨てます）。</li>
-            <li><strong>話すほど絞り込む</strong>: 「もう一言話して、絞り込む」で話すたびに、それまでの回の数字と合わせて結果を出し直します。前の回の音は残さず、数字だけを合わせます。</li>
-            <li><strong>確かさ</strong>: 一言は「ざっくり」、声が合わせて 3 秒からは「だいたい」、1 回で 8 秒以上話すと速さと間も加わって「しっかり」です。抑揚などは 1 回で声 3 秒から、速さと間は 1 回で声 8 秒から測ります（短いと、言った言葉で大きく揺れるため）。</li>
+            <li><span lang="ja"><strong>一言から</strong>: 声が 0.4 秒ほど（「おはようございます」くらい）あれば測れます。一言では、声の高さ・響き・音色・声の質で比べます。</span><span lang="en"><strong>From one phrase</strong>: about 0.4 s of voice (a short greeting) is enough. From one phrase, pitch, resonance, timbre and voice quality are compared.</span></li>
+            <li><span lang="ja"><strong>リアルタイム解析</strong>: 話している間、声の成分の図（スペクトログラム）・声の高さの線・高さや明るさなどの数字・測れるようになった項目を、その場で計算して見せます。結果の数字は、話し終えた後に、もう一度きちんと測った物です（計算は画面とは別の処理で行い、終わったら音を捨てます）。</span><span lang="en"><strong>Live analysis</strong>: while you talk, a spectrogram, a pitch line, numbers such as pitch and brightness, and the items that have become measurable are worked out on the spot. The final numbers are measured again properly after you finish (in a separate process from the page; the sound is thrown away when it is done).</span></li>
+            <li><span lang="ja"><strong>話すほど絞り込む</strong>: 「もう一言話して、絞り込む」で話すたびに、それまでの回の数字と合わせて結果を出し直します。前の回の音は残さず、数字だけを合わせます。</span><span lang="en"><strong>Talk more to narrow it down</strong>: each time you use “Say one more thing to narrow it down”, the result is worked out again together with the earlier takes. Earlier sound is never kept — only the numbers are combined.</span></li>
+            <li><span lang="ja"><strong>確かさ</strong>: 一言は「ざっくり」、声が合わせて 3 秒からは「だいたい」、1 回で 8 秒以上話すと速さと間も加わって「しっかり」です。抑揚などは 1 回で声 3 秒から、速さと間は 1 回で声 8 秒から測ります（短いと、言った言葉で大きく揺れるため）。</span><span lang="en"><strong>Certainty</strong>: one phrase gives a “rough” result, 3 s of voice in all gives a “fair” one, and 8 s or more in one go adds tempo and pauses for a “solid” one. Intonation and similar items need 3 s of voice in one go, tempo and pauses 8 s (when short, they swing a lot with the words said).</span></li>
           </ul>
-          <p>近さは、項目ごとのずれを「同じ人でも配信ごとに揺れる幅」でそろえてから足し合わせて決めます。同じ数字なら、どの端末でも同じ結果になります。</p>
+          <p><span lang="ja">近さは、項目ごとのずれを「同じ人でも配信ごとに揺れる幅」でそろえてから足し合わせて決めます。同じ数字なら、どの端末でも同じ結果になります。</span><span lang="en">Closeness adds up the difference in each item after scaling it by how much the same person varies from stream to stream. The same numbers give the same result on any device.</span></p>
         </section>
 
         <section id="mimic" class="card reveal">
-          <h2><span class="no">03</span>声真似の点数</h2>
+          <h2><span class="no">03</span><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></h2>
           <ul>
-            <li>お手本は、このサイトで測った声から選ぶか、マイクで聞かせる・ほかのタブの音を取る（パソコンの Chrome・Edge）・音声ファイルを選ぶ、のどれかです。</li>
-            <li><strong>セリフ真似</strong>: お手本がセリフ 1 つ（話しはじめから終わりまで 12 秒以内）なら、同じセリフを真似した声と、抑揚（高さの上がり下がりの形）・タイミング・声の質で比べ、2 本の線を重ねた図を出します。点数は、抑揚 4・タイミング 2.5・声の質 3.5 の割合で合わせます。</li>
-            <li><strong>声全体</strong>: それより長いお手本と、このサイトで測ったお手本は、声の数字だけで比べます。</li>
-            <li>真似して話すと、近さの点数（0〜100）と、近づけるための直し方を最大 3 つ出します。</li>
-            <li>セリフの高さと大きさの動き（数字の並び）も、ページを閉じると消えます。</li>
+            <li><span lang="ja">お手本は、このサイトで測った声から選ぶか、マイクで聞かせる・ほかのタブの音を取る（パソコンの Chrome・Edge）・音声ファイルを選ぶ、のどれかです。</span><span lang="en">The model is chosen from voices measured by this site, played to the microphone, captured from another tab (Chrome or Edge on a computer), or taken from a sound file.</span></li>
+            <li><span lang="ja"><strong>セリフ真似</strong>: お手本がセリフ 1 つ（話しはじめから終わりまで 12 秒以内）なら、同じセリフを真似した声と、抑揚（高さの上がり下がりの形）・タイミング・声の質で比べ、2 本の線を重ねた図を出します。点数は、抑揚 4・タイミング 2.5・声の質 3.5 の割合で合わせます。</span><span lang="en"><strong>Line mimic</strong>: when the model is a single line (12 s or less from start to end), your imitation of the same line is compared for intonation (the shape of the rises and falls), timing and voice quality, and the two pitch lines are drawn one over the other. The score weighs intonation 4, timing 2.5 and voice 3.5.</span></li>
+            <li><span lang="ja"><strong>声全体</strong>: それより長いお手本と、このサイトで測ったお手本は、声の数字だけで比べます。</span><span lang="en"><strong>Whole voice</strong>: longer models, and models measured by this site, are compared by the voice numbers only.</span></li>
+            <li><span lang="ja">真似して話すと、近さの点数（0〜100）と、近づけるための直し方を最大 3 つ出します。</span><span lang="en">After you imitate, a closeness score (0–100) and up to three tips to get closer are shown.</span></li>
+            <li><span lang="ja">セリフの高さと大きさの動き（数字の並び）も、ページを閉じると消えます。</span><span lang="en">The line’s pitch and loudness over time (a row of numbers) are also gone when you close the page.</span></li>
           </ul>
         </section>
 
         <section id="items" class="card reveal wide">
-          <h2><span class="no">04</span>測る項目</h2>
-          <p>声から、次の 45 項目を測ります。同じ音なら、いつも同じ数字になります。小さな BGM や雑音があっても、話していない間の音を覚えて差し引き、声の質は声が背景よりはっきり大きい所だけで測るので、数字がずれにくくなっています（歌の入った BGM や、大きな BGM は分けられません）。</p>
+          <h2><span class="no">04</span><span lang="ja">測る項目</span><span lang="en">What is measured</span></h2>
+          <p><span lang="ja">声から、次の 45 項目を測ります。同じ音なら、いつも同じ数字になります。小さな BGM や雑音があっても、話していない間の音を覚えて差し引き、声の質は声が背景よりはっきり大きい所だけで測るので、数字がずれにくくなっています（歌の入った BGM や、大きな BGM は分けられません）。</span><span lang="en">These 45 items are measured from the voice. The same sound always gives the same numbers. With quiet BGM or noise, the sound in the pauses is learned and taken out, and voice quality is measured only where the voice is clearly above the background, so the numbers shift less (BGM with singing, or loud BGM, cannot be separated).</span></p>
           <ul class="items-list">
-            <li><strong>高さ</strong>: 声の高さ、抑揚、高さの偏り、高さの動きの速さ</li>
-            <li><strong>響き</strong>: フォルマント（F1〜F4）とその幅、響きの間隔、口の開きと舌の動きの幅、明るさ、高域の強さ、音色（MFCC 1〜13）、音色の動き</li>
-            <li><strong>声の質</strong>: 澄み（HNR）、はっきりさ（CPP）、柔らかさ（H1−H2）、ゆらぎ（jitter・shimmer）</li>
-            <li><strong>話す速さと間</strong>: 速さ、速さのムラ、間の多さと長さ、ひと続きの長さ、リズム、声の続き方</li>
-            <li><strong>強さ</strong>: 強弱の幅、声の力</li>
+            <li><span lang="ja"><strong>高さ</strong>: 声の高さ、抑揚、高さの偏り、高さの動きの速さ</span><span lang="en"><strong>Pitch</strong>: pitch, intonation, pitch skew, pitch movement</span></li>
+            <li><span lang="ja"><strong>響き</strong>: フォルマント（F1〜F4）とその幅、響きの間隔、口の開きと舌の動きの幅、明るさ、高域の強さ、音色（MFCC 1〜13）、音色の動き</span><span lang="en"><strong>Resonance</strong>: formants (F1–F4) and their bandwidths, formant spacing, mouth-opening and tongue-movement ranges, brightness, treble strength, timbre (MFCC 1–13), timbre movement</span></li>
+            <li><span lang="ja"><strong>声の質</strong>: 澄み（HNR）、はっきりさ（CPP）、柔らかさ（H1−H2）、ゆらぎ（jitter・shimmer）</span><span lang="en"><strong>Voice quality</strong>: clarity (HNR), definition (CPP), softness (H1−H2), wobble (jitter, shimmer)</span></li>
+            <li><span lang="ja"><strong>話す速さと間</strong>: 速さ、速さのムラ、間の多さと長さ、ひと続きの長さ、リズム、声の続き方</span><span lang="en"><strong>Tempo and pauses</strong>: speaking rate, rate variation, number and length of pauses, phrase length, rhythm, voicing</span></li>
+            <li><span lang="ja"><strong>強さ</strong>: 強弱の幅、声の力</span><span lang="en"><strong>Strength</strong>: dynamics, vocal power</span></li>
           </ul>
-          <p>点数と直し方に使うのは、自分で変えやすい 12 項目（高さ・抑揚・響き・息・柔らかさ・力・速さ・間・強弱）です。項目ごとに「ここまでのずれなら近い」幅を決めて、ずれの大きさから点数を出します。ほかの項目は、お手本とあなたの数字を並べて見せるだけです。</p>
-          <p><strong>声紋</strong>: 測った数字から描いた、その声だけの指紋のような図です。図の 18 の項目が、それぞれ図のどこかを動かします。形（高さで色と縦の伸び、抑揚でうねり、高さの偏りで上下のふくらみ、高さの動きで線が流れる速さ）、芯と模様（芯の上下は口の開き、左右は舌の前後、響きの間隔で線の間隔、明るさで星、音色で指紋の模様と、まわりを包む光のリボン。リボンは上が低い音、下が高い音で、外へふくらむ所ほどその高さの音が強い）、霞と線（息で霞と漂う霞の粒、柔らかさで線のぼけ、ゆらぎで線の切れ目と、ふちに散る星のような粒）、外の輪（速さ・間・リズム）、大きさ（声の力・強弱）。同じ数字なら、いつも同じ模様です。図の下の名前を押すと、図のその場所に印と数字が出ます。まだ測っていない項目（一言だけの時の速さと間など）は、点線で描きます。</p>
-          <p>セリフ真似では、これに加えて、1 つのセリフの抑揚とタイミングを比べます。点数は今のところの目安で、本物の声で確かめたら目盛りを見直します。</p>
+          <p><span lang="ja">点数と直し方に使うのは、自分で変えやすい 12 項目（高さ・抑揚・響き・息・柔らかさ・力・速さ・間・強弱）です。項目ごとに「ここまでのずれなら近い」幅を決めて、ずれの大きさから点数を出します。ほかの項目は、お手本とあなたの数字を並べて見せるだけです。</span><span lang="en">The score and tips use 12 items that are easy to change yourself (pitch, intonation, resonance, breath, softness, power, tempo, pauses and dynamics). Each item has a width within which a difference still counts as close, and the score comes from how far off you are. The other items are only shown side by side for the model and you.</span></p>
+          <p><span lang="ja"><strong>声紋</strong>: 測った数字から描いた、その声だけの指紋のような図です。図の 18 の項目が、それぞれ図のどこかを動かします。形（高さで色と縦の伸び、抑揚でうねり、高さの偏りで上下のふくらみ、高さの動きで線が流れる速さ）、芯と模様（芯の上下は口の開き、左右は舌の前後、響きの間隔で線の間隔、明るさで星、音色で指紋の模様と、まわりを包む光のリボン。リボンは上が低い音、下が高い音で、外へふくらむ所ほどその高さの音が強い）、霞と線（息で霞と漂う霞の粒、柔らかさで線のぼけ、ゆらぎで線の切れ目と、ふちに散る星のような粒）、外の輪（速さ・間・リズム）、大きさ（声の力・強弱）。同じ数字なら、いつも同じ模様です。図の下の名前を押すと、図のその場所に印と数字が出ます。まだ測っていない項目（一言だけの時の速さと間など）は、点線で描きます。</span><span lang="en"><strong>Voiceprint</strong>: a fingerprint-like figure drawn from the numbers, unique to each voice. Each of the 18 items in the figure moves some part of it. Shape (pitch sets the colour and height, intonation the waves, pitch skew the bulge at the top or bottom, pitch movement how fast the lines flow); core and pattern (the core moves down with mouth opening and right with the tongue forward, formant spacing sets the line spacing, brightness the stars, and timbre the fingerprint pattern and the ribbon of light around it — low sounds at the top, high at the bottom, bulging where that part of the sound is strong); haze and lines (breath sets the haze and drifting specks, softness the blur of the lines, wobble the breaks in the lines and star-like specks around the edge); outer ring (tempo, pauses, rhythm); size (vocal power, dynamics). The same numbers always draw the same pattern. Press a name below the figure to mark that spot and show its number. Items not measured yet (such as tempo and pauses after one phrase) are drawn dotted.</span></p>
+          <p><span lang="ja">セリフ真似では、これに加えて、1 つのセリフの抑揚とタイミングを比べます。点数は今のところの目安で、本物の声で確かめたら目盛りを見直します。</span><span lang="en">Line mimic also compares the intonation and timing of a single line. Scores are a rough guide for now and will be tuned once checked with real voices.</span></p>
         </section>
 
         <section id="voices" class="card reveal">
-          <h2><span class="no">05</span>このサイトで測った声</h2>
-          <p>運営が、公開されている配信や動画を自分で再生し、その場で 30 秒ずつ数字にしました。音は保存していません。1 つの声あたり数十個の 30 秒の数字の、項目ごとの中央値を使います。サイトにあるのは、名前・公式ページへのリンク・声の数字だけです。</p>
-          <p>このサイトは有志が作った物で、声のご本人・事務所・作品の公式ではありません。</p>
+          <h2><span class="no">05</span><span lang="ja">このサイトで測った声</span><span lang="en">Voices measured by this site</span></h2>
+          <p><span lang="ja">運営が、公開されている配信や動画を自分で再生し、その場で 30 秒ずつ数字にしました。音は保存していません。1 つの声あたり数十個の 30 秒の数字の、項目ごとの中央値を使います。サイトにあるのは、名前・公式ページへのリンク・声の数字だけです。</span><span lang="en">The site’s operator played public streams and videos and turned them into numbers on the spot, 30 s at a time. No sound was kept. Each voice uses the median of each item over dozens of 30-second sets. The site holds only names, links to official pages, and the voice numbers.</span></p>
+          <p><span lang="ja">このサイトは有志が作った物で、声のご本人・事務所・作品の公式ではありません。</span><span lang="en">This site is a fan-made project and is not official for any of the voices, their agencies or works.</span></p>
         </section>
 
         <section id="register" class="card reveal">
-          <h2><span class="no">06</span>声の登録（だれでも・ログインなし）</h2>
-          <p>探している声が無い時は、声真似の点数のページでその声をお手本として測り、登録できます。送るのは数字・名前・所属や作品名・公式ページのリンクだけで、音や、送った人の名前・メールは送りません。</p>
+          <h2><span class="no">06</span><span lang="ja">声の登録（だれでも・ログインなし）</span><span lang="en">Adding voices (anyone, no login)</span></h2>
+          <p><span lang="ja">探している声が無い時は、声真似の点数のページでその声をお手本として測り、登録できます。送るのは数字・名前・所属や作品名・公式ページのリンクだけで、音や、送った人の名前・メールは送りません。</span><span lang="en">If the voice you want is missing, measure it as a model on the mimic score page and add it. Only the numbers, the name, the agency or title, and a link to an official page are sent — never the sound, nor the sender’s name or email.</span></p>
           <ul>
-            <li><strong>確かめ 1</strong>: 数字が人の声としてありうるか、測れた声が足りているか、リンクが公式ページの形か。ページの中と、受け取った後の 2 回確かめます。</li>
-            <li><strong>確かめ 2</strong>: 毎日決まった時間に、AI が名前とリンクを見て、公開されているキャラや人物の声か、一般の人の声でないか、不適切でないかを確かめます。</li>
-            <li><strong>確かめ 3</strong>: 同じ声に別々の 3 件以上の数字が届き、互いに近い時だけ出します。出す数字はその中央値です。</li>
+            <li><span lang="ja"><strong>確かめ 1</strong>: 数字が人の声としてありうるか、測れた声が足りているか、リンクが公式ページの形か。ページの中と、受け取った後の 2 回確かめます。</span><span lang="en"><strong>Check 1</strong>: whether the numbers are possible for a human voice, whether enough voice was measured, and whether the link looks like an official page — checked twice, on the page and after receipt.</span></li>
+            <li><span lang="ja"><strong>確かめ 2</strong>: 毎日決まった時間に、AI が名前とリンクを見て、公開されているキャラや人物の声か、一般の人の声でないか、不適切でないかを確かめます。</span><span lang="en"><strong>Check 2</strong>: once a day, an AI looks at the name and link to check that it is a public character or person, not a private individual, and nothing inappropriate.</span></li>
+            <li><span lang="ja"><strong>確かめ 3</strong>: 同じ声に別々の 3 件以上の数字が届き、互いに近い時だけ出します。出す数字はその中央値です。</span><span lang="en"><strong>Check 3</strong>: a voice appears only when three or more separate entries arrive for it and agree with each other. The numbers shown are their median.</span></li>
           </ul>
-          <p>登録から出した声には「みんなの登録」と表示し、運営が測った声と分けています。送られた登録は、運営だけが見られる場所に置きます。このサイトに載せるのは、出すと決まった声の名前・所属・リンク・数字だけです。</p>
+          <p><span lang="ja">登録から出した声には「みんなの登録」と表示し、運営が測った声と分けています。送られた登録は、運営だけが見られる場所に置きます。このサイトに載せるのは、出すと決まった声の名前・所属・リンク・数字だけです。</span><span lang="en">Voices from entries are marked “Added by users” to set them apart from those the operator measured. Entries are kept where only the operator can see them; this site shows only the name, agency, link and numbers of voices that pass.</span></p>
         </section>
 
         <section id="removal" class="card reveal">
-          <h2><span class="no">07</span>データの削除のお願い</h2>
+          <h2><span class="no">07</span><span lang="ja">データの削除のお願い</span><span lang="en">Removal requests</span></h2>
           <div class="note-card">
-            <p>ご本人・事務所・権利者の方で、このサイトの声のデータから外すことを希望される場合はご連絡ください。確認でき次第、データから消します。</p>
-            <p>窓口: 公開の時にここに書きます。</p>
+            <p><span lang="ja">ご本人・事務所・権利者の方で、このサイトの声のデータから外すことを希望される場合はご連絡ください。確認でき次第、データから消します。</span><span lang="en">If you are the person, their agency or a rights holder and would like a voice removed from this site’s data, please contact us. It will be removed as soon as this is confirmed.</span></p>
+            <p><span lang="ja">窓口: 公開の時にここに書きます。</span><span lang="en">Contact: to be added here at launch.</span></p>
           </div>
         </section>
         </div>
@@ -112,10 +113,11 @@
       <footer class="site-foot">
         <div>
           <p class="foot-logo">voice<span>-</span>twin</p>
-          <p>音は保存も送信もしません。声から性別や年齢を判断しません。</p>
+          <p><span lang="ja">音は保存も送信もしません。声から性別や年齢を判断しません。</span><span lang="en">Sound is never stored or sent. Gender and age are never guessed from a voice.</span></p>
         </div>
-        <p class="foot-links"><a href="./">声をくらべる</a><a href="./mimic.html">声真似の点数</a></p>
+        <p class="foot-links"><a href="./"><span lang="ja">声をくらべる</span><span lang="en">Compare</span></a><a href="./mimic.html"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a></p>
       </footer>
     </div>
+    <script type="module" src="/src/ui/about-page.ts"></script>
   </body>
 </html>

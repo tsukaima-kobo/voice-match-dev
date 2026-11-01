@@ -1,6 +1,7 @@
 // セリフ真似の図: お手本の高さの動きと、お手本の時間に合わせたあなたの高さの動きを、1 つの図に重ねる（SVG）。
 // 下には、お手本の大きさの動き（音の山）を薄く描く。数字の並びだけを使い、音は使わない。
 import type { Contour } from '../voice/measure.ts';
+import { t } from '../i18n.ts';
 
 const NS = 'http://www.w3.org/2000/svg';
 const W = 1000,
@@ -45,7 +46,7 @@ export function drawLineChart(box: HTMLElement, ref: Contour, mine: Float32Array
   const x = (i: number) => (n > 1 ? (i / (n - 1)) * W : W / 2);
   const y = (p: number) => bottom - ((p - lo) / (hi - lo)) * (bottom - top);
 
-  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'お手本とあなたの、声の高さの動きを重ねた図' });
+  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': t('お手本とあなたの、声の高さの動きを重ねた図', 'The pitch of the model and of you, one over the other') });
   const defs = svg('defs', {});
   const g = svg('linearGradient', { id: `${id}g`, x1: 0, x2: 1, y1: 0, y2: 0 });
   g.append(svg('stop', { offset: 0, class: 'stop-a' }), svg('stop', { offset: 0.5, class: 'stop-b' }), svg('stop', { offset: 1, class: 'stop-c' }));

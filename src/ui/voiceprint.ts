@@ -11,6 +11,7 @@
 // 最初に出る時は、芯から外へ広がる走査の光で描き出す。動きを減らす設定では止まった絵（走査もしない）。
 import { FEATURE_BY_KEY, formatFeature, type FeatureKey, type Features } from '../voice/features.ts';
 import { createShapeView, levelWord, renderGuide, SHAPE_LAYERS, shapeParams, type ShapeLayer, type ShapeParams, type ShapeView } from './voice-shape.ts';
+import { t } from '../i18n.ts';
 
 const VERT = `#version 300 es
 in vec2 a;void main(){gl_Position=vec4(a,0.,1.);}`;
@@ -474,8 +475,8 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
     ctx.arc(at[0], at[1], 7 * d, 0, TAU);
     ctx.stroke();
     // (the label, on the side the mark is on)
-    const name = k === 'mfcc2' ? '音色' : FEATURE_BY_KEY[k].name;
-    const val = k === 'mfcc2' ? 'MFCC 1〜13' : formatFeature(k, feats[k]);
+    const name = k === 'mfcc2' ? t('音色', 'Timbre') : FEATURE_BY_KEY[k].name;
+    const val = k === 'mfcc2' ? 'MFCC 1–13' : formatFeature(k, feats[k]);
     const word = k === 'mfcc2' ? '' : levelWord(k, feats[k]);
     const right = at[0] >= W / 2;
     const fs = Math.max(11, Math.min(15, W / d / 30)) * d;
@@ -528,7 +529,7 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
         revealStart = performance.now();
         t0 = 0;
       }
-      box.setAttribute('aria-label', `声紋の図。${SHAPE_LAYERS.flatMap((l) => l.items.filter((i) => !i.key.startsWith('mfcc')).map((i) => `${FEATURE_BY_KEY[i.key].name} ${formatFeature(i.key, f[i.key])}`)).join('、')}`);
+      box.setAttribute('aria-label', `${t('声紋の図。', 'Voiceprint. ')}${SHAPE_LAYERS.flatMap((l) => l.items.filter((i) => !i.key.startsWith('mfcc')).map((i) => `${FEATURE_BY_KEY[i.key].name} ${formatFeature(i.key, f[i.key])}`)).join(t('、', ', '))}`);
       wake();
     },
     focus(layer, item) {

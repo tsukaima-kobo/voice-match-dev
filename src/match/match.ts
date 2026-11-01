@@ -5,6 +5,7 @@
 //    だから、同じ数字なら、どの端末でも同じ順位になる。
 // 声から性別や年齢は判断しない。絞り込み（グループなど）は利用者が選ぶ。
 import { FEATURE_BY_KEY, FEATURE_KEYS, type FeatureKey, type Features } from '../voice/features.ts';
+import { t } from '../i18n.ts';
 
 /** 照合のモデル（data/model.json）。center・spread は変換後（log の物は自然対数）の値 */
 export interface MatchModel {
@@ -115,8 +116,8 @@ export function closeness(model: MatchModel, a: Features, b: Features): [Feature
 
 /** 近さの言葉（distance の目安。データがそろったら tools/eval.ts の結果で見直す） */
 export function closenessWord(distance: number): string {
-  if (distance <= 0.5) return 'とても近い';
-  if (distance <= 0.9) return '近い';
-  if (distance <= 1.4) return 'やや近い';
-  return '似ている所がある';
+  if (distance <= 0.5) return t('とても近い', 'Very close');
+  if (distance <= 0.9) return t('近い', 'Close');
+  if (distance <= 1.4) return t('やや近い', 'Fairly close');
+  return t('似ている所がある', 'Some likeness');
 }

@@ -4,6 +4,8 @@
 // 点数には使わない（2026-10-31、文献の典型値から。人の声のデータで見直す）。
 // 声から性別や年齢は判断しない。項目は声の音の性質だけ。
 
+import { lang } from '../i18n.ts';
+
 export const FEATURE_KEYS = [
   // 高さ
   'pitch',
@@ -62,13 +64,10 @@ export type FeatureKey = (typeof FEATURE_KEYS)[number];
 export type Features = Record<FeatureKey, number | null>;
 
 export type FeatureGroup = 'pitch' | 'timbre' | 'quality' | 'time' | 'strength';
-export const GROUP_NAMES: Record<FeatureGroup, string> = {
-  pitch: '高さ',
-  timbre: '響き',
-  quality: '声の質',
-  time: '話す速さと間',
-  strength: '強さ',
-};
+const GROUP_JA: Record<FeatureGroup, string> = { pitch: '高さ', timbre: '響き', quality: '声の質', time: '話す速さと間', strength: '強さ' };
+const GROUP_EN: Record<FeatureGroup, string> = { pitch: 'Pitch', timbre: 'Resonance', quality: 'Voice quality', time: 'Tempo and pauses', strength: 'Strength' };
+/** まとまりの名前（今の言葉で） */
+export const GROUP_NAMES = new Proxy(GROUP_JA, { get: (o, k: FeatureGroup) => (lang === 'en' ? GROUP_EN[k] : o[k]) }) as Record<FeatureGroup, string>;
 
 export interface FeatureDef {
   key: FeatureKey;
@@ -142,6 +141,52 @@ export const FEATURES: readonly FeatureDef[] = [
   def({ key: 'levelRange', group: 'strength', name: '強弱の幅', unit: 'dB', about: '声の大きさの幅（5〜95%）。マイクの音量には左右されない', lo: 8, hi: 26, log: false, low: '一定', high: '大きい', digits: 2 }),
   def({ key: 'tilt', group: 'strength', name: '声の力', unit: 'dB', about: '高い倍音の強さ（1〜4 kHz と 80 Hz〜1 kHz の差）', lo: -26, hi: -6, log: false, low: '柔らかい', high: '力強い', digits: 2 }),
 ];
+
+/* ---- 英語（name・unit・about・low・high を、今の言葉で返すようにする） ---- */
+type En = { name: string; about: string; low: string; high: string };
+const UNIT_EN: Record<string, string> = { 半音: 'st', '半音/秒': 'st/s', '音/秒': 'syl/s', 秒: 's' };
+const EN: Partial<Record<FeatureKey, En>> = {
+  pitch: { name: 'Pitch', about: 'Median pitch while speaking', low: 'Low', high: 'High' },
+  pitchRange: { name: 'Intonation', about: 'How far the pitch rises and falls (10–90%)', low: 'Flat', high: 'Wide' },
+  pitchSkew: { name: 'Pitch skew', about: 'Spread above the middle minus spread below it (90%−median vs median−10%)', low: 'Bottom-heavy', high: 'Top-heavy' },
+  pitchMotion: { name: 'Pitch movement', about: 'How fast the pitch moves (median)', low: 'Slow', high: 'Fast' },
+  f1: { name: 'Formant 1', about: 'Resonance set by how wide the mouth opens (F1)', low: 'Low', high: 'High' },
+  f2: { name: 'Formant 2', about: 'Resonance set by the tongue’s front–back position (F2)', low: 'Low', high: 'High' },
+  f3: { name: 'Formant 3', about: 'Resonance of the whole vocal tract (F3)', low: 'Low', high: 'High' },
+  f4: { name: 'Formant 4', about: 'Resonance set by the shape deep in the throat (F4)', low: 'Low', high: 'High' },
+  formantSpacing: { name: 'Formant spacing', about: 'Spacing of the formants; wider for a shorter vocal tract', low: 'Narrow', high: 'Wide' },
+  f1Range: { name: 'Mouth-opening range', about: 'Range of F1 (10–90%): how much the mouth opening differs between vowels', low: 'Small', high: 'Large' },
+  f2Range: { name: 'Tongue-movement range', about: 'Range of F2 (10–90%): how much the tongue position differs between vowels', low: 'Small', high: 'Large' },
+  b1: { name: 'F1 bandwidth', about: 'Width of the first formant peak (narrower is a crisper resonance)', low: 'Narrow', high: 'Wide' },
+  b2: { name: 'F2 bandwidth', about: 'Width of the second formant peak', low: 'Narrow', high: 'Wide' },
+  centroid: { name: 'Brightness', about: 'Centre of the sound from 300 Hz to 4 kHz (tilt removed)', low: 'Dark', high: 'Bright' },
+  hammarberg: { name: 'Treble weakness', about: 'Peak at 0–2 kHz minus peak at 2–5 kHz', low: 'Treble-rich', high: 'Treble-poor' },
+  slopeLow: { name: 'Low-band slope', about: 'Slope of the sound from 0 to 500 Hz', low: 'Downward', high: 'Upward' },
+  slopeMid: { name: 'Mid-band slope', about: 'Slope of the sound from 500 to 1500 Hz', low: 'Steep', high: 'Gentle' },
+  mfccDelta: { name: 'Timbre movement', about: 'How much the timbre changes every 10 ms (mean MFCC change between neighbouring frames)', low: 'Smooth', high: 'Lively' },
+  hnr: { name: 'Clarity', about: 'How little breath or noise is in the voice (HNR)', low: 'Breathy', high: 'Clear' },
+  cpp: { name: 'Definition', about: 'How clear the voice’s periodicity is (CPP)', low: 'Blurred', high: 'Defined' },
+  h1h2: { name: 'Softness', about: 'Difference between the 1st and 2nd harmonics (H1−H2)', low: 'Pressed', high: 'Soft' },
+  jitter: { name: 'Pitch jitter', about: 'Cycle-to-cycle wobble of the period (jitter RAP)', low: 'Steady', high: 'Wobbly' },
+  shimmer: { name: 'Loudness shimmer', about: 'Cycle-to-cycle wobble of the loudness (shimmer APQ3)', low: 'Steady', high: 'Wobbly' },
+  rate: { name: 'Speaking rate', about: 'Syllable-like peaks per second while speaking', low: 'Slow', high: 'Fast' },
+  rateVar: { name: 'Rate variation', about: 'Spread of the speaking rate between phrases (SD ÷ mean)', low: 'Even', high: 'Uneven' },
+  pauseShare: { name: 'Pauses', about: 'Share of pauses of 0.25 s or longer within the talk', low: 'Few', high: 'Many' },
+  pauseLen: { name: 'Pause length', about: 'Length of one pause (median)', low: 'Short', high: 'Long' },
+  runLen: { name: 'Phrase length', about: 'Length of talk from pause to pause (median)', low: 'Short', high: 'Long' },
+  rhythm: { name: 'Rhythm variation', about: 'Difference between neighbouring gaps of syllable peaks (nPVI)', low: 'Even', high: 'Uneven' },
+  voicedShare: { name: 'Voicing', about: 'Share of the talk with the vocal folds sounding', low: 'Choppy', high: 'Connected' },
+  levelRange: { name: 'Dynamics', about: 'Range of the loudness (5–95%); not changed by the mic volume', low: 'Even', high: 'Wide' },
+  tilt: { name: 'Vocal power', about: 'Strength of the high harmonics (1–4 kHz minus 80 Hz–1 kHz)', low: 'Soft', high: 'Powerful' },
+};
+for (const d of FEATURES) {
+  const m = /^mfcc(\d+)$/.exec(d.key);
+  const en: En = EN[d.key] ?? (m ? { name: `Timbre ${m[1]}`, about: Number(m[1]) <= 4 ? `Shape of the timbre (MFCC ${m[1]}${m[1] === '1' ? ', overall tilt' : ''})` : `Fine shape of the timbre (MFCC ${m[1]})`, low: '−', high: '+' } : { name: d.name, about: d.about, low: d.low, high: d.high });
+  const ja = { name: d.name, unit: d.unit, about: d.about, low: d.low, high: d.high };
+  const unitEn = UNIT_EN[d.unit] ?? d.unit;
+  for (const k of ['name', 'about', 'low', 'high'] as const) Object.defineProperty(d, k, { get: () => (lang === 'en' ? en[k] : ja[k]), enumerable: true });
+  Object.defineProperty(d, 'unit', { get: () => (lang === 'en' ? unitEn : ja.unit), enumerable: true });
+}
 
 export const FEATURE_BY_KEY: Record<FeatureKey, FeatureDef> = Object.fromEntries(FEATURES.map((f) => [f.key, f])) as Record<FeatureKey, FeatureDef>;
 

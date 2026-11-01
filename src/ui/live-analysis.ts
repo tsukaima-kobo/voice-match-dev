@@ -6,6 +6,7 @@
 //   測れる項目: 声の秒数が、項目ごとに要る長さ（features.ts の needOf）に届くと光る。
 // 音は持たない（直近 40 ms だけを、計算のために持つ）。話し終えた後は、45 項目が順に光る「計算中」の演出（その間に Worker が測る）。
 import { FEATURE_KEYS, FEATURES, FEW_SECONDS, GROUP_NAMES, LONG_SECONDS, needOf, ONE_LINE_SECONDS, type FeatureGroup } from '../voice/features.ts';
+import { onLang, t } from '../i18n.ts';
 
 export type LiveMode = 'off' | 'listening' | 'analysing' | 'done';
 export interface LiveAnalysis {
@@ -106,10 +107,11 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
 
   // (the panel)
   const head = el('div', 'live-head');
-  const title = el('span', 'live-title', 'リアルタイム解析');
+  const title = el('span', 'live-title');
   const count = el('span', 'live-count');
   const countN = el('b', undefined, '0');
-  count.append(countN, ` / ${FEATURE_KEYS.length} 項目`);
+  const countOf = document.createTextNode('');
+  count.append(countN, countOf);
   head.append(title, count);
   const scope = el('div', 'live-scope');
   const spec = el('canvas', 'live-spec');
@@ -122,40 +124,56 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
   const scan = el('div', 'live-scanline');
   scope.append(spec, axis, scan);
   const read = el('div', 'live-read');
-  const cell = (label: string, unit: string) => {
+  const labels: (() => void)[] = [];
+  const cell = (label: [string, string], unit: [string, string]) => {
     const c = el('div', 'live-cell');
     const v = el('b', undefined, '—');
-    c.append(el('span', undefined, label), v, el('small', undefined, unit));
+    const l = el('span'),
+      u = el('small');
+    labels.push(() => {
+      l.textContent = t(...label);
+      u.textContent = t(...unit);
+    });
+    c.append(l, v, u);
     read.append(c);
     return v;
   };
-  const vPitch = cell('声の高さ', 'Hz'),
-    vNote = cell('音名', ''),
-    vRange = cell('抑揚', '半音'),
-    vBright = cell('明るさ', 'Hz'),
-    vLevel = cell('大きさ', 'dB'),
-    vVoiced = cell('声', '秒');
+  const vPitch = cell(['声の高さ', 'Pitch'], ['Hz', 'Hz']),
+    vNote = cell(['音名', 'Note'], ['', '']),
+    vRange = cell(['抑揚', 'Intonation'], ['半音', 'st']),
+    vBright = cell(['明るさ', 'Brightness'], ['Hz', 'Hz']),
+    vLevel = cell(['大きさ', 'Level'], ['dB', 'dB']),
+    vVoiced = cell(['声', 'Voice'], ['秒', 's']);
   const tiers = el('div', 'live-tiers');
-  const tierDefs: [number, string][] = [
-    [ONE_LINE_SECONDS, '一言: 高さ・響き・音色・声の質'],
-    [FEW_SECONDS, '抑揚・口の開き・音色の動き'],
-    [LONG_SECONDS, '速さと間・リズム'],
+  const tierDefs: [number, string, string][] = [
+    [ONE_LINE_SECONDS, '一言: 高さ・響き・音色・声の質', 'A word: pitch, resonance, timbre, quality'],
+    [FEW_SECONDS, '抑揚・口の開き・音色の動き', 'Intonation, mouth opening, timbre movement'],
+    [LONG_SECONDS, '速さと間・リズム', 'Tempo, pauses and rhythm'],
   ];
-  const tierEls = tierDefs.map(([sec, label]) => {
-    const t = el('div', 'live-tier');
+  const tierEls = tierDefs.map(([sec, ja, en]) => {
+    const row = el('div', 'live-tier');
     const bar = el('i');
-    t.append(el('span', undefined, label), bar, el('small', undefined, `${sec} 秒`));
-    tiers.append(t);
-    return { t, bar, sec };
+    const l = el('span'),
+      u = el('small');
+    labels.push(() => {
+      l.textContent = t(ja, en);
+      u.textContent = t(`${sec} 秒`, `${sec} s`);
+    });
+    row.append(l, bar, u);
+    tiers.append(row);
+    return { t: row, bar, sec };
   });
   const items = el('div', 'live-items');
   const chips: { el: HTMLElement; need: number }[] = [];
   const groups = [...new Set(FEATURES.map((d) => d.group))] as FeatureGroup[];
   for (const g of groups) {
     const row = el('div', 'live-group');
-    row.append(el('span', 'live-gname', GROUP_NAMES[g]));
+    const gname = el('span', 'live-gname');
+    row.append(gname);
+    labels.push(() => (gname.textContent = GROUP_NAMES[g]));
     for (const d of FEATURES.filter((x) => x.group === g)) {
-      const c = el('span', 'live-chip', d.name);
+      const c = el('span', 'live-chip');
+      labels.push(() => (c.textContent = d.name));
       row.append(c);
       chips.push({ el: c, need: needOf(d.key) });
     }
@@ -163,6 +181,18 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
   }
   const status = el('p', 'live-status');
   box.replaceChildren(head, scope, read, tiers, items, status);
+  let statusText: [string, string] | null = null;
+  const titleFor = (m: LiveMode) => (m === 'analysing' ? t('解析中', 'Analysing') : m === 'done' ? t('解析しました', 'Analysed') : t('リアルタイム解析', 'Live analysis'));
+  const relabel = () => {
+    for (const f of labels) f();
+    countOf.textContent = t(` / ${FEATURE_KEYS.length} 項目`, ` / ${FEATURE_KEYS.length} items`);
+    title.textContent = titleFor(current);
+    status.textContent = statusText ? t(...statusText) : '';
+  };
+  const say = (ja: string, en: string) => {
+    statusText = [ja, en];
+    status.textContent = t(ja, en);
+  };
 
   // (the state)
   // (the last few tens of ms at 16 kHz, in a circle; copied straight into `ring` every 20 ms for the sums)
@@ -192,6 +222,8 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
   let raf = 0,
     current: LiveMode = 'off',
     lastText = 0;
+  relabel();
+  onLang(relabel);
 
   function palette(): Uint8ClampedArray {
     const probe = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
@@ -365,20 +397,21 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
         t.bar.style.setProperty('--p', '0');
         t.t.classList.remove('done');
       }
+      statusText = null;
       status.textContent = '';
     },
     mode(m) {
       current = m;
       box.dataset.mode = m;
-      title.textContent = m === 'analysing' ? '解析中' : m === 'done' ? '解析しました' : 'リアルタイム解析';
+      title.textContent = titleFor(m);
       if (m === 'listening') {
-        status.textContent = '話すほど、測れる項目が増えます';
+        say('話すほど、測れる項目が増えます', 'The more you speak, the more items can be measured');
         if (!raf) raf = requestAnimationFrame(draw);
       }
     },
     async analysing(ms) {
       // (the items light one by one, as the numbers are worked out in the Worker)
-      status.textContent = `${FEATURE_KEYS.length} 項目を計算しています…`;
+      say(`${FEATURE_KEYS.length} 項目を計算しています…`, `Working out ${FEATURE_KEYS.length} items…`);
       if (reduce.matches) return;
       const per = Math.max(12, Math.floor(ms / chips.length));
       for (let i = 0; i < chips.length; i++) {

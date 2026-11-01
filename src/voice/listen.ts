@@ -5,6 +5,7 @@
 // `?test=1` の時だけ window.__voiceTwin.feed(samples, rate) で、マイクの代わりに決まった音を流せる（画面の確認用）。
 // マイクは選べる（listMics の一覧の deviceId を openMic に渡す）。一覧の名前は、ブラウザーがマイクを許可した後にだけ見える。
 import workletUrl from './capture.worklet.js?url&no-inline';
+import { t } from '../i18n.ts';
 
 export interface Mic {
   rate: number;
@@ -92,7 +93,7 @@ export async function listMics(ask = false): Promise<MicChoice[]> {
   for (const d of all) {
     if (!d.deviceId || d.deviceId === 'default' || d.deviceId === 'communications') continue;
     if (out.some((x) => x.id === d.deviceId)) continue;
-    out.push({ id: d.deviceId, label: d.label || `マイク ${out.length + 1}` });
+    out.push({ id: d.deviceId, label: d.label || t(`マイク ${out.length + 1}`, `Microphone ${out.length + 1}`) });
   }
   return out;
 }
@@ -177,17 +178,17 @@ export function micErrorText(e: unknown): string {
   switch (name) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return 'マイクが許可されていません。ブラウザーの設定でこのページにマイクを許可してから、もう一度押してください。';
+      return t('マイクが許可されていません。ブラウザーの設定でこのページにマイクを許可してから、もう一度押してください。', 'The microphone is not allowed. Allow it for this page in your browser settings, then press again.');
     case 'MicGoneError':
-      return '選んだマイクが見つかりませんでした。「いつものマイク」に戻したので、もう一度押してください。';
+      return t('選んだマイクが見つかりませんでした。「いつものマイク」に戻したので、もう一度押してください。', 'The chosen microphone was not found. It has been set back to the default microphone; please press again.');
     case 'NotFoundError':
     case 'OverconstrainedError':
-      return 'マイクが見つかりません。マイクをつないでから、もう一度押してください。';
+      return t('マイクが見つかりません。マイクをつないでから、もう一度押してください。', 'No microphone was found. Connect one, then press again.');
     case 'NotReadableError':
     case 'AbortError':
-      return 'マイクを始められませんでした。ほかのアプリやタブがマイクを使っていないか確かめてください。';
+      return t('マイクを始められませんでした。ほかのアプリやタブがマイクを使っていないか確かめてください。', 'The microphone could not start. Check that no other app or tab is using it.');
     default:
-      return 'マイクを始められませんでした。もう一度押してください。';
+      return t('マイクを始められませんでした。もう一度押してください。', 'The microphone could not start. Please press again.');
   }
 }
 
@@ -196,13 +197,13 @@ export function tabErrorText(e: unknown): string {
   const name = typeof e === 'object' && e !== null && 'name' in e ? String((e as { name: unknown }).name) : '';
   switch (name) {
     case 'NoAudioError':
-      return 'タブの音が共有されませんでした。共有するタブを選ぶ画面で「タブの音声も共有する」をオンにしてから、もう一度押してください。';
+      return t('タブの音が共有されませんでした。共有するタブを選ぶ画面で「タブの音声も共有する」をオンにしてから、もう一度押してください。', 'The tab’s sound was not shared. Turn on “Share tab audio” when you choose the tab, then press again.');
     case 'NotAllowedError':
-      return '共有がキャンセルされました。お手本の動画を開いたタブを選んで、もう一度押してください。';
+      return t('共有がキャンセルされました。お手本の動画を開いたタブを選んで、もう一度押してください。', 'Sharing was cancelled. Choose the tab with the model video and press again.');
     case 'NotSupportedError':
     case 'TypeError':
-      return 'このブラウザーでは、タブの音を取れません。パソコンの Chrome か Edge を使うか、マイクで聞かせてください。';
+      return t('このブラウザーでは、タブの音を取れません。パソコンの Chrome か Edge を使うか、マイクで聞かせてください。', 'This browser cannot capture a tab’s sound. Use Chrome or Edge on a computer, or play it to the microphone.');
     default:
-      return 'タブの音を取れませんでした。もう一度押すか、マイクで聞かせてください。';
+      return t('タブの音を取れませんでした。もう一度押すか、マイクで聞かせてください。', 'The tab’s sound could not be captured. Press again, or play it to the microphone.');
   }
 }

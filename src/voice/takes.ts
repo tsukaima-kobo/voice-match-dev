@@ -2,6 +2,7 @@
 // 項目ごとに、その項目に足りる長さの回（features.ts の needOf）だけを使い、声の長さで重みを付けた平均にする
 // （Hz など log の項目は、log の平均 = 相乗平均）。乱数なし・同じ回の並びなら同じ結果。
 import { FEATURE_BY_KEY, FEATURE_KEYS, FEW_SECONDS, LONG_SECONDS, needOf, roundFeature, type Features } from './features.ts';
+import { lang } from '../i18n.ts';
 
 export interface Take {
   features: Features;
@@ -42,4 +43,6 @@ export function certaintyOf(c: Pick<Combined, 'voicedSeconds' | 'longest'>): Cer
   if (c.voicedSeconds >= FEW_SECONDS) return 2;
   return 1;
 }
-export const CERTAINTY_WORDS: Record<Certainty, string> = { 1: 'ざっくり', 2: 'だいたい', 3: 'しっかり' };
+const CERT_JA: Record<Certainty, string> = { 1: 'ざっくり', 2: 'だいたい', 3: 'しっかり' };
+const CERT_EN: Record<Certainty, string> = { 1: 'Rough', 2: 'Fair', 3: 'Solid' };
+export const CERTAINTY_WORDS = new Proxy(CERT_JA, { get: (o, k) => (lang === 'en' ? CERT_EN : o)[k as unknown as Certainty] }) as Record<Certainty, string>;

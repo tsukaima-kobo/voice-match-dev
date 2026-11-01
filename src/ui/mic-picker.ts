@@ -3,9 +3,10 @@
 // 選んだ物は、このタブを閉じるまで覚える（sessionStorage。声真似の点数のページと共通）。マイクの抜き差しで一覧を作り直す。
 // 1 つのページに選ぶ所が 2 つある時（声真似の点数）は、どちらで選んでも同じ物にそろえる。
 import { listMics, micChoiceSupported, type MicChoice } from '../voice/listen.ts';
+import { onLang, t } from '../i18n.ts';
 
 const KEY = 'voice-twin-mic';
-const DEFAULT_LABEL = 'いつものマイク（端末の設定）';
+const defaultLabel = () => t('いつものマイク（端末の設定）', 'Default microphone (device setting)');
 
 export interface MicPicker {
   /** 選んでいるマイクの deviceId（空なら端末の設定） */
@@ -43,7 +44,7 @@ export function micPicker(parts: { box: HTMLElement; select: HTMLSelectElement; 
   function draw(): void {
     if (chosen && !mics.some((m) => m.id === chosen) && mics.length) chosen = '';
     for (const p of parts) {
-      const opts = [new Option(DEFAULT_LABEL, ''), ...mics.map((m) => new Option(m.label, m.id))];
+      const opts = [new Option(defaultLabel(), ''), ...mics.map((m) => new Option(m.label, m.id))];
       p.select.replaceChildren(...opts);
       p.select.value = mics.some((m) => m.id === chosen) ? chosen : '';
       p.find.hidden = mics.length > 0;
@@ -54,7 +55,7 @@ export function micPicker(parts: { box: HTMLElement; select: HTMLSelectElement; 
     try {
       mics = await listMics(ask);
     } catch (e) {
-      if (ask) onError?.('マイクの一覧を出せませんでした。ブラウザーの設定で、このページにマイクを許可してください。');
+      if (ask) onError?.(t('マイクの一覧を出せませんでした。ブラウザーの設定で、このページにマイクを許可してください。', 'The list of microphones could not be shown. Allow the microphone for this page in your browser settings.'));
       void e;
       return;
     }
@@ -70,6 +71,7 @@ export function micPicker(parts: { box: HTMLElement; select: HTMLSelectElement; 
   }
   if (supported) navigator.mediaDevices.addEventListener?.('devicechange', () => void refresh());
   draw();
+  onLang(draw);
   void refresh();
   return {
     get: () => (mics.some((m) => m.id === chosen) ? chosen : ''),

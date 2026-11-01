@@ -1,6 +1,7 @@
 // 項目の並び（声のページの「あなたの声」と、声真似の点数の「お手本とあなた」で共通）。
 // まとまり（高さ・響き…）ごとの枠に並べ、意味を言葉にしにくい項目（features.ts の detail）は「細かい項目」に畳む。
 import { displayValue, FEATURES, GROUP_NAMES, type FeatureDef, type FeatureGroup } from '../voice/features.ts';
+import { t } from '../i18n.ts';
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -51,7 +52,7 @@ export function renderGroups(box: HTMLElement, makeRow: (d: FeatureDef) => HTMLE
     const more = defs.filter((x) => x.detail);
     if (more.length) {
       const det = el('details', 'more');
-      det.append(el('summary', undefined, `細かい項目（${more.length}）`));
+      det.append(el('summary', undefined, t(`細かい項目（${more.length}）`, `More items (${more.length})`)));
       for (const d of more) det.append(makeRow(d));
       card.append(det);
     }

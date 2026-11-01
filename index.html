@@ -8,29 +8,30 @@
     <meta name="theme-color" content="#f7f6fd" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0f0d1c" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0478f'/%3E%3Cstop offset='.55' stop-color='%237a4dff'/%3E%3Cstop offset='1' stop-color='%2362d8ec'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='14' fill='url(%23g)'/%3E%3C/svg%3E" />
+    <script src="./lang.js"></script>
     <link rel="stylesheet" href="/src/ui/base.css" />
   </head>
   <body>
     <div class="page">
       <header class="site">
         <a class="logo" href="./"><i class="logo-orb" aria-hidden="true"></i>voice<span>-</span>twin</a>
-        <nav aria-label="ページ"><a href="./" aria-current="page">声をくらべる</a><a href="./mimic.html">声真似の点数</a><a href="./about.html">しくみと約束</a></nav>
+        <nav aria-label="ページ" data-en-aria-label="Pages"><a href="./" aria-current="page"><span lang="ja">声をくらべる</span><span lang="en">Compare</span></a><a href="./mimic.html"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a><a href="./about.html"><span lang="ja">しくみと約束</span><span lang="en">How it works</span></a></nav>
       </header>
       <main>
         <section class="hero hero-voice">
           <div class="hero-copy">
-            <p class="eyebrow">声真似練習場・45 項目で声をはかる</p>
-            <h1><span class="grad">あなたの声</span>は、<br /><span class="nowrap">誰に近い？</span></h1>
-            <p class="lead">一言話すだけで、声の高さや響きを測って、事前に測った声の中から近い声を出します。もう一言ずつ話すほど絞り込み、最大 45 項目で比べます。ふだんの声でも、声真似でも。</p>
-            <ul class="chips"><li>一言から</li><li>登録なし</li><li>音は送らない・残さない</li><li>声から性別や年齢を判断しない</li></ul>
+            <p class="eyebrow"><span lang="ja">声真似練習場・45 項目で声をはかる</span><span lang="en">Voice-mimic studio · 45 measures of your voice</span></p>
+            <h1><span lang="ja"><span class="grad">あなたの声</span>は、<br /><span class="nowrap">誰に近い？</span></span><span lang="en">Whose voice is <span class="grad">yours</span> closest to?</span></h1>
+            <p class="lead"><span lang="ja">一言話すだけで、声の高さや響きを測って、事前に測った声の中から近い声を出します。もう一言ずつ話すほど絞り込み、最大 45 項目で比べます。ふだんの声でも、声真似でも。</span><span lang="en">Say a single phrase and we measure its pitch and resonance, then find the closest voices among those measured in advance. Each extra phrase narrows it down, up to 45 measures. Your usual voice or an impression — both work.</span></p>
+            <ul class="chips"><li><span lang="ja">一言から</span><span lang="en">From one phrase</span></li><li><span lang="ja">登録なし</span><span lang="en">No sign-up</span></li><li><span lang="ja">音は送らない・残さない</span><span lang="en">Sound never sent or kept</span></li><li><span lang="ja">声から性別や年齢を判断しない</span><span lang="en">No guessing of gender or age</span></li></ul>
           </div>
 
           <div class="orb-wrap">
             <div class="orb" id="orb" aria-hidden="true"></div>
-            <p class="orb-label" id="orb-label" aria-hidden="true">聞いています</p>
+            <p class="orb-label" id="orb-label" aria-hidden="true"><span lang="ja">聞いています</span><span lang="en">Listening</span></p>
           </div>
 
-          <section class="stage" id="stage" data-state="idle" aria-label="声を測る">
+          <section class="stage" id="stage" data-state="idle" aria-label="声を測る" data-en-aria-label="Measure your voice">
             <div class="topic">
               <p class="topic-label" id="topic-label">お題</p>
               <p class="topic-text" id="topic-text"></p>
@@ -40,9 +41,9 @@
               </div>
             </div>
             <div class="mic-pick" id="mic-pick" hidden>
-              <label for="mic-select">マイク</label>
+              <label for="mic-select"><span lang="ja">マイク</span><span lang="en">Mic</span></label>
               <select id="mic-select"><option value="">いつものマイク（端末の設定）</option></select>
-              <button type="button" id="mic-find">ほかのマイクを選ぶ</button>
+              <button type="button" id="mic-find"><span lang="ja">ほかのマイクを選ぶ</span><span lang="en">Choose another mic</span></button>
             </div>
             <div id="live"></div>
             <canvas class="wave" id="wave" aria-hidden="true"></canvas>
@@ -62,26 +63,26 @@
 
         <section class="result" id="result" hidden aria-live="polite">
           <header class="section-head">
-            <p class="kicker">01 結果</p>
-            <h2>近い声</h2>
+            <p class="kicker"><span lang="ja">01 結果</span><span lang="en">01 Result</span></p>
+            <h2><span lang="ja">近い声</span><span lang="en">Closest voices</span></h2>
           </header>
           <div class="certainty-row">
             <div class="certainty" id="certainty" data-level="1">
               <span class="c-bars" aria-hidden="true"><i></i><i></i><i></i></span>
-              <p><span class="c-label">確かさ</span><strong id="certainty-word">ざっくり</strong></p>
+              <p><span class="c-label"><span lang="ja">確かさ</span><span lang="en">Certainty</span></span><strong id="certainty-word"></strong></p>
               <p class="c-note" id="certainty-note"></p>
             </div>
             <button type="button" class="primary" id="more">もう一言話して、絞り込む</button>
           </div>
           <ol class="matches" id="matches"></ol>
-          <div class="empty-card" id="no-data" hidden><p>比べる声のデータは、いま準備中です。今はあなたの声の数字だけを出しています。</p></div>
-          <p class="empty">探している声が無い時は、<a href="./mimic.html">声真似の点数のページ</a>でその声をお手本として測り、登録できます。</p>
+          <div class="empty-card" id="no-data" hidden><p><span lang="ja">比べる声のデータは、いま準備中です。今はあなたの声の数字だけを出しています。</span><span lang="en">The voices to compare with are still being prepared. For now, only your own numbers are shown.</span></p></div>
+          <p class="empty"><span lang="ja">探している声が無い時は、<a href="./mimic.html">声真似の点数のページ</a>でその声をお手本として測り、登録できます。</span><span lang="en">Can’t find the voice you are looking for? Measure it as a model on the <a href="./mimic.html">mimic score page</a> and add it.</span></p>
 
           <section class="shape-sec" aria-labelledby="shape-title">
             <header class="section-head">
-              <p class="kicker">02 声紋</p>
-              <h2 id="shape-title">あなたの<span class="grad">声紋</span></h2>
-              <p>測った数字から描いた、あなたの声だけの模様です。同じ数字なら、いつも同じ模様になります。下の名前を押すと、図のどこが何を表すかが分かります。一言だけの時は外の輪が点線で、話すほど模様がそろっていきます。</p>
+              <p class="kicker"><span lang="ja">02 声紋</span><span lang="en">02 Voiceprint</span></p>
+              <h2 id="shape-title"><span lang="ja">あなたの<span class="grad">声紋</span></span><span lang="en">Your <span class="grad">voiceprint</span></span></h2>
+              <p><span lang="ja">測った数字から描いた、あなたの声だけの模様です。同じ数字なら、いつも同じ模様になります。下の名前を押すと、図のどこが何を表すかが分かります。一言だけの時は外の輪が点線で、話すほど模様がそろっていきます。</span><span lang="en">A pattern drawn from your numbers — yours alone. The same numbers always draw the same pattern. Press a name below to see which part shows what. After a single phrase the outer ring is dotted; the more you talk, the more complete the pattern becomes.</span></p>
             </header>
             <div class="shape-row">
               <div class="shapes" id="shapes"></div>
@@ -90,13 +91,13 @@
           </section>
 
           <header class="section-head">
-            <p class="kicker">03 あなたの声</p>
-            <h2>45 項目の数字</h2>
+            <p class="kicker"><span lang="ja">03 あなたの声</span><span lang="en">03 Your voice</span></p>
+            <h2><span lang="ja">45 項目の数字</span><span lang="en">The 45 measures</span></h2>
           </header>
           <p class="empty" id="mine-note"></p>
           <div class="groups" id="mine"></div>
           <details class="info">
-            <summary>測った内容</summary>
+            <summary><span lang="ja">測った内容</span><span lang="en">About this measurement</span></summary>
             <p id="info"></p>
           </details>
         </section>
@@ -105,22 +106,22 @@
 
         <section class="flow reveal" aria-labelledby="flow-title">
           <header class="section-head">
-            <p class="kicker">しくみ</p>
-            <h2 id="flow-title">一言から。<span class="grad">話すほど</span>絞り込む。</h2>
+            <p class="kicker"><span lang="ja">しくみ</span><span lang="en">How it works</span></p>
+            <h2 id="flow-title"><span lang="ja">一言から。<span class="grad">話すほど</span>絞り込む。</span><span lang="en">Start with a phrase. <span class="grad">Talk more</span>, get closer.</span></h2>
           </header>
           <ol class="flow-list">
-            <li class="card"><span class="no" aria-hidden="true">01</span><h3>一言話す</h3><p>セリフ 1 つでも、お題に答えても。ふだんの声でも、声真似でも。</p></li>
-            <li class="card"><span class="no" aria-hidden="true">02</span><h3>近い声が出る</h3><p>この端末の中で声を数字にして、事前に測った声と比べ、近い順に 5 つ出します。音はすぐに捨てます。</p></li>
-            <li class="card"><span class="no" aria-hidden="true">03</span><h3>話すほど絞り込む</h3><p>もう一言ずつ話すと、数字をまとめて結果が確かになります。続けて長く話すと、速さや間まで 45 項目で比べます。</p></li>
+            <li class="card"><span class="no" aria-hidden="true">01</span><h3><span lang="ja">一言話す</span><span lang="en">Say a phrase</span></h3><p><span lang="ja">セリフ 1 つでも、お題に答えても。ふだんの声でも、声真似でも。</span><span lang="en">A single line or an answer to a prompt. Your usual voice or an impression.</span></p></li>
+            <li class="card"><span class="no" aria-hidden="true">02</span><h3><span lang="ja">近い声が出る</span><span lang="en">See the closest voices</span></h3><p><span lang="ja">この端末の中で声を数字にして、事前に測った声と比べ、近い順に 5 つ出します。音はすぐに捨てます。</span><span lang="en">Your voice is turned into numbers on this device, compared with voices measured in advance, and the five closest are shown. The sound is thrown away at once.</span></p></li>
+            <li class="card"><span class="no" aria-hidden="true">03</span><h3><span lang="ja">話すほど絞り込む</span><span lang="en">Talk more to narrow it down</span></h3><p><span lang="ja">もう一言ずつ話すと、数字をまとめて結果が確かになります。続けて長く話すと、速さや間まで 45 項目で比べます。</span><span lang="en">Each extra phrase is combined with the earlier ones for a surer result. Talk longer in one go and tempo and pauses join in, up to all 45 measures.</span></p></li>
           </ol>
         </section>
       </main>
       <footer class="site-foot">
         <div>
           <p class="foot-logo">voice<span>-</span>twin</p>
-          <p>音は保存も送信もしません。声から性別や年齢を判断しません。</p>
+          <p><span lang="ja">音は保存も送信もしません。声から性別や年齢を判断しません。</span><span lang="en">Sound is never stored or sent. Gender and age are never guessed from a voice.</span></p>
         </div>
-        <p class="foot-links"><a href="./mimic.html">声真似の点数</a><a href="./about.html">しくみと約束</a><a href="./about.html#removal">データの削除のお願い</a></p>
+        <p class="foot-links"><a href="./mimic.html"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a><a href="./about.html"><span lang="ja">しくみと約束</span><span lang="en">How it works</span></a><a href="./about.html#removal"><span lang="ja">データの削除のお願い</span><span lang="en">Ask for removal</span></a></p>
       </footer>
     </div>
     <script type="module" src="/src/ui/voice-page.ts"></script>
