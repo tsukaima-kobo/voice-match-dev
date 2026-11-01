@@ -116,7 +116,7 @@ export const FEATURES: readonly FeatureDef[] = [
   def({ key: 'hammarberg', group: 'timbre', name: '高域の弱さ', unit: 'dB', about: '0〜2 kHz の山と 2〜5 kHz の山の差', lo: 15, hi: 45, log: false, low: '高域が強い', high: '高域が弱い', digits: 2 }),
   def({ key: 'slopeLow', group: 'timbre', name: '低域の傾き', unit: 'dB/kHz', about: '0〜500 Hz の音の傾き', lo: -40, hi: 80, log: false, low: '下がる', high: '上がる', digits: 2 }),
   def({ key: 'slopeMid', group: 'timbre', name: '中域の傾き', unit: 'dB/kHz', about: '500〜1500 Hz の音の傾き', lo: -35, hi: -5, log: false, low: '急に下がる', high: 'なだらか', digits: 2 }),
-  def({ key: 'mfcc1', group: 'timbre', name: '音色 1', unit: '', about: '音色の形（MFCC 1、全体の傾き）', lo: 5, hi: 30, log: false, low: '−', high: '+', digits: 3 }),
+  def({ key: 'mfcc1', group: 'timbre', name: '音色 1', unit: '', about: '音色の形（MFCC 1、全体の傾き）', lo: 3, hi: 23, log: false, low: '−', high: '+', digits: 3 }),
   def({ key: 'mfcc2', group: 'timbre', name: '音色 2', unit: '', about: '音色の形（MFCC 2）', lo: -12, hi: 8, log: false, low: '−', high: '+', digits: 3 }),
   def({ key: 'mfcc3', group: 'timbre', name: '音色 3', unit: '', about: '音色の形（MFCC 3）', lo: -5, hi: 15, log: false, low: '−', high: '+', digits: 3 }),
   def({ key: 'mfcc4', group: 'timbre', name: '音色 4', unit: '', about: '音色の形（MFCC 4）', lo: -10, hi: 10, log: false, low: '−', high: '+', digits: 3 }),

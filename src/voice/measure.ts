@@ -15,8 +15,13 @@
 // 目盛り（features.ts の lo・hi）は暫定。人の声・配信の音で確かめて見直す。
 import { FEATURE_KEYS, roundFeature, type Features } from './features.ts';
 
+// 2026-11-01 版 3.1: 小さな BGM・雑音に強くした。話していない枠の平均スペクトル（背景）を、話している所のスペクトルから引いて
+// 音色（MFCC）・明るさ・強さの傾き・長い時間の平均スペクトルを出す。声の質（澄み・ゆらぎ・はっきりさ・柔らかさ）は、
+// 声が背景より CLEAR_DB 大きい枠だけで測る（足りなければ全部の枠）。話していない所が無い・無音だけの時は、前と同じ。
+// 音色は、その枠の一番強い帯から MFCC_RANGE_DB（50 dB）より弱い帯を、その下の端にそろえる（前は 80 dB。弱い雑音で動かないように）。
+// 背景を引くのは、声と背景の差が 40 dB より小さい時だけ（静かな部屋では引かない）。
 /** 測り方の版（数字の意味が変わったら上げる。事前に測ったお手本の数字と利用者の数字は、同じ版どうしで比べる） */
-export const MEASURE_VERSION = '3.0.0';
+export const MEASURE_VERSION = '3.1.0';
 
 /** the rate the analysis runs at (every clip is brought to it first) */
 export const RATE = 16000;
@@ -38,6 +43,27 @@ export const PAUSE_MIN_SECONDS = 0.25;
 export const QUIET_DB = -55;
 export const MIN_SNR_DB = 15;
 export const MAX_CLIPPED = 0.003;
+/** 背景の音（BGM・雑音）を引くのは、声と背景の差（loud − 背景、dB）がこれより小さい時。BG_FULL_SNR 以下で全部引き、
+ * BG_NONE_SNR 以上では引かない（静かな部屋の小さな雑音で数字を動かさないため。間はなめらかに） */
+const BG_FULL_SNR = 30;
+const BG_NONE_SNR = 40;
+/** 音色（MFCC）: 帯ごとに背景を引き、背景のこの割合より下げない（小さすぎる値の log で揺れないように） */
+const BG_MEL_FLOOR = 0.3;
+/** 長い時間の平均スペクトル・帯の強さ: 引いた後に残す下限（元の割合） */
+const BG_FLOOR = 0.05;
+/** 背景の音を覚えるのに要る、話していない枠の数（0.2 秒） */
+const BG_MIN_FRAMES = 20;
+/** 背景の音は、話している所からこれだけ離れた枠で覚える（話しはじめ・終わりの声のすそを混ぜないため。0.1 秒） */
+const BG_MARGIN = 10;
+/** 背景の音は、その場所の前後 BG_RADIUS 枠（1.5 秒）の、話していない枠から覚える（BGM の和音が変わっても追えるように）。
+ * BG_BLOCK 枠（0.5 秒）ごとに 1 つ。近くに話していない枠が BG_LOCAL_MIN より少なければ、全体の平均 */
+const BG_RADIUS = 150;
+const BG_BLOCK = 50;
+const BG_LOCAL_MIN = 10;
+/** 声の質（澄み・ゆらぎ・はっきりさ・柔らかさ）は、背景の音よりこれだけ大きい枠だけで測る（dB） */
+const CLEAR_DB = 12;
+/** 音色（MFCC）で見る強さの幅（その枠の一番強い帯から下へ、dB）。これより弱い帯は、この幅の下の端にそろえる */
+const MFCC_RANGE_DB = 50;
 /** LPC: the order at 16 kHz and the window (25 ms) */
 const LPC_ORDER = 18;
 const LPC_WIN = 400;
@@ -579,10 +605,6 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   for (let i = 0; i < WIN; i++) hannSum2 += hann[i]! * hann[i]!;
   const level = new Float64Array(nF);
   const syl = new Float64Array(nF);
-  const lowBand = new Float64Array(nF),
-    highBand = new Float64Array(nF),
-    cenNum = new Float64Array(nF),
-    cenDen = new Float64Array(nF);
   const re = new Float64Array(WIN),
     im = new Float64Array(WIN),
     pw = new Float64Array(WIN / 2 + 1);
@@ -597,24 +619,9 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     let total = 0;
     for (let k = 0; k <= WIN / 2; k++) total += (k === 0 || k === WIN / 2 ? 1 : 2) * pw[k]!;
     level[f] = dB(total / WIN / hannSum2);
-    let a = 0,
-      lo = 0,
-      hi = 0,
-      cn = 0,
-      cd = 0;
+    let a = 0;
     for (let k = kSyl0; k < kSyl1; k++) a += pw[k]!;
-    for (let k = kLow0; k < kLow1; k++) lo += pw[k]!;
-    for (let k = kLow1; k < kHigh1; k++) hi += pw[k]!;
-    for (let k = kCen0; k < kHigh1; k++) {
-      const w = pw[k]! * LIFT[k]!;
-      cn += k * BIN_HZ * w;
-      cd += w;
-    }
     syl[f] = dB(a);
-    lowBand[f] = lo;
-    highBand[f] = hi;
-    cenNum[f] = cn;
-    cenDen[f] = cd;
   }
 
   /* 雑音の床と、話している所の線 */
@@ -703,6 +710,60 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   const inSpeech = new Uint8Array(nF);
   for (const [a, b] of speech) for (let f = a; f <= b; f++) inSpeech[f] = 1;
   const isVs = (f: number) => voiced(f) && inSpeech[f] === 1;
+
+  /* 背景の音（BGM・換気扇など）: 話していない枠の平均スペクトルと大きさ。話している所のスペクトルから引き、
+     声の質は、声が背景よりはっきり大きい枠だけで測る。話していない所が少ない（または無音だけの）時は何もしない */
+  const NB = WIN / 2 + 1;
+  const bgFrames: number[] = [];
+  const bgLevels: number[] = [];
+  const nearSpeech = new Uint8Array(nF);
+  for (const [a, b] of speech) for (let f = Math.max(0, a - BG_MARGIN); f <= Math.min(nF - 1, b + BG_MARGIN); f++) nearSpeech[f] = 1;
+  for (let f = 0; f < nF; f++) {
+    if (nearSpeech[f] || level[f]! < -90 || level[f]! >= gate) continue;
+    bgFrames.push(f);
+    bgLevels.push(level[f]!);
+  }
+  const hasBg = bgFrames.length >= BG_MIN_FRAMES;
+  const bgDb = hasBg ? median(bgLevels) : -Infinity;
+  // (how much of the background to take out: all of it when it is near the voice, none when it is far under)
+  const bgW = hasBg ? Math.min(1, Math.max(0, (BG_NONE_SNR - (loudDb - bgDb)) / (BG_NONE_SNR - BG_FULL_SNR))) : 0;
+  // (the background spectrum near each block of frames, and its MFCC bands)
+  const nBlocks = Math.ceil(nF / BG_BLOCK);
+  const blockSpec = new Float64Array(bgW > 0 ? nBlocks * NB : 0);
+  const blockMel = new Float64Array(bgW > 0 ? nBlocks * MEL_FILTERS : 0);
+  if (bgW > 0) {
+    const spec = new Float64Array(bgFrames.length * NB);
+    const all = new Float64Array(NB);
+    bgFrames.forEach((f, i) => {
+      powerSpectrum(s, f * HOP, hann, re, im, pw);
+      for (let k = 0; k < NB; k++) {
+        spec[i * NB + k] = pw[k]!;
+        all[k] = all[k]! + pw[k]! / bgFrames.length;
+      }
+    });
+    for (let b = 0; b < nBlocks; b++) {
+      const c = b * BG_BLOCK + BG_BLOCK / 2;
+      let n = 0;
+      const out = blockSpec.subarray(b * NB, (b + 1) * NB);
+      bgFrames.forEach((f, i) => {
+        if (Math.abs(f - c) > BG_RADIUS) return;
+        n++;
+        for (let k = 0; k < NB; k++) out[k] = out[k]! + spec[i * NB + k]!;
+      });
+      if (n >= BG_LOCAL_MIN) for (let k = 0; k < NB; k++) out[k] = out[k]! / n;
+      else out.set(all);
+      for (let m = 0; m < MEL_FILTERS; m++) {
+        const [k0, w] = MEL_BANK[m]!;
+        let e = 0;
+        for (let j = 0; j < w.length; j++) e += w[j]! * out[k0 + j]!;
+        blockMel[b * MEL_FILTERS + m] = e;
+      }
+    }
+  }
+  /** the voiced frames' background, summed (taken out of the long-term sums after the voiced loop) */
+  const bgSum = new Float64Array(NB);
+  const clearLine = hasBg ? bgDb + CLEAR_DB : -Infinity;
+  const isClear = (f: number) => level[f]! >= clearLine;
 
   /* 高さ・抑揚・高さの動きの速さ */
   const vf: number[] = [];
@@ -803,21 +864,13 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   const voicedShare = speakFrames ? voicedInSpeech / speakFrames : NaN;
   /* 強さ・響き（枠の分布から） */
   const vl: number[] = [];
+  for (let f = 0; f < nF; f++) if (isVs(f)) vl.push(level[f]!);
+  const levelRangeDb = quantileOf(vl, 0.95) - quantileOf(vl, 0.05);
+  // (the high and low bands and the centroid: summed in the voiced loop below, from the spectrum with the background taken out)
   let lowSum = 0,
     highSum = 0,
     cn = 0,
     cd = 0;
-  for (let f = 0; f < nF; f++) {
-    if (!isVs(f)) continue;
-    vl.push(level[f]!);
-    lowSum += lowBand[f]!;
-    highSum += highBand[f]!;
-    cn += cenNum[f]!;
-    cd += cenDen[f]!;
-  }
-  const levelRangeDb = quantileOf(vl, 0.95) - quantileOf(vl, 0.05);
-  const tiltDb = dB(highSum) - dB(lowSum);
-  const centroidHz = cd > 0 ? cn / cd : NaN;
   // (music under the talk: of the frames well under the voice (15 dB below its median) between the first sound of speech
   // and the last, the share that still has a pitch. In speech those are pauses, closures and voiceless sounds; a tune
   // under the talk keeps them tonal)
@@ -851,7 +904,9 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     B2: number[] = [],
     dF: number[] = [];
   const cpps: number[] = [],
-    h12: number[] = [];
+    h12: number[] = [],
+    cppsClear: number[] = [],
+    h12Clear: number[] = [];
   const melE = new Float64Array(MEL_FILTERS);
   const lpcFrame = new Float64Array(LPC_WIN);
   const hamming = windowOf('hamming', LPC_WIN);
@@ -872,19 +927,34 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   for (let f = 0; f < nF; f++) {
     if (!isVs(f)) continue;
     const centre = f * HOP + WIN / 2;
-    // (the spectrum once more, for the long-term average and the MFCC)
+    // (the spectrum once more, for the long-term average, the MFCC, the bands and the centroid. The background comes out
+    // of the long-term sums after the loop, and out of each MFCC band here)
     powerSpectrum(s, f * HOP, hann, re, im, pw);
     for (let k = 0; k <= WIN / 2; k++) ltas[k] = ltas[k]! + pw[k]!;
+    const blk = Math.floor(f / BG_BLOCK);
+    if (bgW > 0) for (let k = 0; k < NB; k++) bgSum[k] = bgSum[k]! + blockSpec[blk * NB + k]!;
+    for (let k = kLow0; k < kLow1; k++) lowSum += pw[k]!;
+    for (let k = kLow1; k < kHigh1; k++) highSum += pw[k]!;
+    for (let k = kCen0; k < kHigh1; k++) {
+      const w = pw[k]! * LIFT[k]!;
+      cn += k * BIN_HZ * w;
+      cd += w;
+    }
     let melFloor = 0;
     for (let m = 0; m < MEL_FILTERS; m++) {
       const [k0, w] = MEL_BANK[m]!;
       let e = 0;
       for (let j = 0; j < w.length; j++) e += w[j]! * pw[k0 + j]!;
+      if (bgW > 0) {
+        const bm = blockMel[blk * MEL_FILTERS + m]!;
+        e = Math.max(e - bgW * bm, bgW * BG_MEL_FLOOR * bm + (1 - bgW) * e);
+      }
       melE[m] = e;
       if (e > melFloor) melFloor = e;
     }
-    // (a floor 80 dB under the frame's strongest band: empty bands do not swing the shape)
-    melFloor *= 1e-8;
+    // (a floor MFCC_RANGE_DB under the frame's strongest band: empty bands, and bands under a hiss or a BGM, do not swing
+    // the shape. 50 dB keeps most of what tells voices apart while a quiet hiss moves the timbre a third as much as at 80 dB)
+    melFloor *= 10 ** (-MFCC_RANGE_DB / 10);
     for (let m = 0; m < MEL_FILTERS; m++) melE[m] = Math.log(Math.max(melE[m]!, melFloor) + 1e-30);
     for (let q = 0; q < MFCC_N; q++) {
       const row = DCT_ROWS[q]!;
@@ -949,7 +1019,9 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
       }
       const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
       const icpt = (sy - slope * sx) / n;
-      cpps.push(sm3(best) - (icpt + slope * best));
+      const cppV = sm3(best) - (icpt + slope * best);
+      cpps.push(cppV);
+      if (isClear(f)) cppsClear.push(cppV);
     }
     // (H1−H2: the first two harmonics over four periods, each the highest of five tries within ±3 %)
     const fz = f0[f]!;
@@ -961,9 +1033,36 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
         h1 = Math.max(h1, amplitudeAt(x16, centre, nWin, fz * (1 + k)));
         h2 = Math.max(h2, amplitudeAt(x16, centre, nWin, 2 * fz * (1 + k)));
       }
-      if (h1 > 0 && h2 > 0) h12.push(20 * Math.log10(h1 / h2));
+      if (h1 > 0 && h2 > 0) {
+        const hv = 20 * Math.log10(h1 / h2);
+        h12.push(hv);
+        if (isClear(f)) h12Clear.push(hv);
+      }
     }
   }
+  // (the background out of the long-term sums: each voiced frame's own background, summed)
+  if (bgW > 0) {
+    let bl = 0,
+      bh = 0,
+      bn = 0,
+      bd = 0;
+    for (let k = kLow0; k < kLow1; k++) bl += bgSum[k]!;
+    for (let k = kLow1; k < kHigh1; k++) bh += bgSum[k]!;
+    for (let k = kCen0; k < kHigh1; k++) {
+      const w = bgSum[k]! * LIFT[k]!;
+      bn += k * BIN_HZ * w;
+      bd += w;
+    }
+    lowSum = Math.max(lowSum - bgW * bl, lowSum * BG_FLOOR);
+    highSum = Math.max(highSum - bgW * bh, highSum * BG_FLOOR);
+    if (cd - bgW * bd > cd * BG_FLOOR) {
+      cn -= bgW * bn;
+      cd -= bgW * bd;
+    }
+    for (let k = 0; k < NB; k++) ltas[k] = Math.max(ltas[k]! - bgW * bgSum[k]!, ltas[k]! * BG_FLOOR);
+  }
+  const tiltDb = dB(highSum) - dB(lowSum);
+  const centroidHz = cd > 0 ? cn / cd : NaN;
   const ltasDb = Array.from(ltas, (v) => dB(v / Math.max(1, mfccN)));
   const maxIn = (lo: number, hi: number) => {
     let m = -Infinity;
@@ -993,6 +1092,13 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   let sumT = 0,
     sumA = 0,
     nCycles = 0;
+  // (the same, from the cycles where the voice is well over the background only)
+  const dTC: number[] = [],
+    dAC: number[] = [],
+    matchesC: number[] = [];
+  let sumTC = 0,
+    sumAC = 0;
+  const cleanAt = (p: number) => isClear(Math.max(0, Math.min(nF - 1, frameAt(p))));
   for (const [ra, rb] of runsOf(isVs)) {
     if (rb - ra + 1 < 5) continue;
     const start = Math.max(0, ra * HOP + WIN / 2 - HOP / 2);
@@ -1005,7 +1111,8 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     let clear = false;
     const P: number[] = [],
       A: number[] = [],
-      J: boolean[] = [];
+      J: boolean[] = [],
+      C: boolean[] = [];
     for (;;) {
       const T = periodAt(m);
       const n = Math.round(T);
@@ -1028,6 +1135,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
         P.push(NaN);
         A.push(NaN);
         J.push(false);
+        C.push(false);
         continue;
       }
       const [off, rv] = peakOf(ncc(lp, sqLp, m, best - 1, n), bestR, ncc(lp, sqLp, m, best + 1, n));
@@ -1036,13 +1144,16 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
       P.push(period);
       A.push(Math.sqrt((sqLp[m + nc]! - sqLp[m]!) / nc));
       J.push(clear && rv >= 0.7);
+      C.push(cleanAt(m));
       clear = rv >= 0.7;
       nCycles++;
       const t0 = Math.round(period),
         c0 = m - (n >> 1);
       if (c0 >= 0 && c0 + t0 + K + n + 1 <= len) {
         for (let k = -K; k <= K; k++) v[k + K] = ncc(pe, sqPe, c0, t0 + k, n);
-        matches.push(Math.min(0.99999, peakBetween(v, K, period - t0)));
+        const mv = Math.min(0.99999, peakBetween(v, K, period - t0));
+        matches.push(mv);
+        if (cleanAt(m)) matchesC.push(mv);
       }
       mf += period;
       m = Math.round(mf);
@@ -1059,6 +1170,12 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
       dA.push(Math.abs(A[i]! - a3));
       sumT += t3;
       sumA += a3;
+      if (C[i - 1] && C[i] && C[i + 1]) {
+        dTC.push(Math.abs(p1 - t3));
+        dAC.push(Math.abs(A[i]! - a3));
+        sumTC += t3;
+        sumAC += a3;
+      }
     }
   }
   const info1 = { ...info0, cycles: nCycles, formantFrames: F1.length, gapTonal };
@@ -1070,9 +1187,13 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     for (let i = 0; i < k; i++) sum += s2[i]!;
     return sum / k;
   };
-  const jitter = trimmedMean(dT) / (sumT / dT.length);
-  const shimmer = trimmedMean(dA) / (sumA / dA.length);
-  const rMid = Math.max(1e-6, median(matches));
+  // (with a background, from the cycles well over it, when there are enough of them)
+  const useClear = hasBg && dTC.length >= 40 && matchesC.length >= 40;
+  const jitter = useClear ? trimmedMean(dTC) / (sumTC / dTC.length) : trimmedMean(dT) / (sumT / dT.length);
+  const shimmer = useClear ? trimmedMean(dAC) / (sumAC / dAC.length) : trimmedMean(dA) / (sumA / dA.length);
+  const rMid = Math.max(1e-6, median(useClear ? matchesC : matches));
+  const cppList = hasBg && cppsClear.length >= 30 ? cppsClear : cpps;
+  const h12List = hasBg && h12Clear.length >= 30 ? h12Clear : h12;
   const hnrDb = 10 * Math.log10(rMid / (1 - rMid));
 
   // (formants from fewer than 0.3 s of frames are left out: too few to trust. Their spread needs 1 s)
@@ -1101,8 +1222,8 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     // (the mean, not the median: the moves between sounds are what it is about, and they are a small part of the frames)
     mfccDelta: mfccSteps.length >= 50 ? mfccSteps.reduce((x, y) => x + y, 0) / mfccSteps.length : NaN,
     hnr: hnrDb,
-    cpp: cpps.length >= 30 ? median(cpps) : NaN,
-    h1h2: h12.length >= 30 ? median(h12) : NaN,
+    cpp: cppList.length >= 30 ? median(cppList) : NaN,
+    h1h2: h12List.length >= 30 ? median(h12List) : NaN,
     jitter,
     shimmer,
     rate,

@@ -59,6 +59,32 @@ describe('同じ音なら同じ数字', () => {
   });
 });
 
+describe('小さな BGM', () => {
+  it('keeps the numbers near when a quiet tune and hiss play under the talk (−20 dB): the background is learnt in the pauses and taken out', () => {
+    const voice = inRoom(vowel({ rate: R, seconds: 12, f0: glide(4), jitter: 0.006, shimmer: 0.03, breath: 0.02, envelope: talk, rms: 0.1 }));
+    const tune = new Float32Array(voice.length);
+    const r = rng(3);
+    for (let i = 0; i < tune.length; i++) {
+      const t = i / R;
+      const chord = Math.floor(t / 2) % 2 ? [196, 246.9, 293.7] : [220, 277.2, 329.6];
+      let v = 0;
+      for (const f of chord) for (let h = 1; h <= 3; h++) v += Math.sin(2 * Math.PI * f * h * t) / (h * h);
+      tune[i] = v + (r() - 0.5) * 0.3;
+    }
+    let ms = 0;
+    for (const v of tune) ms += v * v;
+    const k = (0.1 * 10 ** (-20 / 20)) / Math.sqrt(ms / tune.length);
+    for (let i = 0; i < tune.length; i++) tune[i] = tune[i]! * k;
+    const clean = ok(measureVoice(voice, R));
+    const under = ok(measureVoice(mixIn(Float32Array.from(voice), tune), R));
+    expect(Math.abs(num(under.features.pitch) / num(clean.features.pitch) - 1)).toBeLessThan(0.01);
+    for (const key of ['mfcc1', 'mfcc2', 'mfcc3', 'mfcc4'] as const) expect(Math.abs(num(under.features[key]) - num(clean.features[key])), key).toBeLessThan(0.5);
+    expect(Math.abs(num(under.features.centroid) / num(clean.features.centroid) - 1)).toBeLessThan(0.02);
+    expect(Math.abs(num(under.features.tilt) - num(clean.features.tilt))).toBeLessThan(1);
+    expect(Math.abs(num(under.features.hnr) - num(clean.features.hnr))).toBeLessThan(2);
+  });
+});
+
 describe('高さ', () => {
   it('finds the F0 of harmonic tones from 80 to 400 Hz within 0.5 %', () => {
     for (const f of [80, 95, 123.4, 160, 211, 250, 300, 400]) {
