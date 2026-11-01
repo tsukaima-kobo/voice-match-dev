@@ -10,7 +10,7 @@
 // 図の読み方で項目を選ぶと、その場所に印と引き出し線を描き、数字を出す（上に重ねた 2D の canvas）。
 // 最初に出る時は、芯から外へ広がる走査の光で描き出す。動きを減らす設定では止まった絵（走査もしない）。
 import { FEATURE_BY_KEY, formatFeature, type FeatureKey, type Features } from '../voice/features.ts';
-import { createShapeView, levelWord, renderGuide, SHAPE_LAYERS, shapeParams, type ShapeLayer, type ShapeParams, type ShapeView } from './voice-shape.ts';
+import { createShapeView, drawShape, levelWord, renderGuide, SHAPE_LAYERS, shapeParams, type ShapeLayer, type ShapeParams, type ShapeView } from './voice-shape.ts';
 import { t } from '../i18n.ts';
 
 const VERT = `#version 300 es
@@ -258,24 +258,104 @@ export interface Voiceprint {
 
 const LAYER_INDEX: Record<ShapeLayer, number> = { shape: 1, core: 2, mist: 3, orbit: 4, size: 5 };
 
+/** 声紋の色（0〜1 の RGB）。light は明るい画面の時 */
+export interface VpPalette {
+  low: RGB;
+  mid: RGB;
+  high: RGB;
+  glint: RGB;
+  light: boolean;
+}
+/** 共有カードなどに使う、いつも夜の色（濃い画面の --a3・--a2・--a1） */
+export const NIGHT: VpPalette = { low: [0.4, 0.86, 0.92], mid: [0.66, 0.5, 1], high: [1, 0.42, 0.66], glint: [1, 0.97, 0.99], light: false };
+
+/** canvas に声紋を描く物（WebGL2 が使えなければ null） */
+function makeRenderer(canvas: HTMLCanvasElement, preserve = false): { draw(p: ShapeParams, t: number, reveal: number, focus: number, W: number, pal: VpPalette): Geo } | null {
+  const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: preserve });
+  if (!gl) return null;
+  const prog = build(gl);
+  if (!prog) return null;
+  gl.useProgram(prog);
+  const names = ['uRes', 'uT', 'uReveal', 'uS', 'uA', 'uSkewK', 'uPitch', 'uMotion', 'uSpacing', 'uBright', 'uHnr', 'uSoft', 'uJit', 'uShim', 'uRate', 'uPause', 'uRhythm', 'uPower', 'uLight', 'uSt', 'uCore', 'uW', 'uPh', 'uTim', 'uStar', 'uLow', 'uMid', 'uHigh', 'uGlint', 'uFocus'];
+  const L = Object.fromEntries(names.map((n) => [n, gl.getUniformLocation(prog, n)])) as Record<string, WebGLUniformLocation | null>;
+  canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
+  return {
+    draw(p, t, reveal, focus, W, pal) {
+      if (canvas.width !== W || canvas.height !== W) canvas.width = canvas.height = W;
+      gl.viewport(0, 0, W, W);
+      const g = geometry(p, t);
+      gl.uniform3fv(L.uLow!, pal.low);
+      gl.uniform3fv(L.uMid!, pal.mid);
+      gl.uniform3fv(L.uHigh!, pal.high);
+      gl.uniform3fv(L.uGlint!, pal.glint);
+      gl.uniform1f(L.uLight!, pal.light ? 1 : 0);
+      gl.uniform2f(L.uRes!, W, W);
+      gl.uniform1f(L.uT!, t);
+      gl.uniform1f(L.uReveal!, reveal);
+      gl.uniform1f(L.uS!, g.S);
+      gl.uniform1f(L.uA!, g.A);
+      gl.uniform1f(L.uSkewK!, g.skewK);
+      gl.uniform2f(L.uSt!, g.st[0], g.st[1]);
+      gl.uniform2f(L.uCore!, g.core[0], g.core[1]);
+      gl.uniform1fv(L.uW!, g.w);
+      gl.uniform1fv(L.uPh!, g.ph);
+      gl.uniform1fv(L.uTim!, Array.from({ length: 13 }, (_, i) => or(p[`mfcc${i + 1}`] ?? null)));
+      gl.uniform3fv(L.uStar!, g.stars.flat());
+      const set1 = (n: string, v: number) => gl.uniform1f(L[n]!, v);
+      set1('uPitch', or(p.pitch));
+      set1('uMotion', or(p.pitchMotion));
+      set1('uSpacing', or(p.formantSpacing));
+      set1('uBright', or(p.centroid));
+      set1('uHnr', or(p.hnr));
+      set1('uSoft', or(p.h1h2));
+      set1('uJit', or(p.jitter, 0));
+      set1('uShim', or(p.shimmer, 0));
+      set1('uRate', p.rate === null || p.pauseShare === null ? -1 : or(p.rate));
+      set1('uPause', or(p.pauseShare));
+      set1('uRhythm', or(p.rhythm));
+      set1('uPower', or(p.tilt));
+      gl.uniform1i(L.uFocus!, focus);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      return g;
+    },
+  };
+}
+
+/**
+ * 声紋を 1 枚の絵に（共有カード用。いつも同じ時刻・描き出しの後・夜の色）。WebGL2 が無ければ 2D の図。
+ * 描いたすぐ後に写すので、描いた物を残す設定は要らない。描き終えたら WebGL の文脈を手放す。
+ */
+export function renderSnapshot(f: Features, size: number, pal: VpPalette = NIGHT): HTMLCanvasElement {
+  const out = document.createElement('canvas');
+  out.width = out.height = size;
+  const ctx = out.getContext('2d')!;
+  const gc = document.createElement('canvas');
+  const r = makeRenderer(gc, true);
+  if (r) {
+    r.draw(shapeParams(f), 2.4, 1, 0, size, pal);
+    ctx.drawImage(gc, 0, 0);
+    (gc.getContext('webgl2')?.getExtension('WEBGL_lose_context') as { loseContext(): void } | null)?.loseContext();
+  } else {
+    const to255 = (c: RGB): [number, number, number] => [c[0] * 255, c[1] * 255, c[2] * 255];
+    drawShape(ctx, size, shapeParams(f), { low: to255(pal.low), mid: to255(pal.mid), high: to255(pal.high), ink: [240, 236, 250], glint: to255(pal.glint), light: pal.light }, { t: 2.4, focus: null });
+  }
+  return out;
+}
+
 /** WebGL2 が使えなければ null（呼んだ側が 2D の図にする） */
 export function createVoiceprint(box: HTMLElement): Voiceprint | null {
   const canvas = document.createElement('canvas');
   canvas.className = 'vp-gl';
   canvas.setAttribute('aria-hidden', 'true');
-  const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: true });
-  if (!gl) return null;
-  const prog = build(gl);
-  if (!prog) return null;
+  const renderer = makeRenderer(canvas);
+  if (!renderer) return null;
   const over = document.createElement('canvas');
   over.className = 'vp-over';
   over.setAttribute('aria-hidden', 'true');
   box.append(canvas, over);
   const octx = over.getContext('2d')!;
-  gl.useProgram(prog);
-  const U = (n: string) => gl.getUniformLocation(prog, n);
-  const names = ['uRes', 'uT', 'uReveal', 'uS', 'uA', 'uSkewK', 'uPitch', 'uMotion', 'uSpacing', 'uBright', 'uHnr', 'uSoft', 'uJit', 'uShim', 'uRate', 'uPause', 'uRhythm', 'uPower', 'uLight', 'uSt', 'uCore', 'uW', 'uPh', 'uTim', 'uStar', 'uLow', 'uMid', 'uHigh', 'uGlint', 'uFocus'];
-  const L = Object.fromEntries(names.map((n) => [n, U(n)])) as Record<string, WebGLUniformLocation | null>;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
   const dark = matchMedia('(prefers-color-scheme: dark)');
   let params: ShapeParams | null = null,
@@ -286,71 +366,32 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
     raf = 0,
     t0 = 0,
     revealStart = 0,
-    colorsRead = false;
+    pal: VpPalette | null = null;
 
-  function colors() {
+  function colors(): VpPalette {
     const cs = getComputedStyle(box);
     const probe = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
     const c = (n: string, fb: RGB) => cssColor(probe, cs.getPropertyValue(n).trim(), fb);
-    gl!.uniform3fv(L.uLow!, c('--a3', [0.4, 0.85, 0.93]));
-    gl!.uniform3fv(L.uMid!, c('--a2', [0.48, 0.3, 1]));
-    gl!.uniform3fv(L.uHigh!, c('--a1', [0.94, 0.28, 0.56]));
-    gl!.uniform3fv(L.uGlint!, dark.matches ? [1, 0.97, 0.99] : [1, 1, 1]);
-    gl!.uniform1f(L.uLight!, dark.matches ? 0 : 1);
-    colorsRead = true;
+    return { low: c('--a3', [0.4, 0.85, 0.93]), mid: c('--a2', [0.48, 0.3, 1]), high: c('--a1', [0.94, 0.28, 0.56]), glint: dark.matches ? [1, 0.97, 0.99] : [1, 1, 1], light: !dark.matches };
   }
   dark.addEventListener('change', () => {
-    colorsRead = false;
+    pal = null;
     wake();
   });
 
   function frame(now: number) {
     raf = 0;
     if (!params || !canvas.isConnected) return;
-    if (!colorsRead) colors();
+    pal ??= colors();
     if (!t0) t0 = now;
     const still = reduce.matches;
     const t = still ? 0 : (now - t0) / 1000;
     const reveal = still ? 1 : Math.min(1, (now - revealStart) / 2400);
     const d = Math.min(1.75, window.devicePixelRatio || 1);
     const W = Math.max(1, Math.round(box.clientWidth * d));
-    if (canvas.width !== W || canvas.height !== W) {
-      canvas.width = canvas.height = W;
-      over.width = over.height = W;
-    }
-    gl!.viewport(0, 0, W, W);
-    const p = params,
-      g = geometry(p, t);
-    gl!.uniform2f(L.uRes!, W, W);
-    gl!.uniform1f(L.uT!, t);
-    gl!.uniform1f(L.uReveal!, reveal);
-    gl!.uniform1f(L.uS!, g.S);
-    gl!.uniform1f(L.uA!, g.A);
-    gl!.uniform1f(L.uSkewK!, g.skewK);
-    gl!.uniform2f(L.uSt!, g.st[0], g.st[1]);
-    gl!.uniform2f(L.uCore!, g.core[0], g.core[1]);
-    gl!.uniform1fv(L.uW!, g.w);
-    gl!.uniform1fv(L.uPh!, g.ph);
-    gl!.uniform1fv(L.uTim!, Array.from({ length: 13 }, (_, i) => or(p[`mfcc${i + 1}`] ?? null)));
-    gl!.uniform3fv(L.uStar!, g.stars.flat());
-    const set1 = (n: string, v: number) => gl!.uniform1f(L[n]!, v);
-    set1('uPitch', or(p.pitch));
-    set1('uMotion', or(p.pitchMotion));
-    set1('uSpacing', or(p.formantSpacing));
-    set1('uBright', or(p.centroid));
-    set1('uHnr', or(p.hnr));
-    set1('uSoft', or(p.h1h2));
-    set1('uJit', or(p.jitter, 0));
-    set1('uShim', or(p.shimmer, 0));
-    set1('uRate', p.rate === null || p.pauseShare === null ? -1 : or(p.rate));
-    set1('uPause', or(p.pauseShare));
-    set1('uRhythm', or(p.rhythm));
-    set1('uPower', or(p.tilt));
-    gl!.uniform1i(L.uFocus!, focusLayer ? LAYER_INDEX[focusLayer] : 0);
-    gl!.clearColor(0, 0, 0, 0);
-    gl!.clear(gl!.COLOR_BUFFER_BIT);
-    gl!.drawArrays(gl!.TRIANGLES, 0, 3);
-    drawCallout(octx, W, d, g, p, reveal);
+    if (over.width !== W || over.height !== W) over.width = over.height = W;
+    const g = renderer!.draw(params, t, reveal, focusLayer ? LAYER_INDEX[focusLayer] : 0, W, pal);
+    drawCallout(octx, W, d, g, params, reveal);
     if (visible && !document.hidden && (!still || reveal < 1)) raf = requestAnimationFrame(frame);
   }
   function wake() {
@@ -518,7 +559,6 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
   }).observe(box);
   document.addEventListener('visibilitychange', wake);
   new ResizeObserver(wake).observe(box);
-  canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
 
   return {
     set(f) {

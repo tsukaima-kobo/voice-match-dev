@@ -40,6 +40,10 @@ jobs:
           BLOCK_RANGE: ${{ vars.BLOCK_RANGE }}
           NG_RANGE: ${{ vars.NG_RANGE }}
         run: node tools/intake.ts --sheet
+      - name: GitHub のスターの数（設定がある時だけ）
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node tools/github-stars.ts
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -19,8 +19,11 @@ import { el, itemRow, renderGroups } from './items.ts';
 import { closeness, closenessWord, rank } from '../match/match.ts';
 import { ENTRY_BY_ID, MODEL, PROFILES } from '../data/load.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
+import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 
 mountLang({ ja: 'voice-twin｜あなたの声は誰に近い？', en: 'voice-twin | Whose voice is yours closest to?' });
+mountGithubLink();
+mountFooter();
 
 /** 聞く長さ（秒）: 最大と、「話し終えた」を押せるまで */
 const LISTEN_MAX = 35;
@@ -49,6 +52,8 @@ const result = $('result');
 const orb = createOrb($('orb'));
 /** 録っている間の解析パネル（見せるためだけ。数字は measure.ts） */
 const live = createLiveAnalysis($('live'));
+/** 結果のシェア（X など） */
+const share = mountShare($('share'));
 
 type State = 'idle' | 'asking' | 'listening' | 'analysing' | 'failed' | 'done';
 /** 案内の文（今の言葉で作る関数。切り替えた時に作り直す） */
@@ -280,6 +285,7 @@ function draw() {
         : t(`しっかりの結果です（これまで ${c.takes} 回・声 ${vs} 秒）。`, `A solid result (${c.takes} take${c.takes > 1 ? 's' : ''}, ${vs} s of voice so far).`);
   const top = renderMatches(f, before);
   renderMine(f);
+  share.update({ kind: 'voice', features: f, ...(top ? { top: { name: top.name, word: top.word } } : {}), certainty: CERTAINTY_WORDS[level] });
   mountShapes($('shapes'), $('shape-guide'), [
     { who: t('あなた', 'You'), sub: t(`確かさ: ${CERTAINTY_WORDS[level]}（${c.takes} 回分）`, `Certainty: ${CERTAINTY_WORDS[level]} (${c.takes} take${c.takes > 1 ? 's' : ''})`), f },
     ...(top ? [{ who: t('1 位の声', 'No. 1 voice'), sub: top.name, f: top.features }] : []),
@@ -297,7 +303,7 @@ function draw() {
 }
 
 /** 近い声を並べる。1 位の名前と数字を返す（声紋で並べるため） */
-function renderMatches(f: Features, before: string[]): { name: string; features: Features } | null {
+function renderMatches(f: Features, before: string[]): { name: string; word: string; features: Features } | null {
   const list = $('matches');
   list.replaceChildren();
   $('no-data').hidden = PROFILES.length > 0;
@@ -334,7 +340,7 @@ function renderMatches(f: Features, before: string[]): { name: string; features:
     list.append(li);
   });
   const first = ranked[0];
-  return first ? { name: ENTRY_BY_ID.get(first.id)!.name, features: byId.get(first.id)!.features } : null;
+  return first ? { name: ENTRY_BY_ID.get(first.id)!.name, word: closenessWord(first.distance), features: byId.get(first.id)!.features } : null;
 }
 
 function renderMine(f: Features) {

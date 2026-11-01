@@ -26,6 +26,7 @@ import { adviceFor, differences, mimicScore, scoreWord } from '../mimic/mimic.ts
 import { ENTRY_BY_ID, PROFILES } from '../data/load.ts';
 import { nextPromptIndex, promptText, readingText } from '../prompts/prompts.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
+import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 import { checkSubmission, encodeSubmission, makeSubmission, type Source } from '../submit/code.ts';
 import { SUBMIT_FORM } from '../submit/config.ts';
 
@@ -51,6 +52,10 @@ const START_RMS = 0.003;
 
 const $ = <E extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as E;
 mountLang({ ja: '声真似の点数｜voice-twin', en: 'Voice-mimic score | voice-twin' });
+mountGithubLink();
+mountFooter();
+/** 結果のシェア（X など） */
+const share = mountShare($('share'));
 /** 案内の文（今の言葉で作る関数。切り替えた時に作り直す） */
 type Msg = () => string;
 const M = (ja: string, en: string): Msg => () => t(ja, en);
@@ -733,6 +738,7 @@ function paint(): void {
     list.append(li);
   }
 
+  share.update({ kind: 'mimic', features: mine, model: { name: tg.name, features: tg.features }, score, word: scoreWord(score), line: !!line });
   mountShapes($('shapes'), $('shape-guide'), [
     { who: t('お手本', 'Model'), ...(tg.name ? { sub: tg.name } : {}), f: tg.features },
     { who: t('あなた', 'You'), sub: t(`${tries} 回目`, `Try ${tries}`), f: mine },
