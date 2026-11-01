@@ -9,6 +9,7 @@ import { measureVoice, type MeasureFail, type Measured } from '../voice/measure.
 import { createWave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
 import { micPicker } from './mic-picker.ts';
+import { mountShapes } from './voice-shape.ts';
 import { FEATURE_BY_KEY, FEATURES, FEW_SECONDS, formatFeature, LONG_SECONDS, ONE_LINE_SECONDS, type Features } from '../voice/features.ts';
 import { CERTAINTY_WORDS, certaintyOf, combineTakes, type Combined, type Take } from '../voice/takes.ts';
 import { el, itemRow, renderGroups } from './items.ts';
@@ -224,8 +225,12 @@ function render(c: Combined, m: Extract<Measured, { ok: true }>) {
       : level === 2
         ? `だいたいの結果です（これまで ${c.takes} 回・声 ${c.voicedSeconds.toFixed(1)} 秒）。1 回で声を ${LONG_SECONDS} 秒以上（話して 15 秒ほど）話すと、速さと間も加わって、しっかりの結果になります。`
         : `しっかりの結果です（これまで ${c.takes} 回・声 ${c.voicedSeconds.toFixed(1)} 秒）。`;
-  renderMatches(f);
+  const top = renderMatches(f);
   renderMine(f);
+  mountShapes($('shapes'), $('shape-guide'), [
+    { who: 'あなた', sub: c.takes > 1 ? `${c.takes} 回分` : '一言から', f },
+    ...(top ? [{ who: '1 位の声', sub: top.name, f: top.features }] : []),
+  ]);
   const missing: string[] = [];
   if (c.longest < FEW_SECONDS) missing.push(`抑揚・口の開きの幅などは、1 回で声を ${FEW_SECONDS} 秒以上話すと出ます`);
   if (c.longest < LONG_SECONDS) missing.push(`速さと間は、1 回で声を ${LONG_SECONDS} 秒以上話すと出ます`);
@@ -235,11 +240,12 @@ function render(c: Combined, m: Extract<Measured, { ok: true }>) {
   result.hidden = false;
 }
 
-function renderMatches(f: Features) {
+/** 近い声を並べる。1 位の名前と数字を返す（声のかたちで並べるため） */
+function renderMatches(f: Features): { name: string; features: Features } | null {
   const list = $('matches');
   list.replaceChildren();
   $('no-data').hidden = PROFILES.length > 0;
-  if (!PROFILES.length) return;
+  if (!PROFILES.length) return null;
   const byId = new Map(PROFILES.map((p) => [p.id, p]));
   const ranked = rank(MODEL, f, PROFILES, 5);
   const before = lastRank;
@@ -273,6 +279,8 @@ function renderMatches(f: Features) {
     li.append(practice);
     list.append(li);
   });
+  const first = ranked[0];
+  return first ? { name: ENTRY_BY_ID.get(first.id)!.name, features: byId.get(first.id)!.features } : null;
 }
 
 function renderMine(f: Features) {
