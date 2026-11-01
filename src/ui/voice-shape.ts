@@ -34,7 +34,7 @@ export const SHAPE_LAYERS: readonly { key: ShapeLayer; name: string; items: read
       { key: 'f2', fig: '光る芯の左右。舌が前に出る響きほど、芯が右にきます（点線の左右）。' },
       { key: 'formantSpacing', fig: '線の間隔。響きの間隔が広いほど、線が少なく、間が広くなります。' },
       { key: 'centroid', fig: 'ふちのうねりの細かさと、光る星。明るい声ほど、うねりが細かく、星が多く強くなります。' },
-      { key: 'mfcc2', name: '音色', fig: '指紋の模様そのものと、まわりの光の冠。音色（MFCC 1〜13）から決まる、その声だけの模様です。冠の 13 本の長さが、音色の 13 の数字です。' },
+      { key: 'mfcc2', name: '音色', fig: '指紋の模様そのものと、まわりを包む光のリボン。リボンは音色（MFCC 1〜13）から計算した響きの山と谷で、上が低い音、下が高い音です。外へふくらむ所ほど、その高さの音が強く響いています。' },
     ],
   },
   {
@@ -69,7 +69,7 @@ export const SHAPE_LAYERS: readonly { key: ShapeLayer; name: string; items: read
 /** 図に使う値（0〜1。測っていない項目は null） */
 export type ShapeParams = Record<string, number | null>;
 
-const KEYS: readonly FeatureKey[] = ['pitch', 'pitchRange', 'pitchSkew', 'pitchMotion', 'f1', 'f2', 'formantSpacing', 'centroid', 'mfcc1', 'mfcc2', 'mfcc3', 'mfcc4', 'mfcc5', 'mfcc6', 'hnr', 'h1h2', 'jitter', 'shimmer', 'rate', 'pauseShare', 'rhythm', 'tilt', 'levelRange'];
+const KEYS: readonly FeatureKey[] = ['pitch', 'pitchRange', 'pitchSkew', 'pitchMotion', 'f1', 'f2', 'formantSpacing', 'centroid', 'mfcc1', 'mfcc2', 'mfcc3', 'mfcc4', 'mfcc5', 'mfcc6', 'mfcc7', 'mfcc8', 'mfcc9', 'mfcc10', 'mfcc11', 'mfcc12', 'mfcc13', 'hnr', 'h1h2', 'jitter', 'shimmer', 'rate', 'pauseShare', 'rhythm', 'tilt', 'levelRange'];
 /** 数字を、図に使う 0〜1 に（画面の目盛りと同じ位置） */
 export function shapeParams(f: Features): ShapeParams {
   const out: ShapeParams = {};

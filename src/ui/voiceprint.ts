@@ -1,7 +1,8 @@
 // 声紋: 測った数字から描く、その声だけの指紋のような図（WebGL2）。乱数なし: 同じ数字なら、いつも同じ模様。
 // 図の 18 の項目（voice-shape.ts の SHAPE_LAYERS）が、それぞれ図のどこかを動かす:
 //   形      声の高さ → 色と縦の伸び／抑揚 → ふちと隆線のうねり／高さの偏り → 上下のふくらみ／高さの動きの速さ → 隆線が流れる速さ
-//   芯と模様 F1 → 芯の上下／F2 → 芯の左右／響きの間隔 → 隆線の数（間隔）／明るさ → うねりの細かさと星／音色 → 指紋の模様と、まわりの光の冠（MFCC 1〜13）
+//   芯と模様 F1 → 芯の上下／F2 → 芯の左右／響きの間隔 → 隆線の数（間隔）／明るさ → うねりの細かさと星／
+//            音色 → 指紋の模様と、まわりの光のリボン（MFCC 1〜13 から戻した、低い音から高い音までの響きの山と谷。上が低い音、下が高い音、左右対称）
 //   霞と線  声の澄み → 霞と隆線のくっきりさ／声の柔らかさ → 隆線のぼけ／高さのゆらぎ → 隆線の切れ目／大きさのゆらぎ → 隆線の粒
 //   外の輪  速さ → 粒の数と回る速さ／間の多さ → 輪のすき間／リズムのムラ → 粒の大きさと並びのムラ
 //   大きさ  声の力 → 全体の大きさと隆線の太さ／強弱の幅 → 脈打つ幅
@@ -30,6 +31,8 @@ float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h2(i)
 vec3 pal(float x){x=clamp(x,0.,1.);return x<.5?mix(uLow,uMid,x*2.):mix(uMid,uHigh,(x-.5)*2.);}
 float rOf(float th){float s=0.;for(int i=0;i<10;i++)s+=uW[i]*cos(float(i+2)*th+uPh[i]);return uS*(1.+uA*s+uSkewK*sin(th));}
 float lay(int l){return (uFocus==0||uFocus==l)?1.:.16;}
+// 音色のリボンの形: MFCC 1〜13 を戻した、低い音（s=0、上）から高い音（s=1、下）までの響きの山と谷
+float envAt(float s){float mm=s*25.,e=0.;for(int k=1;k<=13;k++){float w=1./(1.+.3*float(k));e+=(uTim[k-1]-.5)*2.*w*cos(3.14159265*float(k)*(mm+.5)/26.);}return e;}
 void main(){
   vec2 p=(gl_FragCoord.xy*2.-uRes)/min(uRes.x,uRes.y);
   vec2 q=p/uSt;
@@ -92,18 +95,25 @@ void main(){
     st*=lCore*smoothstep(.5,1.,uReveal)*(.4+.6*uBright);
     C+=(uLight>.5?pal(uPitch+.25):uGlint)*st;A+=st;
   }
-  // 冠（音色 MFCC 1〜13。左右対称に 26 本）
+  // 音色のリボン（左右対称。上が低い音、下が高い音。外へふくらむ所ほど、その高さの音が強い）
   float dp=length(p),thp=atan(p.y,p.x);
-  float rc0=uS*(1.2+uA)+.02;
-  float a0=mod(thp-1.5707963+TAU,TAU);
-  float sec=TAU/26.;
-  float k=floor(a0/sec);
-  int m=int(k<13.?k:25.-k);
-  float fa=abs(fract(a0/sec)-.5);
-  float L=(.025+.15*uTim[m])*uS/.42*smoothstep(.75,1.,uReveal);
-  float inBar=(1.-smoothstep(.16,.24,fa))*smoothstep(rc0-.004,rc0+.004,dp)*(1.-smoothstep(rc0+L-.004,rc0+L+.004,dp));
-  float crown=inBar*(.35+.5*(dp-rc0)/max(L,.001))*lCore;
-  C+=pal(float(m)/12.)*crown;A+=crown;
+  float rc0=uS*(1.15+uA)+.015;
+  float sR=abs(atan(p.x,p.y))/3.14159265;
+  float off=.5+.5*tanh(envAt(sR)*1.6);
+  float grow=smoothstep(.72,1.,uReveal);
+  float H=(.03+.2*off)*uS/.42*grow;
+  float rb=rc0+H;
+  vec3 rcol=pal(.08+.84*sR);
+  float tIn=clamp((dp-rc0)/max(H,.001),0.,1.);
+  float body=smoothstep(rc0-.006,rc0+.004,dp)*(1.-smoothstep(rb-.002,rb+.006,dp));
+  float curtain=body*pow(tIn,1.3)*(.22+.34*off)*(.7+.3*sin(sR*30.-uT*.8+tIn*3.));
+  float strands=0.;
+  for(int j=0;j<4;j++){float fj=float(j);float rj=rc0+H*(.3+.22*fj)+.004*sin(sR*18.+uT*(.6+.25*fj)+fj*1.7);strands+=exp(-abs(dp-rj)/.0018)*(.16+.08*fj);}
+  float edge=exp(-abs(dp-rb)/.0028)*.95;
+  float shine=pow(.5+.5*sin(sR*26.-uT*1.4),10.)*exp(-abs(dp-rb)/.007)*.7;
+  float base0=exp(-abs(dp-rc0)/.0018)*.22;
+  float rib=(curtain+(strands+edge+shine+base0)*grow)*lCore;
+  C+=mix(rcol,uGlint,.2*edge)*rib;A+=rib;
   // 外の輪（速さ・間・リズム）
   float ro=.885;
   float ringBase=exp(-abs(dp-ro)/.0025)*.16*lOrbit*smoothstep(.6,1.,uReveal);
@@ -378,9 +388,14 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
       case 'centroid':
         at = XP(g.stars[0]![0], g.stars[0]![1]);
         break;
-      case 'mfcc2':
-        at = XP(0.03, g.S * (1.2 + g.A) + 0.02 + ((0.025 + 0.15 * or(p.mfcc1)) * g.S) / 0.42);
+      case 'mfcc2': {
+        // (the top of the ribbon: the lowest sounds)
+        let e = 0;
+        for (let k = 1; k <= 13; k++) e += (or(p[`mfcc${k}`] ?? null) - 0.5) * 2 * (1 / (1 + 0.3 * k)) * Math.cos((Math.PI * k * 0.5) / 26);
+        const off = 0.5 + 0.5 * Math.tanh(e * 1.6);
+        at = XP(0, g.S * (1.15 + g.A) + 0.015 + ((0.03 + 0.2 * off) * g.S) / 0.42);
         break;
+      }
       case 'hnr':
         at = polar(Math.PI * 0.82, rOf(g, Math.PI * 0.82) * 1.16);
         break;
