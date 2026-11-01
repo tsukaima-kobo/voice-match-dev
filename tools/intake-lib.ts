@@ -1,7 +1,7 @@
 // 声の登録の取り込みの計算（ファイルの読み書き・通信なし。test/intake.test.ts で試す）。
 // フォームの回答の 1 行 = [タイムスタンプ, 送る内容, 判定, 理由]。判定は dots が書く（壁 ②。OK の行だけ使う）。
 // 壁 ① をもう一度（ページの確認は回り込めるため）、禁止の言葉・削除済みの名前・1 日の上限・同じ数字の重なりを除き、
-// 名前ごとに壁 ③（3 件以上そろったら中央値）で声にする。ID は一度決めたら変えない（data/user-ids.json）。
+// 名前ごとに壁 ③（3 件以上そろったら中央値）で声にする。ID は名前（nameKey）から決まる（記録を持たずに、毎日同じ ID）。
 import { checkSubmission, decodeSubmission, featuresOf, nameKey, type Source, type Submission } from '../src/submit/code.ts';
 import { consensus } from '../src/submit/consensus.ts';
 import { FEATURE_KEYS, type Features } from '../src/voice/features.ts';
@@ -65,7 +65,22 @@ function mostCommon(values: readonly string[]): string | undefined {
   return best;
 }
 
-export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: readonly string[]; blocked: readonly string[]; ids: Readonly<Record<string, string>> }): { accepted: Accepted[]; voices: UserVoice[]; ids: Record<string, string>; counts: Record<CountKey, number> } {
+/** 名前（nameKey）から決まる声の ID（u- と 11 文字。53 ビットのハッシュ cyrb53）。運営の声の ID（v-）とは重ならない */
+export function userIdOf(key: string): string {
+  let h1 = 0xdeadbeef,
+    h2 = 0x41c6ce57;
+  for (let i = 0; i < key.length; i++) {
+    const ch = key.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  const n = 4294967296 * (2097151 & h2) + (h1 >>> 0);
+  return `u-${n.toString(36).padStart(11, '0')}`;
+}
+
+export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: readonly string[]; blocked: readonly string[] }): { accepted: Accepted[]; voices: UserVoice[]; counts: Record<CountKey, number> } {
   const counts = Object.fromEntries((['rows', 'pending', 'judgedNg', 'unreadable', 'wall1', 'ngWord', 'blocked', 'overDay', 'overName', 'duplicate', 'accepted'] as CountKey[]).map((k) => [k, 0])) as Record<CountKey, number>;
   const blocked = new Set(o.blocked.map(nameKey));
   const ng = o.ngWords.map(nameKey).filter(Boolean);
@@ -126,20 +141,22 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
   }
 
   // (壁 ③, name by name, in the order each name first came)
-  const ids: Record<string, string> = { ...o.ids };
-  let next = Math.max(0, ...Object.values(ids).map((id) => Number(/^u-(\d+)$/.exec(id)?.[1] ?? 0))) + 1;
   const keys = [...new Set(accepted.map((a) => a.key))];
+  const used = new Set<string>();
   const voices: UserVoice[] = [];
   for (const key of keys) {
     const items = accepted.filter((a) => a.key === key);
     const c = consensus(o.model, items);
     if (!c) continue;
-    if (!ids[key]) ids[key] = `u-${String(next++).padStart(4, '0')}`;
+    // (two names on one ID is next to impossible; if it ever happens, the later one gets a mark)
+    let id = userIdOf(key);
+    for (let n = 2; used.has(id); n++) id = `${userIdOf(key)}-${n}`;
+    used.add(id);
     const group = mostCommon(items.map((a) => a.group ?? '').filter(Boolean));
-    voices.push({ id: ids[key]!, key, name: mostCommon(items.map((a) => a.name))!, ...(group ? { group } : {}), link: mostCommon(items.map((a) => a.link))!, used: c.used, features: c.features });
+    voices.push({ id, key, name: mostCommon(items.map((a) => a.name))!, ...(group ? { group } : {}), link: mostCommon(items.map((a) => a.link))!, used: c.used, features: c.features });
   }
   voices.sort((a, b) => (a.id < b.id ? -1 : 1));
-  return { accepted, voices, ids, counts };
+  return { accepted, voices, counts };
 }
 
 /** 数字の並びを features の順の配列に（ファイルを小さく、読みやすく） */

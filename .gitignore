@@ -9,3 +9,5 @@ collector/dist/
 # 公開しない物（引き継ぎの記録と、手元の決まり）
 handoff/
 CLAUDE.md
+# 声の登録から、サイトを作る時だけ作る物（元は Google スプレッドシート。リポジトリには入れない）
+data/generated/

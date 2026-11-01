@@ -41,11 +41,11 @@ npm run intake -- --csv 回答.csv  # 声の登録を取り込む（毎日は Gi
 | `src/ui/voiceprint.ts`・`voice-shape.ts` | 声紋: 測った数字から描く図（WebGL2。18 項目に連動）と、図の読み方。WebGL2 が無い時の 2D の図 |
 | `src/prompts/prompts.ts` | お題 |
 | `src/submit/` | 声の登録: 送る内容と壁 ①（`code.ts`）、壁 ③（`consensus.ts`）、Google フォームの住所（`config.ts`） |
-| `tools/intake.ts` | 声の登録の取り込み（壁 ① をもう一度・dots の判定・壁 ③）→ `data/user-*.json` |
-| `.github/workflows/site.yml` | 毎日の取り込みと、GitHub Pages への公開 |
+| `tools/intake.ts` | 声の登録の取り込み（シートから。壁 ① をもう一度・dots の判定・壁 ③・削除と禁止の言葉のタブ）→ `data/generated/`（ビルドの時だけ） |
+| `.github/workflows/site.yml` | 毎日と push の時に、シートを読んでサイトを作り、GitHub Pages へ公開（リポジトリには書き込まない） |
 | `collector/` | お手本の声を事前に測る Chrome 拡張機能（運営用。ストアには出さない）。[使い方](docs/collector.md) |
 | `tools/` | 代表値づくり（`build-voices.ts`）、照合のモデルと見分ける力の評価（`eval.ts`）、配信の経路で数字がどれだけ動くか（`channel.ts`） |
-| `data/` | 声の名前・リンク（`catalog.json`）、30 秒ごとの数字（`voices/`）、代表値（`profiles.json`）、照合のモデル（`model.json`）、登録から出た声（`user-catalog.json`・`user-profiles.json`・`user-ids.json`・`submissions.json`）、削除済みの名前（`blocklist.json`）、禁止の言葉（`ng-words.json`） |
+| `data/` | 声の名前・リンク（`catalog.json`）、30 秒ごとの数字（`voices/`）、代表値（`profiles.json`）、照合のモデル（`model.json`）。登録から出た声は、サイトを作る時だけ Google スプレッドシートから `data/generated/` に作る（リポジトリには入れない） |
 
 ## 声のデータの作り方
 

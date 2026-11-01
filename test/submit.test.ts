@@ -6,7 +6,7 @@ import { defaultModel } from '../src/match/match.ts';
 import { MEASURE_VERSION } from '../src/voice/measure.ts';
 import { checkLink, checkSubmission, decodeSubmission, encodeSubmission, makeSubmission, nameKey } from '../src/submit/code.ts';
 import { consensus } from '../src/submit/consensus.ts';
-import { dayOf, intake, INTAKE, rowsFromTable, type Row } from '../tools/intake-lib.ts';
+import { dayOf, intake, INTAKE, rowsFromTable, userIdOf, type Row } from '../tools/intake-lib.ts';
 import { parseCsv } from '../tools/csv.ts';
 import { bursts, concat, silence, vowel } from './voice-synth.ts';
 
@@ -81,7 +81,7 @@ describe('取り込み', () => {
   const code = (f: Features, name = '試験のキャラ') => encodeSubmission(sub({ features: f, name }));
   const rows = (list: [string, string, string][]): Row[] => list.map(([at, c, verdict]) => ({ at, code: c, verdict, reason: '' }));
   const three = [voice(220, 2), voice(222, 3), voice(218, 4)];
-  it('uses only rows dots marked OK, and makes a voice from 3 that agree, with a lasting ID', () => {
+  it('uses only rows dots marked OK, and makes a voice from 3 that agree, with an ID that comes from the name', () => {
     const r = intake(
       rows([
         ['2026/11/01 10:00:00', code(three[0]!), 'OK'],
@@ -90,12 +90,15 @@ describe('取り込み', () => {
         ['2026/11/02 09:00:00', code(three[1]!, '試験の キャラ'), 'ok'],
         ['2026/11/02 09:30:00', code(three[2]!), 'OK'],
       ]),
-      { model, ngWords: [], blocked: [], ids: { 'べつのこえ': 'u-0007' } },
+      { model, ngWords: [], blocked: [] },
     );
     expect(r.counts).toMatchObject({ rows: 5, judgedNg: 1, pending: 1, accepted: 3 });
     expect(r.voices).toHaveLength(1);
-    expect(r.voices[0]).toMatchObject({ id: 'u-0008', name: '試験のキャラ', link: 'https://example.com/chara', used: 3 });
-    expect(r.ids[nameKey('試験のキャラ')]).toBe('u-0008');
+    expect(r.voices[0]).toMatchObject({ id: userIdOf(nameKey('試験のキャラ')), name: '試験のキャラ', link: 'https://example.com/chara', used: 3 });
+    // (the same name, written a little differently, is the same ID every day; another name, another ID)
+    expect(userIdOf(nameKey('試験の キャラ'))).toBe(r.voices[0]!.id);
+    expect(userIdOf(nameKey('べつのこえ'))).not.toBe(r.voices[0]!.id);
+    expect(r.voices[0]!.id).toMatch(/^u-[0-9a-z]{11}$/);
   });
   it('drops blocked names, banned words, the same numbers again, and more than the daily limit for a name', () => {
     const many = Array.from({ length: INTAKE.perNamePerDay + 2 }, (_, i): [string, string, string] => ['2026/11/03 10:00:00', code(voice(200 + i, 10 + i), 'たくさん'), 'OK']);
@@ -107,7 +110,7 @@ describe('取り込み', () => {
         ['2026/11/03 09:01:00', code(three[0]!), 'OK'],
         ...many,
       ]),
-      { model, ngWords: ['だめなことば'], blocked: ['消された 声'], ids: {} },
+      { model, ngWords: ['だめなことば'], blocked: ['消された 声'] },
     );
     expect(r.counts).toMatchObject({ blocked: 1, ngWord: 1, duplicate: 1, overName: 2 });
   });

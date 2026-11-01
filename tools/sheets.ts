@@ -8,7 +8,8 @@ interface ServiceKey {
   token_uri?: string;
 }
 
-export async function readSheet(keyJson: string, sheetId: string, range: string): Promise<string[][]> {
+/** スプレッドシートを開く（通行証を 1 回だけもらい、いくつかの範囲を読む） */
+export async function openSheet(keyJson: string, sheetId: string): Promise<{ read(range: string): Promise<string[][]>; readOptional(range: string): Promise<string[][]> }> {
   const key = JSON.parse(keyJson) as ServiceKey;
   const aud = key.token_uri ?? 'https://oauth2.googleapis.com/token';
   const now = Math.floor(Date.now() / 1000);
@@ -22,7 +23,19 @@ export async function readSheet(keyJson: string, sheetId: string, range: string)
   });
   if (!tok.ok) throw new Error(`Google の通行証をもらえませんでした（HTTP ${tok.status}）`);
   const { access_token } = (await tok.json()) as { access_token: string };
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range)}`, { headers: { authorization: `Bearer ${access_token}` } });
-  if (!res.ok) throw new Error(`スプレッドシートを読めませんでした（HTTP ${res.status}）`);
-  return ((await res.json()) as { values?: string[][] }).values ?? [];
+  const get = (range: string) => fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range)}`, { headers: { authorization: `Bearer ${access_token}` } });
+  return {
+    async read(range) {
+      const res = await get(range);
+      if (!res.ok) throw new Error(`スプレッドシートを読めませんでした（HTTP ${res.status}）`);
+      return ((await res.json()) as { values?: string[][] }).values ?? [];
+    },
+    // (a tab that may not be there yet: the Sheets API answers 400 for a range on a missing tab)
+    async readOptional(range) {
+      const res = await get(range);
+      if (res.status === 400) return [];
+      if (!res.ok) throw new Error(`スプレッドシートを読めませんでした（HTTP ${res.status}）`);
+      return ((await res.json()) as { values?: string[][] }).values ?? [];
+    },
+  };
 }
