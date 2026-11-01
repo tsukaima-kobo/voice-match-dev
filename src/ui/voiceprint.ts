@@ -3,7 +3,8 @@
 //   形      声の高さ → 色と縦の伸び／抑揚 → ふちと隆線のうねり／高さの偏り → 上下のふくらみ／高さの動きの速さ → 隆線が流れる速さ
 //   芯と模様 F1 → 芯の上下／F2 → 芯の左右／響きの間隔 → 隆線の数（間隔）／明るさ → うねりの細かさと星／
 //            音色 → 指紋の模様と、まわりの光のリボン（MFCC 1〜13 から戻した、低い音から高い音までの響きの山と谷。上が低い音、下が高い音、左右対称）
-//   霞と線  声の澄み → 霞と隆線のくっきりさ／声の柔らかさ → 隆線のぼけ／高さのゆらぎ → 隆線の切れ目／大きさのゆらぎ → 隆線の粒
+//   霞と線  声の澄み → 霞と、漂う霞の粒と、隆線のくっきりさ／声の柔らかさ → 隆線のぼけ／
+//            高さのゆらぎ → 隆線の切れ目と、星の粒のまたたきの速さ／大きさのゆらぎ → ふちに散る星の粒の数と、隆線のまだら
 //   外の輪  速さ → 粒の数と回る速さ／間の多さ → 輪のすき間／リズムのムラ → 粒の大きさと並びのムラ
 //   大きさ  声の力 → 全体の大きさと隆線の太さ／強弱の幅 → 脈打つ幅
 // 図の読み方で項目を選ぶと、その場所に印と引き出し線を描き、数字を出す（上に重ねた 2D の canvas）。
@@ -63,8 +64,10 @@ void main(){
   float aa=fwidth(v)*1.2+.2*uSoft;
   float hw=.07+.1*uPower;
   float line=1.-smoothstep(hw,hw+aa,dv);
-  float brk=smoothstep(uJit*.6-.06,uJit*.6+.06,vn(vec2(ri*1.73,thc*(4.+mod(ri,7.)*.7)+ri)));
-  float bead=1.-uShim*.8*smoothstep(.35,.85,vn(vec2(thc*(18.+mod(ri,5.)*2.),ri*2.3)));
+  // (切れ目と粒の模様は、角度を cos・sin で持って、左の継ぎ目（−π と π）でずれないように)
+  vec2 dirc=vec2(cos(thc),sin(thc));
+  float brk=smoothstep(uJit*.6-.06,uJit*.6+.06,vn(dirc*3.5+vec2(u*nR*1.1,u*nR*.7)));
+  float bead=1.-uShim*.8*smoothstep(.35,.85,vn(dirc*14.+vec2(u*nR*2.3,3.1)));
   float inside=smoothstep(1.,.95,u);
   float coreFade=smoothstep(.03,.16,u);
   float rv=uReveal>=1.?1.:smoothstep(uReveal*1.2,uReveal*1.2-.04,u);
@@ -114,6 +117,40 @@ void main(){
   float base0=exp(-abs(dp-rc0)/.0018)*.22;
   float rib=(curtain+(strands+edge+shine+base0)*grow)*lCore;
   C+=mix(rcol,uGlint,.2*edge)*rib;A+=rib;
+  // かすれの星の粒（大きさのゆらぎで数、高さのゆらぎでまたたきの速さ）。ふちのまわりに散る。きれいな声でも少しだけ
+  float rasp=clamp(.65*uShim+.35*uJit,0.,1.);
+  float grain=0.;
+  {
+    float cs=.016;vec2 cell=floor(p/cs);
+    float ha=h2(cell),hb=h2(cell+17.3),hc=h2(cell+41.7),hd=h2(cell+5.1);
+    vec2 cen=(cell+.3+.4*vec2(ha,hb))*cs;
+    float uc=length(cen/uSt)/R;
+    float band=exp(-pow((uc-1.04)/(.07+.16*rasp),2.));
+    if(hc<(.06+.75*rasp)*band){
+      vec2 d=p-cen;float sz=cs*(.05+.1*hd);
+      float tw=.5+.5*sin(uT*(1.2+5.*uJit)*(.6+hd)+hc*40.);
+      float st=exp(-length(d)/(sz*.55))+.7*(exp(-abs(d.x)/(sz*.12))*exp(-abs(d.y)/(sz*1.1))+exp(-abs(d.y)/(sz*.12))*exp(-abs(d.x)/(sz*1.1)));
+      grain=st*(.25+.75*tw)*smoothstep(.55,.9,uReveal);
+    }
+  }
+  grain*=lMist;
+  C+=mix(pal(uPitch+.12),uGlint,.55)*grain;A+=grain;
+  // 霞の粒（息）。霞の中を、ふわっと出ては消える
+  float puff=0.;
+  {
+    float cs=.03;vec2 cell=floor(p/cs);
+    float ha=h2(cell+3.3),hb=h2(cell+9.1),hc=h2(cell+27.7);
+    vec2 cen=(cell+.3+.4*vec2(ha,hb))*cs;
+    float uc=length(cen/uSt)/R;
+    float band=smoothstep(.95,1.08,uc)*(1.-smoothstep(1.25,1.25+.45*fogAmt,uc));
+    if(hc<fogAmt*.7*band){
+      float life=fract(uT*.12+hc*7.);
+      float sz=cs*(.12+.12*ha);
+      puff=exp(-pow(length(p-cen)/sz,2.))*sin(3.14159265*life)*.55*smoothstep(.6,1.,uReveal);
+    }
+  }
+  puff*=lMist;
+  C+=pal(uPitch+.08)*puff;A+=puff;
   // 外の輪（速さ・間・リズム）
   float ro=.885;
   float ringBase=exp(-abs(dp-ro)/.0025)*.16*lOrbit*smoothstep(.6,1.,uReveal);
@@ -406,7 +443,7 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
         at = polar(-Math.PI * 0.62, rOf(g, -Math.PI * 0.62) * 0.72);
         break;
       case 'shimmer':
-        at = polar(Math.PI * 0.22, rOf(g, Math.PI * 0.22) * 0.86);
+        at = polar(Math.PI * 0.22, rOf(g, Math.PI * 0.22) * 1.06);
         break;
       case 'rate':
       case 'pauseShare':
