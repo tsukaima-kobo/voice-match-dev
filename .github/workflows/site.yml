@@ -65,6 +65,8 @@ jobs:
 
   deploy:
     needs: build
+    # (intake is skipped on a push; without this, a job after a skipped one is skipped too)
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
