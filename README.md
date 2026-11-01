@@ -38,6 +38,8 @@ npm run intake -- --csv 回答.csv  # 声の登録を取り込む（毎日は Gi
 | `src/mimic/mimic.ts` | 真似の点数と直し方（自分で変えやすい 12 項目。幅は暫定） |
 | `src/mimic/line.ts` | セリフ真似: 抑揚とタイミングを、時間をそろえて（DTW）比べる |
 | `src/ui/orb.ts`・`line-chart.ts` | 声に反応する玉（WebGL）、セリフ真似の図（SVG） |
+| `src/ui/live-analysis.ts` | 録っている間の解析パネル（声の成分の図・高さの線・数字・測れる項目）と、計算中の演出 |
+| `src/voice/measure.worker.ts`・`measure-async.ts` | 測定を Web Worker で（計算の間も画面が止まらない） |
 | `src/ui/voiceprint.ts`・`voice-shape.ts` | 声紋: 測った数字から描く図（WebGL2。18 項目に連動）と、図の読み方。WebGL2 が無い時の 2D の図 |
 | `src/prompts/prompts.ts` | お題 |
 | `src/submit/` | 声の登録: 送る内容と壁 ①（`code.ts`）、壁 ③（`consensus.ts`）、Google フォームの住所（`config.ts`） |

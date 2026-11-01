@@ -14,6 +14,8 @@ import { LONG_MAX_SECONDS, measureLong } from '../voice/combine.ts';
 import { createWave, type Wave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
 import { micPicker } from './mic-picker.ts';
+import { createLiveAnalysis, type LiveAnalysis } from './live-analysis.ts';
+import { measureAsync } from '../voice/measure-async.ts';
 import { FEATURE_BY_KEY, forLength, formatFeature, LONG_SECONDS, ONE_LINE_SECONDS, type Features } from '../voice/features.ts';
 import type { Contour, Measured } from '../voice/measure.ts';
 import { compareLines, LINE_MAX_SECONDS, lineScore } from '../mimic/line.ts';
@@ -31,6 +33,10 @@ const LISTEN_MAX = 35;
 /** 「聞かせ終えた」「話し終えた」を押せるまで（秒） */
 const REF_DONE_AFTER = 1;
 const MIM_DONE_AFTER = 1;
+/** 計算中の演出の長さ（ミリ秒）。その間に Worker が測る */
+const ANALYSE_MS = 1500;
+/** お手本をマイク・タブから測っている時だけ、解析パネルの計算中の演出を出す（ファイルの時は出さない） */
+let refAnalysingMic = false;
 /** 声の登録に要る声（秒。壁 ① と同じ） */
 const REG_MIN_VOICED = LONG_SECONDS;
 /** 雑音の床が分からない短いファイル（声だけを切り出した物）は、前後に無音を足して測り直す（その時は登録しない） */
@@ -61,6 +67,8 @@ const lockMics = () => mics.lock(isBusy(refState) || isBusy(mimState));
 /* ---- 録る（お手本と真似で共通） ---- */
 interface TakeUi {
   wave: Wave;
+  /** 録っている間の解析パネル（見せるためだけ） */
+  live: LiveAnalysis;
   fill: HTMLElement;
   sec: HTMLElement;
   done: HTMLButtonElement;
@@ -84,6 +92,7 @@ class Take {
     this.chunks.push(x);
     this.got += x.length;
     this.ui.wave.push(x, this.rate);
+    this.ui.live.push(x, this.rate);
     orb.push(x, this.rate);
     // (checked here and not in the frame loop: the page may be hidden while a model plays in another tab)
     if (this.got / this.rate >= LISTEN_MAX) this.onFull();
@@ -131,6 +140,7 @@ class Take {
     this.chunks = [];
     this.got = 0;
     this.ui.wave.clear();
+    this.ui.live.reset();
     this.ui.fill.style.width = '0';
     this.ui.sec.textContent = '';
   }
@@ -161,7 +171,8 @@ const ref = {
   fill: $('ref-fill'),
   sec: $('ref-sec'),
 };
-const refTake = new Take({ wave: createWave($<HTMLCanvasElement>('ref-wave')), fill: ref.fill, sec: ref.sec, done: ref.done }, REF_DONE_AFTER, true, () => refFinish());
+const refLive = createLiveAnalysis($('ref-live'));
+const refTake = new Take({ wave: createWave($<HTMLCanvasElement>('ref-wave')), live: refLive, fill: ref.fill, sec: ref.sec, done: ref.done }, REF_DONE_AFTER, true, () => refFinish());
 
 type RefState = 'idle' | 'asking' | 'listening' | 'analysing' | 'ready' | 'failed';
 let refState: RefState = 'idle';
@@ -184,6 +195,7 @@ let tries = 0;
 function showRef(next: RefState, text: string, bad = false): void {
   refState = next;
   ref.stage.dataset.state = next;
+  refLive.mode(next === 'listening' ? 'listening' : next === 'analysing' && refAnalysingMic ? 'analysing' : 'off');
   orb.mode(ORB_MODE[next] ?? 'idle');
   lockMics();
   ref.status.textContent = text;
@@ -238,16 +250,18 @@ function refFinish(): void {
     showRef('failed', 'お手本の音が届きませんでした。音量を上げて、もう一度試してください。', true);
     return;
   }
-  showRef('analysing', '数字にしています…');
-  setTimeout(() => {
-    const m = measureVoice(got.pcm, got.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true });
-    got.pcm.fill(0);
+  refAnalysingMic = true;
+  showRef('analysing', 'お手本を計算しています…');
+  const my = refToken;
+  void Promise.all([measureAsync(got.pcm, got.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true }), refLive.analysing(ANALYSE_MS)]).then(([m]) => {
+    refAnalysingMic = false;
+    if (my !== refToken || refState !== 'analysing') return;
     if (!m.ok) {
       showRef('failed', failText(m.reason, m.info.voicedSeconds, true), true);
       return;
     }
     targetFrom(m, refKind, false);
-  }, 120);
+  });
 }
 
 /** 測ったお手本から Target を作る（セリフ 1 つなら動きも。登録は声が足りて、無音を足していない時だけ） */
@@ -485,7 +499,8 @@ const mim = {
   cancel: $<HTMLButtonElement>('mim-cancel'),
   status: $('mim-status'),
 };
-const mimTake = new Take({ wave: createWave($<HTMLCanvasElement>('mim-wave')), fill: $('mim-fill'), sec: $('mim-sec'), done: mim.done }, MIM_DONE_AFTER, false, () => mimFinish());
+const mimLive = createLiveAnalysis($('mim-live'));
+const mimTake = new Take({ wave: createWave($<HTMLCanvasElement>('mim-wave')), live: mimLive, fill: $('mim-fill'), sec: $('mim-sec'), done: mim.done }, MIM_DONE_AFTER, false, () => mimFinish());
 
 type MimState = 'locked' | 'idle' | 'asking' | 'listening' | 'analysing' | 'done' | 'failed';
 let mimState: MimState = 'locked';
@@ -494,6 +509,7 @@ let mimToken = 0;
 function showMim(next: MimState, text: string, bad = false): void {
   mimState = next;
   mim.stage.dataset.state = next;
+  mimLive.mode(next === 'listening' ? 'listening' : next === 'analysing' ? 'analysing' : 'off');
   orb.mode(ORB_MODE[next] ?? 'idle');
   lockMics();
   mim.status.textContent = text;
@@ -538,11 +554,10 @@ function mimFinish(): void {
     showMim('failed', '声が届きませんでした。もう一度試してください。', true);
     return;
   }
-  showMim('analysing', '数字にしています…');
-  setTimeout(() => {
-    const m = measureVoice(got.pcm, got.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: !!target?.contour });
-    got.pcm.fill(0);
-    if (!target) return;
+  showMim('analysing', '計算しています…');
+  const my = mimToken;
+  void Promise.all([measureAsync(got.pcm, got.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: !!target.contour }), mimLive.analysing(ANALYSE_MS)]).then(([m]) => {
+    if (my !== mimToken || mimState !== 'analysing' || !target) return;
     if (!m.ok) {
       showMim('failed', failText(m.reason, m.info.voicedSeconds, false), true);
       return;
@@ -553,7 +568,7 @@ function mimFinish(): void {
     }
     showMim('done', '測りました。結果は下にあります。');
     $('result').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-  }, 120);
+  });
 }
 
 function mimCancel(): void {

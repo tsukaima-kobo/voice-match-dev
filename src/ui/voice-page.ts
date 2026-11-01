@@ -5,10 +5,12 @@
 // 終わった時・やめた時・ページが隠れた時は、すぐマイクを止める。声から性別や年齢を判断しない。
 import { nextPrompt, READING } from '../prompts/prompts.ts';
 import { openMic, micErrorText, type Mic } from '../voice/listen.ts';
-import { measureVoice, type MeasureFail, type Measured } from '../voice/measure.ts';
+import { type MeasureFail, type Measured } from '../voice/measure.ts';
 import { createWave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
 import { micPicker } from './mic-picker.ts';
+import { createLiveAnalysis } from './live-analysis.ts';
+import { measureAsync } from '../voice/measure-async.ts';
 import { mountShapes } from './voiceprint.ts';
 import { FEATURE_BY_KEY, FEATURES, FEW_SECONDS, formatFeature, LONG_SECONDS, ONE_LINE_SECONDS, type Features } from '../voice/features.ts';
 import { CERTAINTY_WORDS, certaintyOf, combineTakes, type Combined, type Take } from '../voice/takes.ts';
@@ -39,6 +41,10 @@ const secEl = $('sec');
 const wave = createWave($<HTMLCanvasElement>('wave'));
 const result = $('result');
 const orb = createOrb($('orb'));
+/** 録っている間の解析パネル（見せるためだけ。数字は measure.ts） */
+const live = createLiveAnalysis($('live'));
+/** 計算中の演出の長さ（ミリ秒）。その間に Worker が測る */
+const ANALYSE_MS = 1500;
 const mics = micPicker([{ box: $('mic-pick'), select: $<HTMLSelectElement>('mic-select'), find: $<HTMLButtonElement>('mic-find') }], (text) => {
   statusEl.textContent = text;
   statusEl.classList.add('bad');
@@ -92,6 +98,7 @@ function show(next: State, text: string, bad = false) {
   btn.cancel.hidden = !(next === 'listening' || next === 'asking');
   btn.next.disabled = btn.read.disabled = next === 'listening' || next === 'asking' || next === 'analysing';
   orb.mode(ORB_MODE[next] ?? 'idle');
+  live.mode(next === 'listening' ? 'listening' : next === 'analysing' ? 'analysing' : 'off');
   mics.lock(next === 'listening' || next === 'asking' || next === 'analysing');
   if (next !== 'listening') {
     cancelAnimationFrame(raf);
@@ -105,7 +112,7 @@ function tick() {
   orb.progress(sec / LISTEN_MAX);
   btn.done.disabled = sec < DONE_AFTER;
   wave.draw(true);
-  if (sec >= LISTEN_MAX) finish();
+  if (sec >= LISTEN_MAX) void finish();
   else raf = requestAnimationFrame(tick);
 }
 
@@ -121,6 +128,7 @@ function dropSound() {
 }
 async function start() {
   dropSound();
+  live.reset();
   show('asking', 'マイクの許可を待っています…');
   try {
     const m = await openMic((x) => {
@@ -129,6 +137,7 @@ async function start() {
       got += x.length;
       wave.push(x, m.rate);
       orb.push(x, m.rate);
+      live.push(x, m.rate);
     }, undefined, mics.get());
     if (state !== 'asking') {
       // (cancelled while asking)
@@ -145,7 +154,7 @@ async function start() {
     show('failed', micErrorText(e), true);
   }
 }
-function finish() {
+async function finish() {
   if (state !== 'listening' || !mic) return;
   const rate = mic.rate;
   stopMic();
@@ -156,20 +165,18 @@ function finish() {
     at += c.length;
   }
   dropSound();
-  show('analysing', '数字にしています…');
-  // (a few frames for the words and the orb to show, then the measuring; the sound is let go right after)
-  setTimeout(() => {
-    const m = measureVoice(pcm, rate, { minVoicedSeconds: ONE_LINE_SECONDS });
-    pcm.fill(0);
-    if (!m.ok) {
-      show('failed', failText(m.reason, m.info.voicedSeconds) + (takes.length ? '（前までの結果はそのままです）' : ''), true);
-      return;
-    }
-    takes.push({ features: m.features, voicedSeconds: m.info.voicedSeconds });
-    render(combineTakes(takes), m);
-    show('done', takes.length > 1 ? `${takes.length} 回分をまとめて、絞り込みました。結果は下にあります。` : '測りました。結果は下にあります。');
-    result.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-  }, 160);
+  show('analysing', `${FEATURES.length} 項目を計算しています…`);
+  // (the measuring runs in a Worker, the sound handed to it and let go there, while the panel plays its working-out)
+  const [m] = await Promise.all([measureAsync(pcm, rate, { minVoicedSeconds: ONE_LINE_SECONDS }), live.analysing(ANALYSE_MS)]);
+  if ((state as State) !== 'analysing') return;
+  if (!m.ok) {
+    show('failed', failText(m.reason, m.info.voicedSeconds) + (takes.length ? '（前までの結果はそのままです）' : ''), true);
+    return;
+  }
+  takes.push({ features: m.features, voicedSeconds: m.info.voicedSeconds });
+  render(combineTakes(takes), m);
+  show('done', takes.length > 1 ? `${takes.length} 回分をまとめて、絞り込みました。結果は下にあります。` : '測りました。結果は下にあります。');
+  result.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
 }
 function cancel() {
   stopMic();
@@ -188,7 +195,7 @@ btn.more.addEventListener('click', () => {
   void start();
 });
 btn.reset.addEventListener('click', reset);
-btn.done.addEventListener('click', finish);
+btn.done.addEventListener('click', () => void finish());
 btn.cancel.addEventListener('click', cancel);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && (state === 'listening' || state === 'asking')) cancel();
