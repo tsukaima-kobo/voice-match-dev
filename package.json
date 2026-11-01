@@ -1,6 +1,7 @@
 {
   "name": "voice-twin",
   "private": true,
+  "license": "MIT",
   "version": "0.1.0",
   "type": "module",
   "description": "話すと、事前に測った数百〜数万の声の中から近い声を出す。声真似の点数も出せる",

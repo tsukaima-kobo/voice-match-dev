@@ -94,3 +94,9 @@ npm run intake -- --csv 回答.csv  # 声の登録を取り込む（毎日は Gi
 ## 本番のリリース
 
 [docs/release.md](docs/release.md)（ライセンス・本番のリポジトリ・スターの導線を出す・GitHub の設定・広め方）。
+
+## ライセンス / License
+
+プログラムは [MIT ライセンス](LICENSE) です。 / The code is released under the [MIT License](LICENSE).
+
+声の名前・公式ページへのリンクなどは、それぞれの声のご本人・権利者の物です（ライセンスの対象は、このリポジトリのプログラムだけ）。 / Names of voices and links to their official pages belong to their owners; the license covers this repository’s code only.

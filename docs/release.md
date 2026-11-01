@@ -5,7 +5,7 @@
 
 ## 1. 決めておくこと
 
-- [ ] ライセンス（例: MIT）。`LICENSE` を置き、README の最後に書く。
+- [x] ライセンス: MIT（2026-11-01 運営が決定。`LICENSE` と README の最後に書いた）。本番のリポジトリにも `LICENSE` をそのまま入れる。
 - [ ] 本番のリポジトリの名前（例: `tsukaima-kobo/voice-twin`）と、公開の住所（例: `https://tsukaima-kobo.github.io/voice-twin/`。独自ドメインにしない限り無料）。
 - [ ] 削除のお願いの窓口（about.html の「窓口: 公開の時にここに書きます」を置き換える）。
 
