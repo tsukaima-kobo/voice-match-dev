@@ -5,7 +5,8 @@ import { nextPrompt, READING } from '../prompts/prompts.ts';
 import { openMic, micErrorText, type Mic } from '../voice/listen.ts';
 import { measureVoice, type MeasureFail, type Measured } from '../voice/measure.ts';
 import { createWave } from '../voice/wave.ts';
-import { FEATURE_BY_KEY, formatFeature, type Features } from '../voice/features.ts';
+import { createOrb, type OrbMode } from './orb.ts';
+import { FEATURE_BY_KEY, FEATURES, formatFeature, type Features } from '../voice/features.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { closeness, closenessWord, rank } from '../match/match.ts';
 import { ENTRY_BY_ID, MODEL, PROFILES } from '../data/load.ts';
@@ -32,6 +33,8 @@ const fill = $('fill');
 const secEl = $('sec');
 const wave = createWave($<HTMLCanvasElement>('wave'));
 const result = $('result');
+const orb = createOrb($('orb'));
+const ORB_MODE: Partial<Record<State, OrbMode>> = { listening: 'listening', analysing: 'analysing', done: 'done' };
 
 type State = 'idle' | 'asking' | 'listening' | 'analysing' | 'failed' | 'done';
 let state: State = 'idle';
@@ -72,6 +75,7 @@ function show(next: State, text: string, bad = false) {
   btn.done.hidden = next !== 'listening';
   btn.cancel.hidden = !(next === 'listening' || next === 'asking');
   btn.next.disabled = btn.read.disabled = next === 'listening' || next === 'asking' || next === 'analysing';
+  orb.mode(ORB_MODE[next] ?? 'idle');
   if (next !== 'listening') {
     cancelAnimationFrame(raf);
     wave.draw(false);
@@ -81,6 +85,7 @@ function tick() {
   const sec = mic ? got / mic.rate : 0;
   fill.style.width = `${Math.min(100, (sec / LISTEN_MAX) * 100)}%`;
   secEl.textContent = `${Math.floor(sec)} / ${LISTEN_MAX} 秒`;
+  orb.progress(sec / LISTEN_MAX);
   btn.done.disabled = sec < DONE_AFTER;
   wave.draw(true);
   if (sec >= LISTEN_MAX) finish();
@@ -106,6 +111,7 @@ async function start() {
       chunks.push(x);
       got += x.length;
       wave.push(x, m.rate);
+      orb.push(x, m.rate);
     });
     if (state !== 'asking') {
       // (cancelled while asking)
@@ -132,7 +138,7 @@ function finish() {
   }
   dropSound();
   show('analysing', '数字にしています…');
-  // (a frame for the words to show, then the measuring; the sound is let go right after)
+  // (a few frames for the words and the orb to show, then the measuring; the sound is let go right after)
   setTimeout(() => {
     const m = measureVoice(pcm, rate, { minVoicedSeconds: MIN_VOICED });
     pcm.fill(0);
@@ -143,7 +149,7 @@ function finish() {
     render(m);
     show('done', '測りました。結果は下にあります。');
     result.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-  }, 30);
+  }, 160);
 }
 function cancel() {
   stopMic();
@@ -216,6 +222,17 @@ function renderMatches(f: Features) {
 
 function renderMine(f: Features) {
   renderGroups($('mine'), (d) => itemRow(d, [{ value: f[d.key] }], el('div', 'value', formatFeature(d.key, f[d.key]))));
+}
+
+/* ---- 項目の名前の帯（飾り。同じ並びを 2 回続けて、つなぎ目なく流す） ---- */
+{
+  const names = FEATURES.filter((d) => !d.detail).map((d) => d.name);
+  const track = $('ticker');
+  for (const copy of [false, true])
+    for (const n of names) {
+      const s = el('span', copy ? 'copy' : undefined, n);
+      track.append(s);
+    }
 }
 
 show('idle', 'マイクは「話しはじめる」を押した時だけ使います。');

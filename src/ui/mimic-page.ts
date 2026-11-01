@@ -9,6 +9,7 @@ import { micErrorText, openMic, openTabAudio, tabAudioSupported, tabErrorText, t
 import { measureVoice, type MeasureFail } from '../voice/measure.ts';
 import { LONG_MAX_SECONDS, measureLong } from '../voice/combine.ts';
 import { createWave, type Wave } from '../voice/wave.ts';
+import { createOrb, type OrbMode } from './orb.ts';
 import { FEATURE_BY_KEY, formatFeature, type Features } from '../voice/features.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { adviceFor, differences, mimicScore, scoreWord } from '../mimic/mimic.ts';
@@ -32,6 +33,9 @@ const FILE_RATE = 16000;
 const START_RMS = 0.003;
 
 const $ = <E extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as E;
+/** 声の玉（お手本と真似の両方で使う。見た目だけ） */
+const orb = createOrb($('orb'));
+const ORB_MODE: Record<string, OrbMode> = { listening: 'listening', analysing: 'analysing', ready: 'done', done: 'done' };
 
 /* ---- 録る（お手本と真似で共通） ---- */
 interface TakeUi {
@@ -59,6 +63,7 @@ class Take {
     this.chunks.push(x);
     this.got += x.length;
     this.ui.wave.push(x, this.rate);
+    orb.push(x, this.rate);
     // (checked here and not in the frame loop: the page may be hidden while a model plays in another tab)
     if (this.got / this.rate >= LISTEN_MAX) this.onFull();
   };
@@ -72,6 +77,7 @@ class Take {
     const sec = this.rate ? this.got / this.rate : 0;
     this.ui.fill.style.width = `${Math.min(100, (sec / LISTEN_MAX) * 100)}%`;
     this.ui.sec.textContent = `${Math.floor(sec)} / ${LISTEN_MAX} 秒`;
+    orb.progress(sec / LISTEN_MAX);
     this.ui.done.disabled = sec < this.doneAfter;
     this.ui.wave.draw(true);
     if (this.live) this.raf = requestAnimationFrame(this.tick);
@@ -153,6 +159,7 @@ let tries = 0;
 function showRef(next: RefState, text: string, bad = false): void {
   refState = next;
   ref.stage.dataset.state = next;
+  orb.mode(ORB_MODE[next] ?? 'idle');
   ref.status.textContent = text;
   ref.status.classList.toggle('bad', bad);
   const busy = next === 'asking' || next === 'listening' || next === 'analysing';
@@ -411,6 +418,7 @@ let mimToken = 0;
 function showMim(next: MimState, text: string, bad = false): void {
   mimState = next;
   mim.stage.dataset.state = next;
+  orb.mode(ORB_MODE[next] ?? 'idle');
   mim.status.textContent = text;
   mim.status.classList.toggle('bad', bad);
   mim.start.hidden = !(next === 'locked' || next === 'idle' || next === 'failed' || next === 'done');
@@ -507,6 +515,29 @@ function failText(reason: MeasureFail, voiced: number | undefined, model: boolea
 }
 
 /* ---- 結果 ---- */
+/** 点数: 輪（CSS の --score）と、数えあがる数字。動きを減らす設定では、すぐその数 */
+function showScore(score: number): void {
+  const gauge = $('gauge');
+  const num = $('score');
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // (the ring goes back to 0 at once, then fills to the score, each time)
+  gauge.style.transition = 'none';
+  gauge.style.setProperty('--score', '0');
+  void getComputedStyle(gauge).getPropertyValue('--score');
+  gauge.style.transition = '';
+  gauge.style.setProperty('--score', String(score));
+  num.textContent = String(score);
+  if (still) return;
+  num.textContent = '0';
+  let t0 = -1;
+  const step = (now: number) => {
+    if (t0 < 0) t0 = now;
+    const k = Math.min(1, Math.max(0, (now - t0) / 1400));
+    num.textContent = String(Math.round(score * (1 - (1 - k) ** 3)));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
 function render(t: { features: Features; name: string }, mine: Features): boolean {
   const s = mimicScore(t.features, mine);
   if (!s) return false;
@@ -514,7 +545,7 @@ function render(t: { features: Features; name: string }, mine: Features): boolea
   const before = best;
   best = Math.max(best, s.score);
   $('score-label').textContent = `${t.name ? `「${t.name}」` : 'お手本'}との近さ`;
-  $('score').textContent = String(s.score);
+  showScore(s.score);
   $('score-word').textContent = scoreWord(s.score);
   $('best').textContent = tries === 1 ? '' : s.score > before ? `最高点を更新しました（${tries} 回目）` : `このお手本での最高は ${best} 点です（${tries} 回目）`;
 

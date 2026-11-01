@@ -5,58 +5,94 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>voice-twin｜あなたの声は誰に近い？</title>
     <meta name="description" content="30 秒ほど話すと、声の高さ・響き・話す速さなど 45 項目を測って、事前に測った声の中から近い声を出します。ふだんの声でも、声真似でも。音は端末の中だけで数字にして、どこにも送りません。" />
+    <meta name="theme-color" content="#f7f6fd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f0d1c" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0478f'/%3E%3Cstop offset='.55' stop-color='%237a4dff'/%3E%3Cstop offset='1' stop-color='%2362d8ec'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='14' fill='url(%23g)'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/src/ui/base.css" />
   </head>
   <body>
     <div class="page">
       <header class="site">
-        <a class="logo" href="./">voice<span>-</span>twin</a>
-        <nav><a href="./mimic.html">声真似の点数</a><a href="./about.html">しくみと約束</a></nav>
+        <a class="logo" href="./"><i class="logo-orb" aria-hidden="true"></i>voice<span>-</span>twin</a>
+        <nav aria-label="ページ"><a href="./" aria-current="page">声をくらべる</a><a href="./mimic.html">声真似の点数</a><a href="./about.html">しくみと約束</a></nav>
       </header>
-      <main class="page" style="padding: 0">
-        <section class="hero">
-          <h1>あなたの声は誰に近い？</h1>
-          <p>30 秒ほど話すと、声の高さ・響き・話す速さなど 45 項目を測って、事前に測った声の中から近い声を出します。ふだんの声でも、声真似でも試せます。音はこの端末の中だけで数字にして、すぐに捨てます。</p>
-        </section>
+      <main>
+        <section class="hero hero-voice">
+          <div class="hero-copy">
+            <p class="eyebrow">声真似練習場・45 項目で声をはかる</p>
+            <h1><span class="grad">あなたの声</span>は、<br /><span class="nowrap">誰に近い？</span></h1>
+            <p class="lead">30 秒ほど話すと、声の高さ・響き・話す速さなど 45 項目を測って、事前に測った声の中から近い声を出します。ふだんの声でも、声真似でも試せます。</p>
+            <ul class="chips"><li>登録なし</li><li>音は送らない・残さない</li><li>声から性別や年齢を判断しない</li></ul>
+          </div>
 
-        <section class="stage" id="stage" data-state="idle" aria-label="声を測る">
-          <div class="topic">
-            <p class="topic-label" id="topic-label">お題</p>
-            <p class="topic-text" id="topic-text"></p>
-            <div class="topic-actions">
-              <button type="button" id="topic-next">次のお題</button>
-              <button type="button" id="topic-read">決まった文を読む</button>
+          <div class="orb-wrap">
+            <div class="orb" id="orb" aria-hidden="true"></div>
+            <p class="orb-label" id="orb-label" aria-hidden="true">聞いています</p>
+          </div>
+
+          <section class="stage" id="stage" data-state="idle" aria-label="声を測る">
+            <div class="topic">
+              <p class="topic-label" id="topic-label">お題</p>
+              <p class="topic-text" id="topic-text"></p>
+              <div class="topic-actions">
+                <button type="button" id="topic-next">次のお題</button>
+                <button type="button" id="topic-read">決まった文を読む</button>
+              </div>
             </div>
-          </div>
-          <canvas class="wave" id="wave" aria-hidden="true"></canvas>
-          <div class="meter" aria-hidden="true">
-            <div class="track"><div class="fill" id="fill"></div></div>
-            <div class="sec" id="sec"></div>
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" id="start">話しはじめる</button>
-            <button type="button" class="primary" id="done" hidden>話し終えた</button>
-            <button type="button" id="cancel" hidden>やめる</button>
-          </div>
-          <p class="status" id="status" role="status" aria-live="polite">マイクは「話しはじめる」を押した時だけ使います。</p>
+            <canvas class="wave" id="wave" aria-hidden="true"></canvas>
+            <div class="meter" aria-hidden="true">
+              <div class="track"><div class="fill" id="fill"></div></div>
+              <div class="sec" id="sec"></div>
+            </div>
+            <div class="actions">
+              <button type="button" class="primary" id="start">話しはじめる</button>
+              <button type="button" class="primary" id="done" hidden>話し終えた</button>
+              <button type="button" id="cancel" hidden>やめる</button>
+            </div>
+            <p class="status" id="status" role="status" aria-live="polite">マイクは「話しはじめる」を押した時だけ使います。</p>
+          </section>
         </section>
 
         <section class="result" id="result" hidden aria-live="polite">
-          <h2>近い声</h2>
+          <header class="section-head">
+            <p class="kicker">01 結果</p>
+            <h2>近い声</h2>
+          </header>
           <ol class="matches" id="matches"></ol>
-          <p class="empty" id="no-data" hidden>比べる声のデータは、いま準備中です。今はあなたの声の数字だけを出しています。</p>
+          <div class="empty-card" id="no-data" hidden><p>比べる声のデータは、いま準備中です。今はあなたの声の数字だけを出しています。</p></div>
           <p class="empty">探している声が無い時は、<a href="./mimic.html">声真似の点数のページ</a>でその声をお手本として測り、登録できます。</p>
-          <h2>あなたの声</h2>
+
+          <header class="section-head">
+            <p class="kicker">02 あなたの声</p>
+            <h2>45 項目の数字</h2>
+          </header>
           <div class="groups" id="mine"></div>
-          <details>
+          <details class="info">
             <summary>測った内容</summary>
             <p id="info"></p>
           </details>
         </section>
+
+        <div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker"></div></div>
+
+        <section class="flow reveal" aria-labelledby="flow-title">
+          <header class="section-head">
+            <p class="kicker">しくみ</p>
+            <h2 id="flow-title">話すだけ。<span class="grad">30 秒</span>で。</h2>
+          </header>
+          <ol class="flow-list">
+            <li class="card"><span class="no" aria-hidden="true">01</span><h3>話す</h3><p>お題に答えて、15〜35 秒ほど話します。ふだんの声でも、声真似でも。</p></li>
+            <li class="card"><span class="no" aria-hidden="true">02</span><h3>45 項目の数字にする</h3><p>高さ・響き・声の質・速さと間・強さを、この端末の中で測ります。音はすぐに捨てます。</p></li>
+            <li class="card"><span class="no" aria-hidden="true">03</span><h3>近い声を出す</h3><p>事前に測った声と比べて、近い順に 5 つ。そのまま声真似の点数にも挑戦できます。</p></li>
+          </ol>
+        </section>
       </main>
       <footer class="site-foot">
-        <p>音は保存も送信もしません。声から性別や年齢を判断しません。</p>
-        <p><a href="./about.html#removal">データの削除のお願い</a>・<a href="./about.html">しくみと約束</a></p>
+        <div>
+          <p class="foot-logo">voice<span>-</span>twin</p>
+          <p>音は保存も送信もしません。声から性別や年齢を判断しません。</p>
+        </div>
+        <p class="foot-links"><a href="./mimic.html">声真似の点数</a><a href="./about.html">しくみと約束</a><a href="./about.html#removal">データの削除のお願い</a></p>
       </footer>
     </div>
     <script type="module" src="/src/ui/voice-page.ts"></script>

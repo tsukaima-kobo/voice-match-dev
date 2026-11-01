@@ -16,10 +16,17 @@ export function itemRow(d: FeatureDef, dots: { value: number | null; cls?: strin
   label.title = d.about;
   const scale = el('div', 'scale');
   scale.append(el('div', 'line'));
-  for (const p of dots) {
-    if (p.value === null) continue;
+  const xs = dots.filter((p) => p.value !== null).map((p) => ({ ...p, x: displayValue(d.key, p.value!) * 100 }));
+  if (xs.length >= 2) {
+    // (2 つ以上なら、その間を線でつなぐ: お手本とあなたのずれ)
+    const span = el('div', 'span');
+    span.style.setProperty('--from', `${Math.min(...xs.map((p) => p.x))}%`);
+    span.style.setProperty('--to', `${Math.max(...xs.map((p) => p.x))}%`);
+    scale.append(span);
+  }
+  for (const p of xs) {
     const dot = el('div', p.cls ? `dot ${p.cls}` : 'dot');
-    dot.style.left = `${displayValue(d.key, p.value) * 100}%`;
+    dot.style.setProperty('--x', `${p.x}%`);
     scale.append(dot);
   }
   const ends = el('div', 'ends');
@@ -33,9 +40,12 @@ export function itemRow(d: FeatureDef, dots: { value: number | null; cls?: strin
 export function renderGroups(box: HTMLElement, makeRow: (d: FeatureDef) => HTMLElement): void {
   box.replaceChildren();
   const groups = [...new Set(FEATURES.map((d) => d.group))] as FeatureGroup[];
-  for (const g of groups) {
+  groups.forEach((g, i) => {
     const card = el('div', 'group');
-    card.append(el('h3', undefined, GROUP_NAMES[g]));
+    card.style.setProperty('--i', String(i));
+    const h = el('h3');
+    h.append(el('span', 'gno', String(i + 1).padStart(2, '0')), GROUP_NAMES[g]);
+    card.append(h);
     const defs = FEATURES.filter((x) => x.group === g);
     for (const d of defs.filter((x) => !x.detail)) card.append(makeRow(d));
     const more = defs.filter((x) => x.detail);
@@ -46,5 +56,5 @@ export function renderGroups(box: HTMLElement, makeRow: (d: FeatureDef) => HTMLE
       card.append(det);
     }
     box.append(card);
-  }
+  });
 }
