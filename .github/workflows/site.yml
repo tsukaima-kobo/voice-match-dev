@@ -1,0 +1,74 @@
+# サイトのビルドと公開（GitHub Pages）。main に push した時と、毎日 6:00（日本時間）に動く。
+# 毎日の時は、先に声の登録（Google フォームの回答）を取り込む（tools/intake.ts。docs/registration.md）。
+# 取り込みは dots の判定（毎日 5:00）が終わった後の時刻に動かす。鍵は Secrets にだけ置く。
+name: site
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: site
+  cancel-in-progress: false
+
+jobs:
+  intake:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: 声の登録を取り込む
+        env:
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          SHEET_RANGE: ${{ vars.SHEET_RANGE }}
+        run: node tools/intake.ts --sheet
+      - name: 変わっていたら記録する
+        run: |
+          git add data/submissions.json data/user-catalog.json data/user-profiles.json data/user-ids.json
+          if git diff --cached --quiet; then
+            echo '変わった所はありません'
+          else
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m '声の登録を取り込む'
+            git push
+          fi
+
+  build:
+    needs: intake
+    if: ${{ !cancelled() && (needs.intake.result == 'success' || needs.intake.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

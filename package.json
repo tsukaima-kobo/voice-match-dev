@@ -1,0 +1,24 @@
+{
+  "name": "voice-twin",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "話すと、事前に測った数百〜数万の声の中から近い声を出す。声真似の点数も出せる",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build:collector": "vite build --config collector/vite.config.ts",
+    "build:voices": "node tools/build-voices.ts",
+    "eval": "node tools/eval.ts",
+    "intake": "node tools/intake.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}

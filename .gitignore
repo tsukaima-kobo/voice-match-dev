@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env
+.env.*
+collector/dist/
+
+# 公開しない物（引き継ぎの記録と、手元の決まり）
+handoff/
+CLAUDE.md

@@ -1,0 +1,146 @@
+// 声の登録の取り込みの計算（ファイルの読み書き・通信なし。test/intake.test.ts で試す）。
+// フォームの回答の 1 行 = [タイムスタンプ, 送る内容, 判定, 理由]。判定は dots が書く（壁 ②。OK の行だけ使う）。
+// 壁 ① をもう一度（ページの確認は回り込めるため）、禁止の言葉・削除済みの名前・1 日の上限・同じ数字の重なりを除き、
+// 名前ごとに壁 ③（3 件以上そろったら中央値）で声にする。ID は一度決めたら変えない（data/user-ids.json）。
+import { checkSubmission, decodeSubmission, featuresOf, nameKey, type Source, type Submission } from '../src/submit/code.ts';
+import { consensus } from '../src/submit/consensus.ts';
+import { FEATURE_KEYS, type Features } from '../src/voice/features.ts';
+import type { MatchModel } from '../src/match/match.ts';
+
+export const INTAKE = {
+  /** 1 日に受け付ける件数（壁 ② の後で数える。あふれた分は使わない） */
+  perDay: 200,
+  /** 1 つの名前について 1 日に受け付ける件数 */
+  perNamePerDay: 3,
+} as const;
+
+export interface Row {
+  at: string;
+  code: string;
+  verdict: string;
+  reason: string;
+}
+
+export interface Accepted {
+  at: string;
+  key: string;
+  name: string;
+  group?: string;
+  link: string;
+  source: Source;
+  quality: Submission['q'];
+  features: Features;
+}
+
+export interface UserVoice {
+  id: string;
+  key: string;
+  name: string;
+  group?: string;
+  link: string;
+  used: number;
+  features: Features;
+}
+
+export type CountKey = 'rows' | 'pending' | 'judgedNg' | 'unreadable' | 'wall1' | 'ngWord' | 'blocked' | 'overDay' | 'overName' | 'duplicate' | 'accepted';
+
+/** 表（シートや CSV）から行を取り出す。送る内容が無い行（見出しなど）は飛ばす */
+export function rowsFromTable(table: readonly (readonly string[])[]): Row[] {
+  return table.filter((r) => (r[1] ?? '').includes('voice-twin:')).map((r) => ({ at: (r[0] ?? '').trim(), code: r[1] ?? '', verdict: r[2] ?? '', reason: r[3] ?? '' }));
+}
+
+/** タイムスタンプの日付（"2026/11/01 12:34:56" → "2026-11-01"）。読めなければ "unknown" */
+export function dayOf(at: string): string {
+  const m = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/.exec(at.trim());
+  return m ? `${m[1]}-${m[2]!.padStart(2, '0')}-${m[3]!.padStart(2, '0')}` : 'unknown';
+}
+
+/** いちばん多い物（同じ数なら先に出た物） */
+function mostCommon(values: readonly string[]): string | undefined {
+  const n = new Map<string, number>();
+  for (const v of values) n.set(v, (n.get(v) ?? 0) + 1);
+  let best: string | undefined,
+    bestN = 0;
+  for (const v of values) if (n.get(v)! > bestN) [best, bestN] = [v, n.get(v)!];
+  return best;
+}
+
+export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: readonly string[]; blocked: readonly string[]; ids: Readonly<Record<string, string>> }): { accepted: Accepted[]; voices: UserVoice[]; ids: Record<string, string>; counts: Record<CountKey, number> } {
+  const counts = Object.fromEntries((['rows', 'pending', 'judgedNg', 'unreadable', 'wall1', 'ngWord', 'blocked', 'overDay', 'overName', 'duplicate', 'accepted'] as CountKey[]).map((k) => [k, 0])) as Record<CountKey, number>;
+  const blocked = new Set(o.blocked.map(nameKey));
+  const ng = o.ngWords.map(nameKey).filter(Boolean);
+  const perDay = new Map<string, number>();
+  const perName = new Map<string, number>();
+  const seen = new Set<string>();
+  const accepted: Accepted[] = [];
+  for (const row of rows) {
+    counts.rows++;
+    const verdict = row.verdict.trim().toUpperCase();
+    if (!verdict) {
+      counts.pending++;
+      continue;
+    }
+    if (verdict !== 'OK') {
+      counts.judgedNg++;
+      continue;
+    }
+    const s = decodeSubmission(row.code);
+    if (!s) {
+      counts.unreadable++;
+      continue;
+    }
+    if (checkSubmission(s).length) {
+      counts.wall1++;
+      continue;
+    }
+    const key = nameKey(s.n);
+    if (blocked.has(key)) {
+      counts.blocked++;
+      continue;
+    }
+    const text = nameKey(`${s.n} ${s.g ?? ''}`);
+    if (ng.some((w) => text.includes(w))) {
+      counts.ngWord++;
+      continue;
+    }
+    const day = dayOf(row.at);
+    if ((perDay.get(day) ?? 0) >= INTAKE.perDay) {
+      counts.overDay++;
+      continue;
+    }
+    const nk = `${day} ${key}`;
+    if ((perName.get(nk) ?? 0) >= INTAKE.perNamePerDay) {
+      counts.overName++;
+      continue;
+    }
+    const same = `${key} ${JSON.stringify(s.f)}`;
+    if (seen.has(same)) {
+      counts.duplicate++;
+      continue;
+    }
+    seen.add(same);
+    perDay.set(day, (perDay.get(day) ?? 0) + 1);
+    perName.set(nk, (perName.get(nk) ?? 0) + 1);
+    counts.accepted++;
+    accepted.push({ at: row.at, key, name: s.n.trim(), ...(s.g?.trim() ? { group: s.g.trim() } : {}), link: s.l.trim(), source: s.s, quality: s.q, features: featuresOf(s) });
+  }
+
+  // (壁 ③, name by name, in the order each name first came)
+  const ids: Record<string, string> = { ...o.ids };
+  let next = Math.max(0, ...Object.values(ids).map((id) => Number(/^u-(\d+)$/.exec(id)?.[1] ?? 0))) + 1;
+  const keys = [...new Set(accepted.map((a) => a.key))];
+  const voices: UserVoice[] = [];
+  for (const key of keys) {
+    const items = accepted.filter((a) => a.key === key);
+    const c = consensus(o.model, items);
+    if (!c) continue;
+    if (!ids[key]) ids[key] = `u-${String(next++).padStart(4, '0')}`;
+    const group = mostCommon(items.map((a) => a.group ?? '').filter(Boolean));
+    voices.push({ id: ids[key]!, key, name: mostCommon(items.map((a) => a.name))!, ...(group ? { group } : {}), link: mostCommon(items.map((a) => a.link))!, used: c.used, features: c.features });
+  }
+  voices.sort((a, b) => (a.id < b.id ? -1 : 1));
+  return { accepted, voices, ids, counts };
+}
+
+/** 数字の並びを features の順の配列に（ファイルを小さく、読みやすく） */
+export const featureArray = (f: Features): (number | null)[] => FEATURE_KEYS.map((k) => f[k]);
