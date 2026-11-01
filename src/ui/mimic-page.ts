@@ -13,6 +13,7 @@ import { measureVoice, type MeasureFail } from '../voice/measure.ts';
 import { LONG_MAX_SECONDS, measureLong } from '../voice/combine.ts';
 import { createWave, type Wave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
+import { micPicker } from './mic-picker.ts';
 import { FEATURE_BY_KEY, forLength, formatFeature, LONG_SECONDS, ONE_LINE_SECONDS, type Features } from '../voice/features.ts';
 import type { Contour, Measured } from '../voice/measure.ts';
 import { compareLines, LINE_MAX_SECONDS, lineScore } from '../mimic/line.ts';
@@ -44,6 +45,17 @@ const $ = <E extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 /** 声の玉（お手本と真似の両方で使う。見た目だけ） */
 const orb = createOrb($('orb'));
 const ORB_MODE: Record<string, OrbMode> = { listening: 'listening', analysing: 'analysing', ready: 'done', done: 'done' };
+/** マイクを選ぶ所（お手本と真似の 2 か所。どちらで選んでも同じ） */
+const mics = micPicker(
+  ['ref', 'mim'].map((k) => ({ box: $(`${k}-mic-pick`), select: $<HTMLSelectElement>(`${k}-mic-select`), find: $<HTMLButtonElement>(`${k}-mic-find`) })),
+  (text) => {
+    const st = mimState === 'locked' ? ref.status : mim.status;
+    st.textContent = text;
+    st.classList.add('bad');
+  },
+);
+const isBusy = (st: string) => st === 'asking' || st === 'listening' || st === 'analysing';
+const lockMics = () => mics.lock(isBusy(refState) || isBusy(mimState));
 
 /* ---- 録る（お手本と真似で共通） ---- */
 interface TakeUi {
@@ -172,6 +184,7 @@ function showRef(next: RefState, text: string, bad = false): void {
   refState = next;
   ref.stage.dataset.state = next;
   orb.mode(ORB_MODE[next] ?? 'idle');
+  lockMics();
   ref.status.textContent = text;
   ref.status.classList.toggle('bad', bad);
   const busy = next === 'asking' || next === 'listening' || next === 'analysing';
@@ -195,22 +208,24 @@ async function refListen(kind: 'mic' | 'tab'): Promise<void> {
   refTake.drop();
   showRef('asking', kind === 'mic' ? 'マイクの許可を待っています…' : '共有するタブを選んでください…');
   try {
-    const m = await (kind === 'mic' ? openMic : openTabAudio)(refTake.onChunk, () => refFinish());
+    const m = kind === 'mic' ? await openMic(refTake.onChunk, () => refFinish(), mics.get()) : await openTabAudio(refTake.onChunk, () => refFinish());
     if (my !== refToken || refState !== 'asking') {
       m.stop();
       return;
     }
     refTake.begin(m);
+    if (kind === 'mic') void mics.refresh();
     showRef(
       'listening',
       kind === 'mic'
-        ? `お手本を流して、マイクに聞かせてください。音が聞こえたら数えはじめます。セリフ 1 つでもかまいません。流し終えたら「聞かせ終えた」を押してください（最大 ${LISTEN_MAX} 秒）。`
+        ? `お手本を流して、マイクに聞かせてください。音が聞こえたら数えはじめます。セリフ 1 つでもかまいません。流し終えたら「聞かせ終えた」を押してください（最大 ${LISTEN_MAX} 秒）。${m.label ? `マイク: ${m.label}` : ''}`
         : `選んだタブで、お手本を再生してください。セリフ 1 つなら、言い終わったら動画を止めて、このページで「聞かせ終えた」を押してください（音が来てから ${LISTEN_MAX} 秒で止まります）。`,
     );
   } catch (e) {
     if (my !== refToken) return;
     refTake.stop();
     refTake.drop();
+    if ((e as { name?: string } | null)?.name === 'MicGoneError') mics.reset();
     showRef('failed', kind === 'mic' ? micErrorText(e) : tabErrorText(e), true);
   }
 }
@@ -479,6 +494,7 @@ function showMim(next: MimState, text: string, bad = false): void {
   mimState = next;
   mim.stage.dataset.state = next;
   orb.mode(ORB_MODE[next] ?? 'idle');
+  lockMics();
   mim.status.textContent = text;
   mim.status.classList.toggle('bad', bad);
   mim.start.hidden = !(next === 'locked' || next === 'idle' || next === 'failed' || next === 'done');
@@ -496,17 +512,20 @@ async function mimStart(): Promise<void> {
   mimTake.drop();
   showMim('asking', 'マイクの許可を待っています…');
   try {
-    const m = await openMic(mimTake.onChunk, () => mimFinish());
+    const m = await openMic(mimTake.onChunk, () => mimFinish(), mics.get());
     if (my !== mimToken || mimState !== 'asking') {
       m.stop();
       return;
     }
     mimTake.begin(m);
-    showMim('listening', target.contour ? 'お手本と同じセリフを、お手本のように言ってください。言い終えたら「話し終えた」を押してください。' : `お手本のように話してください。一言でもかまいませんが、長く話すほど多くの項目で比べられます（最大 ${LISTEN_MAX} 秒）。`);
+    void mics.refresh();
+    const on = m.label ? `マイク: ${m.label}` : '';
+    showMim('listening', target.contour ? `お手本と同じセリフを、お手本のように言ってください。言い終えたら「話し終えた」を押してください。${on}` : `お手本のように話してください。一言でもかまいませんが、長く話すほど多くの項目で比べられます（最大 ${LISTEN_MAX} 秒）。${on}`);
   } catch (e) {
     if (my !== mimToken) return;
     mimTake.stop();
     mimTake.drop();
+    if ((e as { name?: string } | null)?.name === 'MicGoneError') mics.reset();
     showMim('failed', micErrorText(e), true);
   }
 }

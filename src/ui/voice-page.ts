@@ -8,6 +8,7 @@ import { openMic, micErrorText, type Mic } from '../voice/listen.ts';
 import { measureVoice, type MeasureFail, type Measured } from '../voice/measure.ts';
 import { createWave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
+import { micPicker } from './mic-picker.ts';
 import { FEATURE_BY_KEY, FEATURES, FEW_SECONDS, formatFeature, LONG_SECONDS, ONE_LINE_SECONDS, type Features } from '../voice/features.ts';
 import { CERTAINTY_WORDS, certaintyOf, combineTakes, type Combined, type Take } from '../voice/takes.ts';
 import { el, itemRow, renderGroups } from './items.ts';
@@ -37,6 +38,10 @@ const secEl = $('sec');
 const wave = createWave($<HTMLCanvasElement>('wave'));
 const result = $('result');
 const orb = createOrb($('orb'));
+const mics = micPicker([{ box: $('mic-pick'), select: $<HTMLSelectElement>('mic-select'), find: $<HTMLButtonElement>('mic-find') }], (text) => {
+  statusEl.textContent = text;
+  statusEl.classList.add('bad');
+});
 const ORB_MODE: Partial<Record<State, OrbMode>> = { listening: 'listening', analysing: 'analysing', done: 'done' };
 
 type State = 'idle' | 'asking' | 'listening' | 'analysing' | 'failed' | 'done';
@@ -86,6 +91,7 @@ function show(next: State, text: string, bad = false) {
   btn.cancel.hidden = !(next === 'listening' || next === 'asking');
   btn.next.disabled = btn.read.disabled = next === 'listening' || next === 'asking' || next === 'analysing';
   orb.mode(ORB_MODE[next] ?? 'idle');
+  mics.lock(next === 'listening' || next === 'asking' || next === 'analysing');
   if (next !== 'listening') {
     cancelAnimationFrame(raf);
     wave.draw(false);
@@ -122,17 +128,19 @@ async function start() {
       got += x.length;
       wave.push(x, m.rate);
       orb.push(x, m.rate);
-    });
+    }, undefined, mics.get());
     if (state !== 'asking') {
       // (cancelled while asking)
       m.stop();
       return;
     }
     mic = m;
-    show('listening', `話してください。一言でもかまいません。話し終えたら「話し終えた」を押してください（最大 ${LISTEN_MAX} 秒）。`);
+    void mics.refresh();
+    show('listening', `話してください。一言でもかまいません。話し終えたら「話し終えた」を押してください（最大 ${LISTEN_MAX} 秒）。${m.label ? `マイク: ${m.label}` : ''}`);
     raf = requestAnimationFrame(tick);
   } catch (e) {
     stopMic();
+    if ((e as { name?: string } | null)?.name === 'MicGoneError') mics.reset();
     show('failed', micErrorText(e), true);
   }
 }

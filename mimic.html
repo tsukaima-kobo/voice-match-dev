@@ -43,6 +43,11 @@
               <button type="button" id="ref-file-button">音声ファイルを選ぶ</button>
               <input type="file" id="ref-file" accept="audio/*,video/*" hidden />
             </div>
+            <div class="mic-pick" id="ref-mic-pick" hidden>
+              <label for="ref-mic-select">マイク</label>
+              <select id="ref-mic-select"><option value="">いつものマイク（端末の設定）</option></select>
+              <button type="button" id="ref-mic-find">ほかのマイクを選ぶ</button>
+            </div>
             <ul class="source-notes">
               <li><strong>マイク</strong>: スマホやテレビなど、ほかの機器で流して、マイクに聞かせます。</li>
               <li id="ref-tab-note" hidden><strong>ほかのタブ</strong>: 動画を開いたタブの音を、そのまま取ります（パソコンの Chrome・Edge）。共有する画面で「タブの音声も共有する」をオンにしてください。</li>
@@ -115,6 +120,11 @@
               <button type="button" id="topic-next">次のお題</button>
               <button type="button" id="topic-read">決まった文を読む</button>
             </div>
+          </div>
+          <div class="mic-pick" id="mim-mic-pick" hidden>
+            <label for="mim-mic-select">マイク</label>
+            <select id="mim-mic-select"><option value="">いつものマイク（端末の設定）</option></select>
+            <button type="button" id="mim-mic-find">ほかのマイクを選ぶ</button>
           </div>
           <canvas class="wave" id="mim-wave" aria-hidden="true"></canvas>
           <div class="meter" aria-hidden="true">

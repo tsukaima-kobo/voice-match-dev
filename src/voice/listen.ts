@@ -3,11 +3,20 @@
 // 止めた時はすぐトラックを止め、AudioContext を閉じる。
 // タブの音は、ブラウザーの「共有」の画面で利用者がタブを選んだ時だけ取れる（声真似の練習のお手本用）。映像は使わない。
 // `?test=1` の時だけ window.__voiceTwin.feed(samples, rate) で、マイクの代わりに決まった音を流せる（画面の確認用）。
+// マイクは選べる（listMics の一覧の deviceId を openMic に渡す）。一覧の名前は、ブラウザーがマイクを許可した後にだけ見える。
 import workletUrl from './capture.worklet.js?url&no-inline';
 
 export interface Mic {
   rate: number;
+  /** 使っているマイクの名前（ブラウザーが教える時だけ） */
+  label?: string;
   stop(): void;
+}
+
+/** 選べるマイク。id が空なら「端末の設定のマイク」 */
+export interface MicChoice {
+  id: string;
+  label: string;
 }
 
 interface TestHook {
@@ -29,8 +38,8 @@ if (new URLSearchParams(location.search).has('test')) {
   };
 }
 
-/** マイクを開いて、音を `onChunk` に渡し続ける。マイクが外れた時などは `onEnded` */
-export async function openMic(onChunk: (x: Float32Array) => void, onEnded?: () => void): Promise<Mic> {
+/** マイクを開いて、音を `onChunk` に渡し続ける。マイクが外れた時などは `onEnded`。`deviceId` で選んだマイク（空なら端末の設定のマイク） */
+export async function openMic(onChunk: (x: Float32Array) => void, onEnded?: () => void, deviceId = ''): Promise<Mic> {
   if (fed) {
     // (the test's sound, in chunks of 2048, at 8 times the real speed)
     const { samples, rate } = fed;
@@ -43,11 +52,49 @@ export async function openMic(onChunk: (x: Float32Array) => void, onEnded?: () =
     }, (2048 / rate) * 1000);
     return { rate, stop: () => clearInterval(timer) };
   }
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
-    video: false,
-  });
+  const audio: MediaTrackConstraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 };
+  if (deviceId) audio.deviceId = { exact: deviceId };
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio, video: false });
+  } catch (e) {
+    // (the chosen one is gone: told apart, so the page can go back to the device's own)
+    const name = typeof e === 'object' && e !== null && 'name' in e ? String((e as { name: unknown }).name) : '';
+    if (deviceId && (name === 'OverconstrainedError' || name === 'NotFoundError')) {
+      const gone = new Error('the chosen microphone is gone');
+      gone.name = 'MicGoneError';
+      throw gone;
+    }
+    throw e;
+  }
   return listenTo(stream, onChunk, onEnded);
+}
+
+/** マイクを選べるブラウザーか */
+export function micChoiceSupported(): boolean {
+  const md = navigator.mediaDevices as MediaDevices | undefined;
+  return !!md && typeof md.enumerateDevices === 'function' && typeof md.getUserMedia === 'function';
+}
+
+/**
+ * 選べるマイクの一覧（「端末の設定」の物は除く）。名前はマイクの許可の後にだけ見えるので、`ask` の時は一度だけ許可を求めて、
+ * すぐ止める（音は受けない）。許可が無く名前が見えない時は、空の一覧。
+ */
+export async function listMics(ask = false): Promise<MicChoice[]> {
+  if (!micChoiceSupported()) return [];
+  if (ask) {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    for (const t of s.getTracks()) t.stop();
+  }
+  const all = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+  if (!all.some((d) => d.label)) return [];
+  const out: MicChoice[] = [];
+  for (const d of all) {
+    if (!d.deviceId || d.deviceId === 'default' || d.deviceId === 'communications') continue;
+    if (out.some((x) => x.id === d.deviceId)) continue;
+    out.push({ id: d.deviceId, label: d.label || `マイク ${out.length + 1}` });
+  }
+  return out;
 }
 
 /** ほかのタブの音を取れるブラウザーか（パソコンの Chrome・Edge など。スマホは取れない） */
@@ -106,8 +153,10 @@ async function listenTo(stream: MediaStream, onChunk: (x: Float32Array) => void,
   };
   for (const t of stream.getAudioTracks()) t.addEventListener('ended', ended);
   await ctx.resume();
+  const label = stream.getAudioTracks()[0]?.label;
   return {
     rate: ctx.sampleRate,
+    ...(label ? { label } : {}),
     stop() {
       if (stopped) return;
       stopped = true;
@@ -129,6 +178,8 @@ export function micErrorText(e: unknown): string {
     case 'NotAllowedError':
     case 'SecurityError':
       return 'マイクが許可されていません。ブラウザーの設定でこのページにマイクを許可してから、もう一度押してください。';
+    case 'MicGoneError':
+      return '選んだマイクが見つかりませんでした。「いつものマイク」に戻したので、もう一度押してください。';
     case 'NotFoundError':
     case 'OverconstrainedError':
       return 'マイクが見つかりません。マイクをつないでから、もう一度押してください。';
