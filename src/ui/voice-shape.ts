@@ -20,31 +20,31 @@ export const SHAPE_LAYERS: readonly { key: ShapeLayer; name: string; items: read
     key: 'shape',
     name: '形',
     items: [
-      { key: 'pitch', fig: '形の色と縦の伸び。高いほど上へ伸びて桃色に、低いほど横に広がって水色になります。' },
-      { key: 'pitchRange', fig: 'ふちのうねりの大きさ。抑揚が大きいほど、大きくうねります。' },
+      { key: 'pitch', fig: '全体の色と縦の伸び。高い声ほど縦に伸びて桃色に、低い声ほど横に広がって水色になります。' },
+      { key: 'pitchRange', fig: 'ふちと線のうねりの大きさ。抑揚が大きいほど、大きくうねります。' },
       { key: 'pitchSkew', fig: '上下のふくらみ。上に広い声ほど上が、下に広い声ほど下がふくらみます。' },
-      { key: 'pitchMotion', fig: 'うねりの動く速さ。高さがよく動く声ほど、速くうねります。' },
+      { key: 'pitchMotion', fig: '線が芯から外へ流れる速さ。高さがよく動く声ほど、速く流れます。' },
     ],
   },
   {
     key: 'core',
     name: '芯と模様',
     items: [
-      { key: 'f1', fig: '光る芯の上下。口を大きく開ける響きほど、芯が下にきます。' },
-      { key: 'f2', fig: '光る芯の左右。舌が前に出る響きほど、芯が右にきます。' },
-      { key: 'formantSpacing', fig: '内側の輪の間隔。響きの間隔が広いほど、輪の間も広くなります。' },
-      { key: 'centroid', fig: 'ふちの波の細かさと、左上の光。明るい声ほど波が細かく、光が強くなります。' },
-      { key: 'mfcc2', name: '音色', fig: 'ふちの波の形。音色（MFCC）の数字から決まる、その声だけの模様です。' },
+      { key: 'f1', fig: '光る芯の上下。口を大きく開ける響きほど、芯が下にきます（点線の上下）。' },
+      { key: 'f2', fig: '光る芯の左右。舌が前に出る響きほど、芯が右にきます（点線の左右）。' },
+      { key: 'formantSpacing', fig: '線の間隔。響きの間隔が広いほど、線が少なく、間が広くなります。' },
+      { key: 'centroid', fig: 'ふちのうねりの細かさと、光る星。明るい声ほど、うねりが細かく、星が多く強くなります。' },
+      { key: 'mfcc2', name: '音色', fig: '指紋の模様そのものと、まわりの光の冠。音色（MFCC 1〜13）から決まる、その声だけの模様です。冠の 13 本の長さが、音色の 13 の数字です。' },
     ],
   },
   {
     key: 'mist',
     name: '霞と線',
     items: [
-      { key: 'hnr', fig: 'まわりの霞。息が多い声ほど、霞が広がります。' },
-      { key: 'h1h2', fig: '線のやわらかさ。柔らかい声ほど、線がぼけます。' },
-      { key: 'jitter', fig: '線の切れ目。高さがゆらぐ声ほど、線が切れます。' },
-      { key: 'shimmer', fig: 'ふちに散る粒。大きさがゆらぐ声ほど、粒が増えます。' },
+      { key: 'hnr', fig: 'まわりの霞と、線のくっきりさ。息が多い声ほど霞が広がり、線が淡くなります。' },
+      { key: 'h1h2', fig: '線のぼけ。柔らかい声ほど、線がぼけて光がにじみます。' },
+      { key: 'jitter', fig: '線の切れ目。高さがゆらぐ声ほど、線があちこちで切れます。' },
+      { key: 'shimmer', fig: '線の粒。大きさがゆらぐ声ほど、線が粒のようにまだらになります。' },
     ],
   },
   {
@@ -52,16 +52,16 @@ export const SHAPE_LAYERS: readonly { key: ShapeLayer; name: string; items: read
     name: '外の輪',
     items: [
       { key: 'rate', fig: '外の輪の粒の数と、回る速さ。速く話すほど、粒が多く速く回ります。' },
-      { key: 'pauseShare', fig: '外の輪のすき間。間が多いほど、すき間が広がります。' },
-      { key: 'rhythm', fig: '粒の大きさのムラ。リズムにムラがあるほど、粒の大きさがそろいません。' },
+      { key: 'pauseShare', fig: '外の輪の 3 つのすき間。間が多いほど、すき間が広がります。' },
+      { key: 'rhythm', fig: '粒の大きさと並びのムラ。リズムにムラがあるほど、粒がそろいません。' },
     ],
   },
   {
     key: 'size',
     name: '大きさ',
     items: [
-      { key: 'tilt', fig: '形の大きさと線の太さ。力強い声ほど、大きく太くなります。' },
-      { key: 'levelRange', fig: 'ゆっくり脈打つ大きさの幅。強弱が大きいほど、大きく脈打ちます。' },
+      { key: 'tilt', fig: '全体の大きさと線の太さ。力強い声ほど、大きく太くなります（点線の円）。' },
+      { key: 'levelRange', fig: 'ゆっくり脈打つ幅。強弱が大きいほど、大きく脈打ちます（2 つの点線の円の間）。' },
     ],
   },
 ];
@@ -346,7 +346,7 @@ function readPalette(el: Element): ShapePalette {
 
 export interface ShapeView {
   set(f: Features): void;
-  focus(l: ShapeLayer | null): void;
+  focus(l: ShapeLayer | null, item?: FeatureKey | null): void;
 }
 
 /** canvas に声のかたちを描き続ける（画面に見えない時・ページが隠れた時は止める。動きを減らす設定では止まった絵） */
@@ -411,7 +411,7 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
   let current: string | null = null;
   const buttons: HTMLButtonElement[] = [];
   const pick = (item: ShapeItem | null, layer: ShapeLayer | null, sticky: boolean) => {
-    for (const v of views) v.focus(layer);
+    for (const v of views) v.focus(layer, item?.key ?? null);
     if (!item) {
       note.textContent = REST;
       return;
@@ -458,42 +458,37 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
     box.append(g);
   }
   box.append(note);
-}
 
-/** 箱に、声のかたちを並べる（あなた・1 位の声、お手本・あなた など）。同じ数なら canvas を使い回す */
-const mounted = new WeakMap<HTMLElement, { views: ShapeView[]; caps: HTMLElement[] }>();
-export function mountShapes(box: HTMLElement, guide: HTMLElement, entries: readonly { who: string; sub?: string; f: Features }[]): void {
-  let m = mounted.get(box);
-  if (!m || m.views.length !== entries.length) {
-    const views: ShapeView[] = [],
-      caps: HTMLElement[] = [],
-      figs: HTMLElement[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      const fig = document.createElement('figure');
-      fig.className = 'shape-fig';
-      const c = document.createElement('canvas');
-      c.className = 'shape-canvas';
-      c.setAttribute('role', 'img');
-      const cap = document.createElement('figcaption');
-      fig.append(c, cap);
-      figs.push(fig);
-      caps.push(cap);
-      views.push(createShapeView(c));
+  // (案内: 見えている間、項目を順に 1 回だけ光らせる。押す・重ねると止まる。動きを減らす設定ではしない)
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const all = SHAPE_LAYERS.flatMap((l) => l.items.map((item) => ({ item, layer: l.key })));
+  let step = -1,
+    timer = 0,
+    seen = false;
+  const stop = () => {
+    clearInterval(timer);
+    timer = 0;
+  };
+  const tour = () => {
+    if (current || !box.isConnected) return stop();
+    step++;
+    if (step >= all.length) {
+      stop();
+      pick(null, null, false);
+      return;
     }
-    box.replaceChildren(...figs);
-    m = { views, caps };
-    mounted.set(box, m);
-  }
-  entries.forEach((e, i) => {
-    m!.views[i]!.set(e.f);
-    const who = document.createElement('b');
-    who.textContent = e.who;
-    m!.caps[i]!.replaceChildren(who);
-    if (e.sub) {
-      const s = document.createElement('span');
-      s.textContent = e.sub;
-      m!.caps[i]!.append(s);
-    }
-  });
-  renderGuide(guide, m.views, entries.map((e) => ({ who: e.who, f: e.f })));
+    pick(all[step]!.item, all[step]!.layer, false);
+  };
+  box.addEventListener('pointerdown', stop, { once: true });
+  box.addEventListener('pointerenter', stop, { once: true });
+  box.addEventListener('focusin', stop, { once: true });
+  new IntersectionObserver((es, obs) => {
+    if (seen || !es.some((e) => e.isIntersecting)) return;
+    seen = true;
+    obs.disconnect();
+    // (after the drawing-out of the figure)
+    setTimeout(() => {
+      if (!current) timer = window.setInterval(tour, 2600);
+    }, 2600);
+  }).observe(box);
 }

@@ -18,7 +18,7 @@ import { FEATURE_BY_KEY, forLength, formatFeature, LONG_SECONDS, ONE_LINE_SECOND
 import type { Contour, Measured } from '../voice/measure.ts';
 import { compareLines, LINE_MAX_SECONDS, lineScore } from '../mimic/line.ts';
 import { drawLineChart } from './line-chart.ts';
-import { mountShapes } from './voice-shape.ts';
+import { mountShapes } from './voiceprint.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { adviceFor, differences, mimicScore, scoreWord } from '../mimic/mimic.ts';
 import { ENTRY_BY_ID, PROFILES } from '../data/load.ts';

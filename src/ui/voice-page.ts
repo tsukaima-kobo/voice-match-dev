@@ -9,7 +9,7 @@ import { measureVoice, type MeasureFail, type Measured } from '../voice/measure.
 import { createWave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
 import { micPicker } from './mic-picker.ts';
-import { mountShapes } from './voice-shape.ts';
+import { mountShapes } from './voiceprint.ts';
 import { FEATURE_BY_KEY, FEATURES, FEW_SECONDS, formatFeature, LONG_SECONDS, ONE_LINE_SECONDS, type Features } from '../voice/features.ts';
 import { CERTAINTY_WORDS, certaintyOf, combineTakes, type Combined, type Take } from '../voice/takes.ts';
 import { el, itemRow, renderGroups } from './items.ts';
@@ -228,7 +228,7 @@ function render(c: Combined, m: Extract<Measured, { ok: true }>) {
   const top = renderMatches(f);
   renderMine(f);
   mountShapes($('shapes'), $('shape-guide'), [
-    { who: 'あなた', sub: c.takes > 1 ? `${c.takes} 回分` : '一言から', f },
+    { who: 'あなた', sub: `確かさ: ${CERTAINTY_WORDS[level]}（${c.takes} 回分）`, f },
     ...(top ? [{ who: '1 位の声', sub: top.name, f: top.features }] : []),
   ]);
   const missing: string[] = [];
