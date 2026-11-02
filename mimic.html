@@ -92,7 +92,8 @@
               </div>
               <div class="field">
                 <label for="reg-link"><span lang="ja">公式ページの URL（必須）</span><span lang="en">URL of an official page (required)</span></label>
-                <input type="url" id="reg-link" maxlength="300" autocomplete="off" placeholder="https://" />
+                <input type="url" id="reg-link" maxlength="300" autocomplete="off" placeholder="https://" aria-describedby="reg-link-hint" />
+                <p class="hint" id="reg-link-hint"><span lang="ja">公式サイトやプロフィールのページのほか、声が聞ける公式の動画（公式チャンネルの物）でもかまいません。転載や切り抜きの動画は使わないでください。</span><span lang="en">An official website or profile page, or an official video where the voice can be heard (from the official channel). Please do not use re-uploads or clips.</span></p>
               </div>
               <label class="check"><input type="checkbox" id="reg-ok" /> <span lang="ja">アニメ・ゲームのキャラや、配信者・芸能人など、公開されている声です（一般の人の声ではありません）</span><span lang="en">This is a public voice, such as an anime or game character, a streamer or a celebrity (not a private person’s)</span></label>
               <div class="actions"><button type="button" id="reg-make"><span lang="ja">送る内容を作る</span><span lang="en">Make the entry</span></button></div>
