@@ -3,7 +3,7 @@ import type { Features } from '../voice/features.ts';
 
 /** data/catalog.json の 1 つのお手本の声（VTuber・配信者・キャラなど） */
 export interface CatalogEntry {
-  /** 決まった ID（例 "v-0001"） */
+  /** 決まった ID（例 "v-0001"）。サイトを作る時だけ使い、サイトのデータには入れない（src/data/pack.ts） */
   id: string;
   /** 画面に出す名前 */
   name: string;
@@ -15,8 +15,6 @@ export interface CatalogEntry {
     /** 測ったチャンネル（任意） */
     channel?: string;
   };
-  /** 利用者の登録から出した声（data/user-catalog.json。tools/intake.ts が作る）。無ければ運営が拡張機能で測った声 */
-  by?: 'users';
 }
 
 export interface Catalog {
@@ -67,21 +65,18 @@ export interface ProfileList {
 /**
  * 運営が測った声の代表値（1 人 1 件）。リポジトリにはコミットせず、GitHub の Release「voices-data」に
  * operator-voices.json として置く。tools/voices-release.ts が作って置き、サイトを作る時に data/generated/ へ取ってくる。
+ * Release は公開なので、サイトと同じく名前・所属・公式ページ・数字だけ（人物ID や窓の数は入れない）。
  */
 export interface OperatorVoices {
   version: 1;
   /** 測り方の版（MEASURE_VERSION） */
   measureVersion: string;
   voices: {
-    id: string;
     name: string;
     /** 今の所属や作品名 */
     group?: string;
     /** 公式のページ */
     link: string;
-    /** 使った窓と動画の数 */
-    windows: number;
-    videos: number;
     features: Features;
   }[];
 }

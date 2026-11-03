@@ -2,7 +2,7 @@
 // お手本が 1 つのセリフ（話しはじめから終わりまで LINE_MAX_SECONDS 以内）なら「セリフ真似」: 高さと大きさの動き（Contour）も持ち、
 // 同じセリフを真似した声と、抑揚・タイミング（mimic/line.ts）と声の質（mimic.ts）で比べ、2 本の線を重ねた図を出す。
 // それより長いお手本と、このサイトで測ったお手本は「声全体」: 声の数字だけで比べる。どちらも一言（声 0.4 秒）から。
-// 声のページ（index.html）の結果から `?target=<ID>` で来た時は、その声をお手本にする。
+// 声のページ（index.html）の結果から `?target=<名前>` で来た時は、その声をお手本にする。
 // 音（お手本も利用者の声も）はメモリーの中だけ。数字にしたらすぐ捨てる。どこにも送らない、端末にも残さない。
 // お手本の数字もメモリーの中だけで、ページを閉じれば消える（localStorage なども使わない）。
 // お手本を聞かせている間は、ほかのタブで動画を流せるよう、ページが隠れても止めない（音が来てから 35 秒で止まる）。
@@ -503,9 +503,9 @@ void voicesReady.then(() => {
     o.value = label;
     list.append(o);
   }
-  // (a link from the voice page: ?target=<id>)
+  // (a link from the voice page: ?target=<name>)
   const wanted = new URLSearchParams(location.search).get('target');
-  const p = wanted ? PROFILES.find((x) => x.id === wanted) : undefined;
+  const p = wanted ? PROFILES.find((x) => ENTRY_BY_ID.get(x.id)!.name === wanted) : undefined;
   if (p && !target) setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, M('このサイトで測った代表値', 'a voice measured by this site'));
 });
 

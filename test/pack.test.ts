@@ -17,7 +17,7 @@ function voicesOf(n: number, seed = 1): { voices: CatalogEntry[]; features: Feat
   const voices: CatalogEntry[] = [];
   const features: Features[] = [];
   for (let i = 0; i < n; i++) {
-    voices.push({ id: `v-${String(i).padStart(4, '0')}`, name: `声 ${i}`, ...(i % 3 ? { group: `所属 ${i % 4}` } : {}), links: { profile: `https://example.com/${i}` }, ...(i % 5 === 0 ? { by: 'users' as const } : {}) });
+    voices.push({ id: `v-${String(i).padStart(4, '0')}`, name: `声 ${i}`, ...(i % 3 ? { group: `所属 ${i % 4}` } : {}), links: { profile: `https://example.com/${i}` } });
     features.push(
       Object.fromEntries(
         FEATURE_KEYS.map((k) => {
@@ -32,11 +32,11 @@ function voicesOf(n: number, seed = 1): { voices: CatalogEntry[]; features: Feat
 }
 
 describe('声のデータを詰める', () => {
-  it('ほどくと、名前・所属・リンク・登録の印・無い項目が元のとおり', () => {
+  it('ほどくと、名前・所属・リンク・無い項目が元のとおり', () => {
     const { voices, features } = voicesOf(37);
     const out = unpackVoices(packVoices(MEASURE_VERSION, voices, features));
-    expect(out.voices).toEqual(voices);
-    expect(out.profiles.map((p) => p.id)).toEqual(voices.map((v) => v.id));
+    expect(out.voices.map(({ id: _, ...v }) => v)).toEqual(voices.map(({ id: _, ...v }) => v));
+    expect(out.profiles.map((p) => p.id)).toEqual(out.voices.map((v) => v.id));
     out.profiles.forEach((p, i) => {
       for (const k of FEATURE_KEYS) expect(p.features[k] === null).toBe(features[i]![k] === null);
     });
@@ -54,6 +54,13 @@ describe('声のデータを詰める', () => {
         expect(Math.abs(b! - a)).toBeLessThanOrEqual(pack.step[j]! / 2 + 1e-9);
       });
     });
+  });
+
+  it('入れるのは名前・所属・公式ページ・数字だけ（ID は入れない）', () => {
+    const { voices, features } = voicesOf(5, 7);
+    const pack = packVoices(MEASURE_VERSION, voices, features);
+    expect(Object.keys(pack).sort()).toEqual(['f', 'g', 'groups', 'keys', 'link', 'lo', 'm', 'name', 'step', 'v']);
+    expect(JSON.stringify(pack)).not.toContain('v-000');
   });
 
   it('同じデータなら同じ物になる・数字は 1 つ 1 バイト', () => {
@@ -82,7 +89,8 @@ describe('声のデータを詰める', () => {
   it('照合の 1 位は、詰める前と同じ', () => {
     const { voices, features } = voicesOf(300, 5);
     const model = defaultModel(MEASURE_VERSION);
-    const before = voices.map((v, i) => ({ id: v.id, features: features[i]! }));
+    // (after unpacking, the id is the position in the list)
+    const before = voices.map((_, i) => ({ id: String(i), features: features[i]! }));
     const after = unpackVoices(packVoices(MEASURE_VERSION, voices, features)).profiles as typeof before;
     const r = series(9);
     for (let t = 0; t < 40; t++) {

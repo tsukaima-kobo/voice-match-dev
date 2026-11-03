@@ -7,14 +7,15 @@ import type { CatalogEntry, OperatorVoices, ProfileEntry } from './types.ts';
 
 export interface VoiceSource {
   voices: readonly CatalogEntry[];
-  profiles: readonly ProfileEntry[];
+  profiles: readonly Pick<ProfileEntry, 'id' | 'version' | 'features'>[];
 }
 
-/** 運営が測った声のファイルを、一覧と代表値の形にする */
+/** 運営が測った声のファイルを、一覧と代表値の形にする（ファイルに ID は無いので、まとめる間だけの番号を付ける） */
 export function fromOperatorVoices(file: OperatorVoices): VoiceSource {
+  const id = (i: number) => `o-${i}`;
   return {
-    voices: file.voices.map((v) => ({ id: v.id, name: v.name, ...(v.group ? { group: v.group } : {}), links: { profile: v.link } })),
-    profiles: file.voices.map((v) => ({ id: v.id, version: file.measureVersion, windows: v.windows, videos: v.videos, features: v.features })),
+    voices: file.voices.map((v, i) => ({ id: id(i), name: v.name, ...(v.group ? { group: v.group } : {}), links: { profile: v.link } })),
+    profiles: file.voices.map((v, i) => ({ id: id(i), version: file.measureVersion, features: v.features })),
   };
 }
 

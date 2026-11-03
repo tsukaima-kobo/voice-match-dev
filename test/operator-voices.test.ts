@@ -14,19 +14,23 @@ const snap = (peoples: Snapshot['peoples'], measurements: Snapshot['measurements
 
 describe('運営が測った声の代表値', () => {
   const twelve = Array.from({ length: 12 }, (_, i) => 200 + i);
-  it('数字のある窓の中央値。動画の数も数える', () => {
-    const { file } = buildOperatorVoices(snap([person('a')], [...windows('a', 'v1', twelve.slice(0, 6)), ...windows('a', 'v2', [...twelve.slice(6), null, null])]), { measureVersion: MEASURE_VERSION, only: null });
+  it('数字のある窓の中央値。窓と動画の数は手元の記録に出す', () => {
+    const { file, notes } = buildOperatorVoices(snap([person('a')], [...windows('a', 'v1', twelve.slice(0, 6)), ...windows('a', 'v2', [...twelve.slice(6), null, null])]), { measureVersion: MEASURE_VERSION, only: null });
     expect(file.voices).toHaveLength(1);
     const v = file.voices[0]!;
-    expect(v.windows).toBe(12);
-    expect(v.videos).toBe(2);
     expect(v.features.pitch).toBeCloseTo(205.5, 1);
     expect(v.link).toBe('https://example.com/a');
+    expect(notes.join('\n')).toMatch(/使う 12.*動画 2 本/);
+  });
+
+  it('公開のファイルには、名前・所属・公式ページ・数字だけ（人物ID・窓の数は入れない）', () => {
+    const { file } = buildOperatorVoices(snap([person('a')], windows('a', 'v1', twelve)), { measureVersion: MEASURE_VERSION, only: null });
+    expect(Object.keys(file.voices[0]!).sort()).toEqual(['features', 'group', 'link', 'name']);
   });
 
   it('高さが大きく外れた窓（別の人など）は除く', () => {
-    const { file } = buildOperatorVoices(snap([person('a')], windows('a', 'v1', [...twelve, 400, 410])), { measureVersion: MEASURE_VERSION, only: null });
-    expect(file.voices[0]!.windows).toBe(12);
+    const { notes } = buildOperatorVoices(snap([person('a')], windows('a', 'v1', [...twelve, 400, 410])), { measureVersion: MEASURE_VERSION, only: null });
+    expect(notes.join('\n')).toMatch(/窓 14 → 使う 12/);
   });
 
   it('窓が足りない人・公式ページの無い人は入れない', () => {
@@ -38,7 +42,7 @@ describe('運営が測った声の代表値', () => {
 
   it('一覧にある人だけ。一覧に無い人物ID は知らせる', () => {
     const r = buildOperatorVoices(snap([person('a'), person('b')], [...windows('a', 'v1', twelve), ...windows('b', 'v1', twelve)]), { measureVersion: MEASURE_VERSION, only: new Set(['b', 'zz']) });
-    expect(r.file.voices.map((v) => v.id)).toEqual(['b']);
+    expect(r.file.voices.map((v) => v.name)).toEqual(['名前 b']);
     expect(r.notes.join('\n')).toMatch(/zz: データに無い/);
   });
 
@@ -58,23 +62,23 @@ describe('運営が測った声の代表値', () => {
 
 describe('サイトでのまとめ方', () => {
   const f = Object.fromEntries(FEATURE_KEYS.map((k) => [k, 1])) as never;
-  const op = fromOperatorVoices({ version: 1, measureVersion: MEASURE_VERSION, voices: [{ id: 'sakura', name: 'さくら', link: 'https://example.com/s', windows: 40, videos: 2, features: f }] });
-  it('前の元にある声は、後の元では入れない（同じ ID・同じ名前）。版違いと一覧に無い声も入れない', () => {
+  const op = fromOperatorVoices({ version: 1, measureVersion: MEASURE_VERSION, voices: [{ name: 'さくら', link: 'https://example.com/s', features: f }] });
+  it('前の元にある声は、後の元では入れない（同じ名前）。版違いと一覧に無い声も入れない', () => {
     const users = {
       voices: [
-        { id: 'u-1', name: 'さ くら', links: { profile: 'https://example.com/u1' }, by: 'users' as const },
-        { id: 'u-2', name: '別の人', links: { profile: 'https://example.com/u2' }, by: 'users' as const },
-        { id: 'u-3', name: '版違い', links: { profile: 'https://example.com/u3' }, by: 'users' as const },
+        { id: 'u-1', name: 'さ くら', links: { profile: 'https://example.com/u1' } },
+        { id: 'u-2', name: '別の人', links: { profile: 'https://example.com/u2' } },
+        { id: 'u-3', name: '版違い', links: { profile: 'https://example.com/u3' } },
       ],
       profiles: [
-        { id: 'u-1', version: MEASURE_VERSION, windows: 3, videos: 0, features: f },
-        { id: 'u-2', version: MEASURE_VERSION, windows: 3, videos: 0, features: f },
-        { id: 'u-3', version: '0.0.1', windows: 3, videos: 0, features: f },
-        { id: 'u-9', version: MEASURE_VERSION, windows: 3, videos: 0, features: f },
+        { id: 'u-1', version: MEASURE_VERSION, features: f },
+        { id: 'u-2', version: MEASURE_VERSION, features: f },
+        { id: 'u-3', version: '0.0.1', features: f },
+        { id: 'u-9', version: MEASURE_VERSION, features: f },
       ],
     };
     const m = mergeVoices([op, users], MEASURE_VERSION);
-    expect(m.voices.map((v) => v.id)).toEqual(['sakura', 'u-2']);
+    expect(m.voices.map((v) => v.name)).toEqual(['さくら', '別の人']);
     expect(m.features).toHaveLength(2);
   });
 });

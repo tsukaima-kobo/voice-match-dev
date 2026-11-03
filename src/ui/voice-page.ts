@@ -321,7 +321,6 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     name.append(a, el('span', 'near', closenessWord(r.distance)));
-    if (v.by === 'users') name.append(el('span', 'by', t('みんなの登録', 'Added by users')));
     if (before.length) {
       // (where it was in the result before this take)
       const was = before.indexOf(r.id);
@@ -337,7 +336,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     const far = c.slice(-2).map(([k]) => FEATURE_BY_KEY[k].name);
     li.append(el('div', 'why', t(`似ている所: ${near.join('・')}　違う所: ${far.join('・')}`, `Alike in: ${near.join(', ')} · Different in: ${far.join(', ')}`)));
     const practice = el('a', 'practice', t('この声で声真似の点数をみる', 'Try imitating this voice'));
-    practice.href = `./mimic.html?target=${encodeURIComponent(r.id)}`;
+    practice.href = `./mimic.html?target=${encodeURIComponent(v.name)}`;
     li.append(practice);
     list.append(li);
   });

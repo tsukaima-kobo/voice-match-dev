@@ -318,7 +318,6 @@ main > * { min-width: 0; }
 .match .name a { color: var(--ink); text-decoration: none; }
 .match .name a:hover { text-decoration: underline; }
 .match .near { display: inline-block; vertical-align: 0.3em; font-family: var(--f-body); font-size: clamp(0.72rem, 0.2vw + 0.7rem, 0.86rem); font-weight: 800; color: var(--on-btn); background: var(--grad-btn); border-radius: 999px; padding: 0.15em 0.85em; margin-left: 0.6em; white-space: nowrap; letter-spacing: 0.02em; }
-.match .by { display: inline-block; vertical-align: 0.3em; font-family: var(--f-body); font-size: 0.72rem; font-weight: 600; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 999px; padding: 0.1em 0.7em; margin-left: 0.4em; white-space: nowrap; }
 .match .why { color: var(--muted); font-size: 0.9em; min-width: 0; grid-column: 2; }
 .match .practice { font-size: 0.88em; font-weight: 700; justify-self: start; grid-column: 2; margin-top: 4px; }
 .match .practice::after { content: " →"; }

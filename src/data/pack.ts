@@ -2,7 +2,9 @@
 // - 数字: 項目ごとに、全部の声の最小〜最大を 254 段に分け、1 つの数字を 1 バイトにする（255 は「無い」）。
 //   段の幅は散らばりのおよそ 1/40 以下なので、照合の結果はほぼ変わらない（test/pack.test.ts で確かめる）。
 //   バイトは「項目ごと」に並べる（同じ項目の数字が続くと、配る時の圧縮がよく効く）。文字にするのは base64。
-// - 名前など: 声ごとの物を、項目ごとの並び（ID・名前・リンク）にする。所属は 1 回だけ書いて番号で指す。
+// - 名前など: 声ごとの物を、項目ごとの並び（名前・リンク）にする。所属は 1 回だけ書いて番号で指す。
+// - 入れるのは、名前・所属・公式ページ・数字だけ（「しくみと約束」の 05 のとおり）。ID は入れない。
+//   ほどいた後の ID は、ページの中だけの番号（"0"・"1"…）。データが変わると変わるので、リンクには名前を使う。
 // 乱数なし。同じデータなら同じ物になる。ここはブラウザーの物にも Node の物にも頼らない（vite.config.ts からも使う）。
 import type { CatalogEntry } from './types.ts';
 
@@ -10,7 +12,7 @@ type Features = Record<string, number | null>;
 
 export interface VoicePack {
   /** 形の版 */
-  v: 1;
+  v: 2;
   /** 測り方の版 */
   m: string;
   /** 項目の並び */
@@ -18,14 +20,11 @@ export interface VoicePack {
   /** 項目ごとの最小と、1 段の幅 */
   lo: number[];
   step: number[];
-  id: string[];
   name: string[];
   /** 所属の一覧と、声ごとの番号（-1 は無し） */
   groups: string[];
   g: number[];
   link: string[];
-  /** 利用者の登録から出した声の番号 */
-  users: number[];
   /** 数字（項目ごと × 声ごと、1 バイトずつ、base64） */
   f: string;
 }
@@ -87,32 +86,30 @@ export function packVoices(measureVersion: string, voices: readonly CatalogEntry
     return at;
   });
   return {
-    v: 1,
+    v: 2,
     m: measureVersion,
     keys,
     lo,
     step,
-    id: voices.map((v) => v.id),
     name: voices.map((v) => v.name),
     groups,
     g,
     link: voices.map((v) => v.links.profile),
-    users: voices.flatMap((v, i) => (v.by === 'users' ? [i] : [])),
     f: toBase64(bytes),
   };
 }
 
-/** ほどく。数字は、段の真ん中の値に戻す（元の数字との差は、1 段の幅の半分まで） */
+/** ほどく。数字は、段の真ん中の値に戻す（元の数字との差は、1 段の幅の半分まで）。ID はページの中だけの番号 */
 export function unpackVoices(pack: VoicePack): { voices: CatalogEntry[]; profiles: { id: string; features: Features }[] } {
-  const n = pack.id.length;
+  const n = pack.name.length;
   const bytes = fromBase64(pack.f);
-  if (bytes.length !== pack.keys.length * n) throw new Error('声のデータが壊れています');
-  const users = new Set(pack.users);
-  const voices: CatalogEntry[] = pack.id.map((id, i) => {
+  if (bytes.length !== pack.keys.length * n || pack.link.length !== n) throw new Error('声のデータが壊れています');
+  const ids = pack.name.map((_, i) => String(i));
+  const voices: CatalogEntry[] = ids.map((id, i) => {
     const gi = pack.g[i] ?? -1;
-    return { id, name: pack.name[i]!, ...(gi >= 0 ? { group: pack.groups[gi]! } : {}), links: { profile: pack.link[i]! }, ...(users.has(i) ? { by: 'users' as const } : {}) };
+    return { id, name: pack.name[i]!, ...(gi >= 0 ? { group: pack.groups[gi]! } : {}), links: { profile: pack.link[i]! } };
   });
-  const profiles = pack.id.map((id, i) => {
+  const profiles = ids.map((id, i) => {
     const features: Features = {};
     pack.keys.forEach((k, j) => {
       const b = bytes[j * n + i]!;

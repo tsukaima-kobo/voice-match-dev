@@ -2,6 +2,7 @@
 // 元: 収集の書き出し（スプレッドシートと同じ数字。snapshot.json の peoples・measurements・summary.measureVersions）。
 // 窓: 数字のある窓だけ → その人の高さの中央値から外れた窓を除く（tools/lib.ts の SELECT と同じ）→ SELECT.minWindows 以上の人だけ。
 // 代表値は項目ごとの中央値（サイトと同じ計算）。公式ページの URL が無い・おかしい人は入れない。
+// 書き出すのは名前・所属・公式ページ・数字だけ（Release は公開なので、人物ID や窓の数は手元の記録だけに出す）。
 import { FEATURE_KEYS, type Features } from '../src/voice/features.ts';
 import { quantileOf } from '../src/voice/measure.ts';
 import { checkLink } from '../src/submit/code.ts';
@@ -60,7 +61,7 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
     }
     const group = (p.currentAffiliation ?? '').trim() || (p.groupName ?? '').trim();
     notes.push(note);
-    voices.push({ id, name: p.name.trim(), ...(group ? { group } : {}), link, windows: kept.length, videos, features: medianFeatures(kept) });
+    voices.push({ name: p.name.trim(), ...(group ? { group } : {}), link, features: medianFeatures(kept) });
   }
   return { file: { version: 1, measureVersion: o.measureVersion, voices }, notes };
 }

@@ -1,6 +1,7 @@
 // サイトに入れるデータ（ビルドの時に取り込む。外へは何も読みに行かない）。
 // 声の名前・リンク・数字は、詰めた別のファイル（vite.config.ts の voicePack、src/data/pack.ts）にして、ページを開いたらすぐ裏で読む。
 // 読み終わるまでは空。使う所は voicesReady を待つ（話し終わる頃には読み終わっている）。
+// ID は、ページの中だけの番号（サイトのデータには入れない）。ページをまたぐリンクには名前を使う。
 // 照合のモデル（data/model.json）は小さいので、ページと一緒に読む。
 import modelJson from '../../data/model.json';
 import { MEASURE_VERSION } from '../voice/measure.ts';

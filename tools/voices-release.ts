@@ -60,7 +60,7 @@ if (args[0] === 'make') {
     process.exit(2);
   }
   if (!args.includes('--yes')) {
-    console.log(`置く物: data/generated/operator-voices.json（${file.voices.length} 人: ${file.voices.map((v) => v.id).join('・')}）`);
+    console.log(`置く物: data/generated/operator-voices.json（${file.voices.length} 人: ${file.voices.map((v) => v.name).join('・')}）`);
     console.log(`Release「${RELEASE_TAG}」に置くと公開になります。決めてから --yes を付けて動かしてください。何もしていません。`);
     process.exit(0);
   }
