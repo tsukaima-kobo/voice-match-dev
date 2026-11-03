@@ -2,7 +2,7 @@
 // フォームの回答の 1 行 = [タイムスタンプ, 送る内容, 判定, 理由]。判定は dots が書く（壁 ②。OK の行だけ使う）。
 // 壁 ① をもう一度（ページの確認は回り込めるため）、禁止の言葉・削除済みの名前・1 日の上限・同じ数字の重なりを除き、
 // 名前ごとに壁 ③（3 件以上そろったら中央値）で声にする。ID は名前（nameKey）から決まる（記録を持たずに、毎日同じ ID）。
-import { checkSubmission, decodeSubmission, featuresOf, nameKey, type Source, type Submission } from '../src/submit/code.ts';
+import { checkSubmission, decodeSubmission, featuresOf, nameKey, type Submission } from '../src/submit/code.ts';
 import { consensus } from '../src/submit/consensus.ts';
 import { FEATURE_KEYS, type Features } from '../src/voice/features.ts';
 import type { MatchModel } from '../src/match/match.ts';
@@ -27,7 +27,6 @@ export interface Accepted {
   name: string;
   group?: string;
   link: string;
-  source: Source;
   quality: Submission['q'];
   features: Features;
 }
@@ -137,7 +136,7 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
     perDay.set(day, (perDay.get(day) ?? 0) + 1);
     perName.set(nk, (perName.get(nk) ?? 0) + 1);
     counts.accepted++;
-    accepted.push({ at: row.at, key, name: s.n.trim(), ...(s.g?.trim() ? { group: s.g.trim() } : {}), link: s.l.trim(), source: s.s, quality: s.q, features: featuresOf(s) });
+    accepted.push({ at: row.at, key, name: s.n.trim(), ...(s.g?.trim() ? { group: s.g.trim() } : {}), link: s.l.trim(), quality: s.q, features: featuresOf(s) });
   }
 
   // (壁 ③, name by name, in the order each name first came)

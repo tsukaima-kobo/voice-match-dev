@@ -9,10 +9,6 @@ import { t } from '../i18n.ts';
 /** 送る内容の頭（フォームの回答の中から見つけるため） */
 export const CODE_PREFIX = 'voice-twin:';
 
-/** お手本の聞かせ方 */
-export type Source = 'mic' | 'tab' | 'file';
-export const SOURCE_NAMES: Record<Source, string> = { mic: 'マイク', tab: 'ほかのタブの音', file: '音声ファイル' };
-
 export interface Submission {
   /** 形の版 */
   v: 1;
@@ -24,7 +20,6 @@ export interface Submission {
   g?: string;
   /** 公式ページのリンク */
   l: string;
-  s: Source;
   /** 測れた声の質: 声の秒数・間の音楽らしさ・声と静かな所の差（dB） */
   q: { vs: number; gt: number; snr: number };
   /** 数字（FEATURE_KEYS の順、無い項目は null） */
@@ -100,7 +95,7 @@ export const REQUIRED: readonly FeatureKey[] = ['pitch', 'pitchRange', 'f1', 'f2
 /** 短縮 URL（行き先が分からないので受け付けない） */
 const SHORTENERS = ['bit.ly', 't.co', 'tinyurl.com', 'goo.gl', 'is.gd', 'ow.ly', 'buff.ly', 'rebrand.ly', 'cutt.ly', 'shorturl.at', 'x.gd', 'amzn.to'];
 
-export function makeSubmission(o: { name: string; group?: string; link: string; source: Source; quality: { voicedSeconds: number; gapTonal: number; snrDb: number }; features: Features; consent: boolean }): Submission {
+export function makeSubmission(o: { name: string; group?: string; link: string; quality: { voicedSeconds: number; gapTonal: number; snrDb: number }; features: Features; consent: boolean }): Submission {
   const g = o.group?.trim();
   return {
     v: 1,
@@ -108,7 +103,6 @@ export function makeSubmission(o: { name: string; group?: string; link: string; 
     n: o.name.trim(),
     ...(g ? { g } : {}),
     l: o.link.trim(),
-    s: o.source,
     q: { vs: Math.round(o.quality.voicedSeconds * 10) / 10, gt: Math.round(o.quality.gapTonal * 1000) / 1000, snr: Math.round(o.quality.snrDb * 10) / 10 },
     f: FEATURE_KEYS.map((k) => o.features[k]),
     ok: o.consent,
@@ -136,7 +130,6 @@ export function decodeSubmission(text: string): Submission | null {
     typeof o.n === 'string' &&
     (o.g === undefined || typeof o.g === 'string') &&
     typeof o.l === 'string' &&
-    (o.s === 'mic' || o.s === 'tab' || o.s === 'file') &&
     typeof q === 'object' &&
     q !== null &&
     typeof q.vs === 'number' &&

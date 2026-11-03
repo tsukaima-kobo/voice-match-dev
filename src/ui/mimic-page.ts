@@ -27,7 +27,7 @@ import { ENTRY_BY_ID, PROFILES, voicesReady } from '../data/load.ts';
 import { nextPromptIndex, promptText, readingText } from '../prompts/prompts.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
-import { checkSubmission, encodeSubmission, makeSubmission, type Source } from '../submit/code.ts';
+import { checkSubmission, encodeSubmission, makeSubmission } from '../submit/code.ts';
 import { SUBMIT_FORM } from '../submit/config.ts';
 
 /** 聞く長さの最大（秒） */
@@ -187,11 +187,11 @@ const refTake = new Take({ wave: createWave($<HTMLCanvasElement>('ref-wave')), l
 type RefState = 'idle' | 'asking' | 'listening' | 'analysing' | 'ready' | 'failed';
 let refState: RefState = 'idle';
 let refToken = 0;
-/** お手本。利用者が聞かせた物（マイク・タブ・ファイル）は、登録に使う聞かせ方と声の質も持つ */
+/** お手本。利用者が聞かせた物（マイク・タブ・ファイル）は、登録に使う声の質も持つ */
 interface Target {
   features: Features;
   name: string;
-  reg?: { source: Source; quality: { voicedSeconds: number; gapTonal: number; snrDb: number } };
+  reg?: { quality: { voicedSeconds: number; gapTonal: number; snrDb: number } };
   /** セリフ真似の時だけ: お手本の高さと大きさの動き */
   contour?: Contour;
   /** 利用者が聞かせたお手本の声（秒）。このサイトで測ったお手本は無し */
@@ -285,12 +285,12 @@ function refFinish(): void {
       showRef('failed', () => failText(m.reason, m.info.voicedSeconds, true), true);
       return;
     }
-    targetFrom(m, refKind, false);
+    targetFrom(m, false);
   });
 }
 
 /** 測ったお手本から Target を作る（セリフ 1 つなら動きも。登録は声が足りて、無音を足していない時だけ） */
-function targetFrom(m: Extract<Measured, { ok: true }>, source: Source, padded: boolean): void {
+function targetFrom(m: Extract<Measured, { ok: true }>, padded: boolean): void {
   const i = m.info;
   const line = i.contour && i.speechSeconds <= LINE_MAX_SECONDS ? i.contour : undefined;
   const canReg = !padded && i.voicedSeconds >= REG_MIN_VOICED;
@@ -298,7 +298,7 @@ function targetFrom(m: Extract<Measured, { ok: true }>, source: Source, padded: 
     forLength(m.features, i.voicedSeconds),
     ref.name.value.trim(),
     line ? M(`セリフ ${i.speechSeconds.toFixed(1)} 秒`, `a ${i.speechSeconds.toFixed(1)} s line`) : M(`声 ${i.voicedSeconds.toFixed(1)} 秒分`, `${i.voicedSeconds.toFixed(1)} s of voice`),
-    canReg ? { source, quality: { voicedSeconds: i.voicedSeconds, gapTonal: i.gapTonal, snrDb: i.loudDb - i.floorDb } } : undefined,
+    canReg ? { quality: { voicedSeconds: i.voicedSeconds, gapTonal: i.gapTonal, snrDb: i.loudDb - i.floorDb } } : undefined,
     line,
     i.voicedSeconds,
   );
@@ -365,7 +365,7 @@ async function refFromFile(f: File): Promise<void> {
       showRef('failed', () => failText(m.reason, m.info.voicedSeconds, true), true);
       return;
     }
-    targetFrom(m, 'file', padded);
+    targetFrom(m, padded);
     return;
   }
   const m = await measureLong(sound.pcm, sound.rate, {
@@ -382,7 +382,7 @@ async function refFromFile(f: File): Promise<void> {
   }
   const part = m.seconds >= LONG_MAX_SECONDS ? M(`最初の ${LONG_MAX_SECONDS / 60} 分のうち、声 ${m.voicedSeconds.toFixed(1)} 秒分`, `${m.voicedSeconds.toFixed(1)} s of voice in the first ${LONG_MAX_SECONDS / 60} min`) : M(`声 ${m.voicedSeconds.toFixed(1)} 秒分`, `${m.voicedSeconds.toFixed(1)} s of voice`);
   const canReg = m.voicedSeconds >= REG_MIN_VOICED;
-  setTarget(forLength(m.features, m.voicedSeconds), ref.name.value.trim(), part, canReg ? { source: 'file', quality: { voicedSeconds: m.voicedSeconds, gapTonal: m.gapTonal, snrDb: m.snrDb } } : undefined, undefined, m.voicedSeconds);
+  setTarget(forLength(m.features, m.voicedSeconds), ref.name.value.trim(), part, canReg ? { quality: { voicedSeconds: m.voicedSeconds, gapTonal: m.gapTonal, snrDb: m.snrDb } } : undefined, undefined, m.voicedSeconds);
 }
 
 /** お手本のまとめの文（言葉を切り替えた時に出し直す） */
@@ -452,7 +452,7 @@ function resetRegister(name: string): void {
 }
 reg.make.addEventListener('click', () => {
   if (!target?.reg) return;
-  const sub = makeSubmission({ name: reg.name.value, group: reg.group.value, link: reg.link.value, source: target.reg.source, quality: target.reg.quality, features: target.features, consent: reg.ok.checked });
+  const sub = makeSubmission({ name: reg.name.value, group: reg.group.value, link: reg.link.value, quality: target.reg.quality, features: target.features, consent: reg.ok.checked });
   const problems = checkSubmission(sub);
   reg.problems.replaceChildren(...problems.map((p) => el('li', undefined, p.text)));
   reg.problems.hidden = !problems.length;

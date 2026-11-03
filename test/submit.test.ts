@@ -4,7 +4,7 @@ import { measureVoice, type Measured } from '../src/voice/measure.ts';
 import { type Features } from '../src/voice/features.ts';
 import { defaultModel } from '../src/match/match.ts';
 import { MEASURE_VERSION } from '../src/voice/measure.ts';
-import { checkLink, checkSubmission, decodeSubmission, encodeSubmission, makeSubmission, nameKey } from '../src/submit/code.ts';
+import { checkLink, checkSubmission, CODE_PREFIX, decodeSubmission, encodeSubmission, makeSubmission, nameKey } from '../src/submit/code.ts';
 import { consensus } from '../src/submit/consensus.ts';
 import { dayOf, intake, INTAKE, rowsFromTable, userIdOf, type Row } from '../tools/intake-lib.ts';
 import { parseCsv } from '../tools/csv.ts';
@@ -20,7 +20,7 @@ const voice = (f0: number, seed: number): Features => {
 };
 const A = voice(220, 1);
 const quality = { voicedSeconds: 11.2, gapTonal: 0.02, snrDb: 40 };
-const sub = (o: Partial<Parameters<typeof makeSubmission>[0]> = {}) => makeSubmission({ name: '試験のキャラ', group: '試験の作品', link: 'https://example.com/chara', source: 'tab', quality, features: A, consent: true, ...o });
+const sub = (o: Partial<Parameters<typeof makeSubmission>[0]> = {}) => makeSubmission({ name: '試験のキャラ', group: '試験の作品', link: 'https://example.com/chara', quality, features: A, consent: true, ...o });
 
 describe('送る内容と壁 ①', () => {
   it('goes there and back, and a good one has no problems', () => {
@@ -120,5 +120,15 @@ describe('取り込み', () => {
     expect(rowsFromTable(t)).toEqual([{ at: '2026/11/01 1:00:00', code: 'voice-twin:{"v":1}', verdict: 'OK', reason: 'よい, とても' }]);
     expect(dayOf('2026/1/2 3:04:05')).toBe('2026-01-02');
     expect(dayOf('?')).toBe('unknown');
+  });
+});
+
+describe('送る内容に入る物', () => {
+  it('数字・名前・所属・公式ページ・測り方と声の質・同意だけ（お手本の聞かせ方は入れない）', () => {
+    expect(Object.keys(sub()).sort()).toEqual(['f', 'g', 'l', 'm', 'n', 'ok', 'q', 'v']);
+  });
+  it('前の形（聞かせ方 s が入った物）も読める。s は使わない', () => {
+    const old = { ...sub(), s: 'mic' };
+    expect(decodeSubmission(CODE_PREFIX + JSON.stringify(old))?.n).toBe('試験のキャラ');
   });
 });
