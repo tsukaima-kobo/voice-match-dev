@@ -63,3 +63,25 @@ export interface ProfileList {
   version: string;
   profiles: ProfileEntry[];
 }
+
+/**
+ * 運営が測った声の代表値（1 人 1 件）。リポジトリにはコミットせず、GitHub の Release「voices-data」に
+ * operator-voices.json として置く。tools/voices-release.ts が作って置き、サイトを作る時に data/generated/ へ取ってくる。
+ */
+export interface OperatorVoices {
+  version: 1;
+  /** 測り方の版（MEASURE_VERSION） */
+  measureVersion: string;
+  voices: {
+    id: string;
+    name: string;
+    /** 今の所属や作品名 */
+    group?: string;
+    /** 公式のページ */
+    link: string;
+    /** 使った窓と動画の数 */
+    windows: number;
+    videos: number;
+    features: Features;
+  }[];
+}

@@ -3,6 +3,7 @@
 # 出すと決まった声だけを data/generated/ に作ってページに入れる。リポジトリには書き込まない（履歴に残さない）。
 # シートを読めなかった時は、そこで止める（その日は公開せず、前のページのまま）。鍵は Secrets にだけ置く。
 # 取り込みは dots の判定（毎日 5:00）が終わった後の時刻に動かす。
+# 運営が測った声は、GitHub の Release「voices-data」の operator-voices.json から取ってくる（tools/voices-release.ts が置く。コミットしない）。
 name: site
 
 on:
@@ -40,6 +41,19 @@ jobs:
           BLOCK_RANGE: ${{ vars.BLOCK_RANGE }}
           NG_RANGE: ${{ vars.NG_RANGE }}
         run: node tools/intake.ts --sheet
+      - name: 運営が測った声（Release「voices-data」から。無ければ入れない）
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p data/generated
+          tags=$(gh release list --limit 200 --json tagName -q '.[].tagName')
+          if grep -qx voices-data <<< "$tags"; then
+            gh release download voices-data --pattern operator-voices.json --dir data/generated --clobber
+            node -e "const f=require('./data/generated/operator-voices.json'); console.log('運営が測った声: ' + f.voices.length + ' 人')"
+          else
+            echo 'Release voices-data が無いので、運営が測った声は入れません'
+          fi
       - name: GitHub のスターの数（設定がある時だけ）
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
