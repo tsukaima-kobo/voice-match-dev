@@ -2,6 +2,10 @@
 // ビルドした HTML には CSP を入れ、外への通信（fetch など）と外の物の読み込みを止める。
 import { defineConfig, type Plugin } from 'vite';
 import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
+import { MEASURE_VERSION } from './src/voice/measure.ts';
+import { packVoices } from './src/data/pack.ts';
+import type { Catalog, ProfileList } from './src/data/types.ts';
 
 const CSP = ["default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:", "connect-src 'none'", "font-src 'self'", "object-src 'none'", "base-uri 'none'", "form-action 'none'"].join('; ');
 
@@ -44,9 +48,33 @@ const ogp = (): Plugin => ({
   },
 });
 
+// 声のデータ（名前・リンク・数字）を詰めて、ページとは別のファイルにする（src/data/pack.ts）。ページはすぐ出て、データは裏で読む。
+// 元: 運営が測った声（data/catalog.json・profiles.json）と、登録から出した声（data/generated/。サイトを作る時だけ作る）。
+// 測り方の版が違う数字と、一覧に無い声は入れない。
+const VOICE_PACK = 'virtual:voice-pack';
+const voicePack = (): Plugin => ({
+  name: 'voice-twin-voice-pack',
+  resolveId: (id) => (id === VOICE_PACK ? `\0${VOICE_PACK}` : undefined),
+  load(id) {
+    if (id !== `\0${VOICE_PACK}`) return undefined;
+    const read = <T>(path: string, empty: T): T => {
+      const file = fileURLToPath(new URL(path, import.meta.url));
+      if (!existsSync(file)) return empty;
+      this.addWatchFile(file);
+      return JSON.parse(readFileSync(file, 'utf8')) as T;
+    };
+    const noCatalog: Catalog = { version: 1, voices: [] };
+    const noProfiles: ProfileList = { version: MEASURE_VERSION, profiles: [] };
+    const voices = [...read('./data/catalog.json', noCatalog).voices, ...read('./data/generated/user-catalog.json', noCatalog).voices];
+    const byId = new Map(voices.map((v) => [v.id, v]));
+    const profiles = [...read('./data/profiles.json', noProfiles).profiles, ...read('./data/generated/user-profiles.json', noProfiles).profiles].filter((p) => p.version === MEASURE_VERSION && byId.has(p.id));
+    return `export default ${JSON.stringify(packVoices(MEASURE_VERSION, profiles.map((p) => byId.get(p.id)!), profiles.map((p) => p.features)))};`;
+  },
+});
+
 export default defineConfig({
   base: './',
-  plugins: [csp(), ogp()],
+  plugins: [csp(), ogp(), voicePack()],
   build: {
     outDir: 'dist',
     rollupOptions: {

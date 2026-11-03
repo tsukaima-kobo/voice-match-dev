@@ -23,7 +23,7 @@ import { drawLineChart } from './line-chart.ts';
 import { mountShapes } from './voiceprint.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { adviceFor, differences, mimicScore, scoreWord } from '../mimic/mimic.ts';
-import { ENTRY_BY_ID, PROFILES } from '../data/load.ts';
+import { ENTRY_BY_ID, PROFILES, voicesReady } from '../data/load.ts';
 import { nextPromptIndex, promptText, readingText } from '../prompts/prompts.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
@@ -483,7 +483,8 @@ const labelOf = (id: string) => {
   const v = ENTRY_BY_ID.get(id)!;
   return v.group ? `${v.name}（${v.group}）` : v.name;
 };
-const byLabel = new Map(PROFILES.map((p) => [labelOf(p.id), p]));
+// (the voices load in the background; the list appears when they are in)
+let byLabel = new Map<string, (typeof PROFILES)[number]>();
 ref.catalog.addEventListener('change', () => {
   const p = byLabel.get(ref.catalog.value.trim());
   if (!p) return;
@@ -491,7 +492,9 @@ ref.catalog.addEventListener('change', () => {
   setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, M('このサイトで測った代表値', 'a voice measured by this site'));
 });
 if (tabAudioSupported()) ref.tab.hidden = ref.tabNote.hidden = false;
-if (PROFILES.length) {
+void voicesReady.then(() => {
+  byLabel = new Map(PROFILES.map((p) => [labelOf(p.id), p]));
+  if (!PROFILES.length) return;
   ref.catalogBox.hidden = false;
   $('ref-catalog-count').textContent = t(`${PROFILES.length} 件`, `${PROFILES.length}`);
   const list = $('ref-catalog-list');
@@ -500,7 +503,11 @@ if (PROFILES.length) {
     o.value = label;
     list.append(o);
   }
-}
+  // (a link from the voice page: ?target=<id>)
+  const wanted = new URLSearchParams(location.search).get('target');
+  const p = wanted ? PROFILES.find((x) => x.id === wanted) : undefined;
+  if (p && !target) setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, M('このサイトで測った代表値', 'a voice measured by this site'));
+});
 
 /* ---- 2. 真似 ---- */
 const topicBox = $('topic-box');
@@ -755,11 +762,6 @@ function paint(): void {
 
 showRef('idle', M('お手本の聞かせ方を選んでください。', 'Choose how to play the model.'));
 showMim('locked', M('先にお手本を聞かせてください。', 'Play the model first.'));
-{
-  const wanted = new URLSearchParams(location.search).get('target');
-  const p = wanted ? PROFILES.find((x) => x.id === wanted) : undefined;
-  if (p) setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, M('このサイトで測った代表値', 'a voice measured by this site'));
-}
 
 onLang(() => {
   showRef(refState, refMsg, refBad);

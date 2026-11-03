@@ -17,7 +17,7 @@ import { FEATURE_BY_KEY, FEATURES, FEW_SECONDS, formatFeature, LONG_SECONDS, ONE
 import { CERTAINTY_WORDS, certaintyOf, combineTakes, type Combined, type Take } from '../voice/takes.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { closeness, closenessWord, rank } from '../match/match.ts';
-import { ENTRY_BY_ID, MODEL, PROFILES } from '../data/load.ts';
+import { ENTRY_BY_ID, MODEL, PROFILES, voicesReady } from '../data/load.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 
@@ -213,6 +213,8 @@ async function finish() {
     return;
   }
   takes.push({ features: m.features, voicedSeconds: m.info.voicedSeconds });
+  await voicesReady; // (read in the background since the page opened; done long before this)
+  if ((state as State) !== 'analysing') return;
   render(combineTakes(takes), m);
   const n = takes.length;
   show('done', n > 1 ? M(`${n} 回分をまとめて、絞り込みました。結果は下にあります。`, `Narrowed down using ${n} takes. The result is below.`) : M('測りました。結果は下にあります。', 'Measured. The result is below.'));
