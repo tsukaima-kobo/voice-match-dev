@@ -2,8 +2,9 @@
 // リポジトリにはコミットしない（消すお願いの後に、GitHub の記録に名前と数字を残さないため）。
 // サイトを作る時（.github/workflows/site.yml）に、Release から data/generated/ へ取ってきてページに入れる。
 // 使い方:
-//   node tools/voices-release.ts make --snapshot <snapshot.json> --only <出す人の一覧.txt>
-//   node tools/voices-release.ts make --snapshot <snapshot.json> --all
+//   node tools/voices-release.ts make --sheet <シートをダウンロードした.xlsx> --only <出す人の一覧.txt>
+//   node tools/voices-release.ts make --sheet <シートをダウンロードした.xlsx> --all
+//     （--sheet の代わりに、収集の書き出し --snapshot <snapshot.json> も使える）
 //     → data/generated/operator-voices.json を作る（手元の npx vite でも、この声が出る）。音は入らない。
 //   node tools/voices-release.ts upload --yes
 //     → 作ったファイルを Release に置き（Release が無ければ作る）、サイトを作り直す。gh（GitHub CLI）を使う。
@@ -15,7 +16,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MEASURE_VERSION } from '../src/voice/measure.ts';
 import type { OperatorVoices } from '../src/data/types.ts';
-import { buildOperatorVoices, parseIdList, type Snapshot } from './operator-voices-lib.ts';
+import { buildOperatorVoices, parseIdList, snapshotFromSheet, type Snapshot } from './operator-voices-lib.ts';
+import { readXlsx } from './xlsx.ts';
 
 export const RELEASE_TAG = 'voices-data';
 const root = join(import.meta.dirname, '..');
@@ -25,9 +27,9 @@ const opt = (flag: string) => {
   const i = args.indexOf(flag);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const USAGE = '使い方: node tools/voices-release.ts make --snapshot <snapshot.json> (--only <出す人の一覧.txt> | --all) ／ upload --yes（くわしくは docs/voices-release.md）';
+const USAGE = '使い方: node tools/voices-release.ts make (--sheet <シート.xlsx> | --snapshot <snapshot.json>) (--only <出す人の一覧.txt> | --all) ／ upload --yes（くわしくは docs/voices-release.md）';
 // (anything unknown, such as --help, stops here before anything is made or sent)
-const ALLOWED: Record<string, { flags: string[]; values: string[] }> = { make: { flags: ['--all'], values: ['--snapshot', '--only'] }, upload: { flags: ['--yes'], values: [] } };
+const ALLOWED: Record<string, { flags: string[]; values: string[] }> = { make: { flags: ['--all'], values: ['--sheet', '--snapshot', '--only'] }, upload: { flags: ['--yes'], values: [] } };
 const allowed = ALLOWED[args[0] ?? ''];
 const unknown = !allowed || args.slice(1).some((a, i, rest) => !(allowed.flags.includes(a) || allowed.values.includes(a) || allowed.values.includes(rest[i - 1] ?? '')));
 if (unknown) {
@@ -36,13 +38,15 @@ if (unknown) {
 }
 
 if (args[0] === 'make') {
+  const sheetPath = opt('--sheet');
   const snapPath = opt('--snapshot');
   const onlyPath = opt('--only');
-  if (!snapPath || (!onlyPath && !args.includes('--all'))) {
-    console.error('使い方: node tools/voices-release.ts make --snapshot <snapshot.json> (--only <出す人の一覧.txt> | --all)');
+  if (!sheetPath === !snapPath || (!onlyPath && !args.includes('--all'))) {
+    console.error(USAGE);
     process.exit(2);
   }
-  const snap = JSON.parse(readFileSync(snapPath, 'utf8')) as Snapshot;
+  const snap = sheetPath ? snapshotFromSheet(readXlsx(readFileSync(sheetPath)), MEASURE_VERSION) : (JSON.parse(readFileSync(snapPath!, 'utf8')) as Snapshot);
+  if (sheetPath) console.log(`シート: 人物 ${snap.peoples.length} 行・測定値 ${snap.measurements.length} 行（シートには測り方の版が無いので、45 項目の見出しが今と同じことで確かめ、版 ${MEASURE_VERSION} として扱います）`);
   const only = onlyPath ? parseIdList(readFileSync(onlyPath, 'utf8')) : null;
   const { file, notes } = buildOperatorVoices(snap, { measureVersion: MEASURE_VERSION, only });
   for (const n of notes) console.log(n);

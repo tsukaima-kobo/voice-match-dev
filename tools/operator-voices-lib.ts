@@ -3,7 +3,8 @@
 // 窓: 数字のある窓だけ → その人の高さの中央値から外れた窓を除く（tools/lib.ts の SELECT と同じ）→ SELECT.minWindows 以上の人だけ。
 // 代表値は項目ごとの中央値（サイトと同じ計算）。公式ページの URL が無い・おかしい人は入れない。
 // 書き出すのは名前・所属・公式ページ・数字だけ（Release は公開なので、人物ID や窓の数は手元の記録だけに出す）。
-import { FEATURE_KEYS, type Features } from '../src/voice/features.ts';
+import { FEATURE_BY_KEY, FEATURE_KEYS, formatFeature, type Features } from '../src/voice/features.ts';
+import type { Cell } from './xlsx.ts';
 import { quantileOf } from '../src/voice/measure.ts';
 import { checkLink } from '../src/submit/code.ts';
 import type { OperatorVoices } from '../src/data/types.ts';
@@ -74,4 +75,50 @@ export function parseIdList(text: string): Set<string> {
       .map((l) => l.replace(/#.*/, '').trim())
       .filter(Boolean),
   );
+}
+
+/** シートの見出し（tools/export-voice-sheet.py と同じ作り方: 日本語名 (単位)。比率は % と書いてあるが、数はそのまま） */
+export function sheetLabel(key: (typeof FEATURE_KEYS)[number]): string {
+  const unit = formatFeature(key, 0.123456).endsWith(' %') ? '%' : FEATURE_BY_KEY[key].unit;
+  return FEATURE_BY_KEY[key].name + (unit ? ` (${unit})` : '');
+}
+
+/**
+ * スプレッドシート（xlsx をほどいた表）を、収集の書き出しと同じ形にする。
+ * 使うタブ: 人物一覧（人物ID・氏名・所属区分・現在所属・公式プロフィール）と 声の測定値（人物ID・出典動画ID・45 項目）。
+ * 見出しは「人物ID」で始まる行。シートには測り方の版が書いていないので、45 項目の見出しが今のサイトと全部同じ時だけ、
+ * 今の版（measureVersion）で測った物として扱う。違えば止める。
+ */
+export function snapshotFromSheet(tables: ReadonlyMap<string, Cell[][]>, measureVersion: string): Snapshot {
+  const table = (name: string, need: string[]) => {
+    const rows = tables.get(name);
+    if (!rows) throw new Error(`シートに「${name}」のタブがありません`);
+    const h = rows.findIndex((r) => r[0] === '人物ID');
+    if (h < 0) throw new Error(`「${name}」に「人物ID」で始まる見出しの行がありません`);
+    const at = new Map(rows[h]!.map((c, i) => [String(c ?? '').trim(), i]));
+    const missing = need.filter((l) => !at.has(l));
+    if (missing.length) throw new Error(`「${name}」に無い見出し: ${missing.join('・')}（測り方や項目が今のサイトと違うかもしれません）`);
+    return rows.slice(h + 1).filter((r) => String(r[0] ?? '').trim()).map((r) => (l: string) => r[at.get(l)!] ?? null);
+  };
+  const str = (c: Cell) => (c === null ? null : String(c).trim() || null);
+  const peoples = table('人物一覧', ['人物ID', '氏名', '所属区分', '現在所属', '公式プロフィール']).map((get) => ({
+    personId: str(get('人物ID'))!,
+    name: str(get('氏名')) ?? '',
+    groupName: str(get('所属区分')),
+    currentAffiliation: str(get('現在所属')),
+    officialProfile: str(get('公式プロフィール')),
+  }));
+  const labels = FEATURE_KEYS.map(sheetLabel);
+  const measurements = table('声の測定値', ['人物ID', '出典動画ID', ...labels]).map((get) => ({
+    personId: str(get('人物ID'))!,
+    videoId: str(get('出典動画ID')) ?? '',
+    ...Object.fromEntries(
+      FEATURE_KEYS.map((k, i) => {
+        const c = get(labels[i]!);
+        const x = typeof c === 'number' ? c : c === null || String(c).trim() === '' ? null : Number(c);
+        return [k, x !== null && Number.isFinite(x) ? x : null];
+      }),
+    ),
+  }));
+  return { summary: { measureVersions: [measureVersion] }, peoples, measurements };
 }

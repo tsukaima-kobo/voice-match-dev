@@ -16,11 +16,17 @@
    kuzuha   # にじさんじ
    ```
 
-2. 代表値を作る。元は収集の書き出し（スプレッドシートと同じ数字の `snapshot.json`）。
+2. スプレッドシートを、「ファイル → ダウンロード → Microsoft Excel (.xlsx)」で取ってくる。`data/generated/` に置く（コミットされない）。
+   CSV ではなく xlsx にします（CSV は表示の桁に丸まるため）。
+
+3. 代表値を作る。使うタブは「人物一覧」と「声の測定値」です。
 
    ```sh
-   node tools/voices-release.ts make --snapshot <snapshot.json> --only <出す人の一覧.txt>
+   node tools/voices-release.ts make --sheet data/generated/<ダウンロードした>.xlsx --only <出す人の一覧.txt>
    ```
+
+   - シートには測り方の版が書いていないので、45 項目の見出しが今のサイトとすべて同じ時だけ使います（違えば止まります）。測り方を変えた時は、測り直したシートを使ってください。
+   - 収集の書き出し（`snapshot.json`）がある時は、`--sheet` の代わりに `--snapshot <snapshot.json>` も使えます。
 
    - 人ごとに、使った窓の数と、入れなかった理由が出ます。
    - 窓は、数字のある窓だけを使い、その人の声の高さの中央値から 3 半音より離れた窓を除きます。10 窓に足りない人と、公式ページの URL が無い人は入れません。
@@ -28,7 +34,7 @@
    - 作った物は `data/generated/operator-voices.json`。`npx vite` で手元のページに出して確かめられます。
    - 全員を出す時は `--only` の代わりに `--all`。
 
-3. Release に置いて、サイトを作り直す（公開になるので、決めてから）。
+4. Release に置いて、サイトを作り直す（公開になるので、決めてから）。
 
    ```sh
    node tools/voices-release.ts upload --yes
@@ -39,7 +45,7 @@
 
 ## 消すお願いが来た時
 
-一覧からその人を消して、2 と 3 をもう一度行います。
+一覧からその人を消して、3 と 4 をもう一度行います。
 
 ## サイトの中でのまとめ方
 
