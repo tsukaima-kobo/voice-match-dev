@@ -1,4 +1,6 @@
-# サイトのビルドと公開（GitHub Pages）。main に push した時と、毎日 6:00（日本時間）に動く。
+# サイトのビルドと公開。main に push した時と、毎日 6:00（日本時間）に動く。
+# 置き場所: Secrets に CLOUDFLARE_API_TOKEN と CLOUDFLARE_ACCOUNT_ID がある時は Cloudflare Pages（voice-match.com）、無い時は GitHub Pages。
+# 公開の住所（OGP・共有カード・X の投稿に入る）は Variables の VITE_SITE_URL。無ければ src/site-config.ts の既定。
 # 声の登録は Google スプレッドシートだけに置く（運営だけが見られる）。サイトを作る時に tools/intake.ts がシートを読み、
 # 出すと決まった声だけを data/generated/ に作ってページに入れる。リポジトリには書き込まない（履歴に残さない）。
 # シートを読めなかった時は、そこで止める（その日は公開せず、前のページのまま）。鍵は Secrets にだけ置く。
@@ -25,7 +27,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      TO_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    outputs:
+      cloudflare: ${{ steps.where.outputs.cloudflare }}
     steps:
+      - id: where
+        run: echo "cloudflare=$TO_CLOUDFLARE" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -59,12 +67,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node tools/github-stars.ts
       - run: npm run build
+        env:
+          VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
+      - name: Cloudflare Pages へ送る（鍵がある時だけ。プロジェクトが無ければ最初に作る）
+        if: env.TO_CLOUDFLARE == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ vars.CLOUDFLARE_PROJECT || 'voice-match' }}
+        run: |
+          npx --yes wrangler@4.151.3 pages project create "$PROJECT" --production-branch=main > /dev/null 2>&1 || true
+          npx --yes wrangler@4.151.3 pages deploy dist --project-name="$PROJECT" --branch=main --commit-dirty=true
       - uses: actions/upload-pages-artifact@v3
+        if: env.TO_CLOUDFLARE != 'true'
         with:
           path: dist
 
   deploy:
     needs: build
+    if: needs.build.outputs.cloudflare != 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
