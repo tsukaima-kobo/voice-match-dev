@@ -317,6 +317,25 @@ describe('音楽が混ざった時の目印', () => {
   });
 });
 
+describe('BGM やほかの人の声が混ざる音（bgm、ほかのタブの音の時だけ）', () => {
+  const main = vowel({ rate: R, seconds: 20, f0: glide(8, 260), jitter: 0.01, shimmer: 0.04, breath: 0.02, envelope: talk });
+  it('changes nothing for one clean voice', () => {
+    const clip = inRoom(main);
+    expect(JSON.stringify(measureVoice(clip, R, { bgm: true }))).toBe(JSON.stringify(measureVoice(clip, R)));
+  });
+  it('leaves out a lower voice more than an octave away, so the pitch and its range come back to the main voice', () => {
+    const clean = ok(measureVoice(inRoom(main), R));
+    const low = vowel({ rate: R, seconds: 20, f0: glide(6, 105), seed: 5, envelope: bursts(4, { share: 0.7, floor: 0.2, group: 5, pause: 1.5 }) });
+    const mixed = inRoom(mixIn(Float32Array.from(main), Array.from(low, (v) => v * 0.6)));
+    const plain = ok(measureVoice(mixed, R));
+    const bgm = ok(measureVoice(mixed, R, { bgm: true }));
+    const off = (m: typeof clean, k: 'pitchRange' | 'pitch') => Math.abs(num(m.features[k]) - num(clean.features[k]));
+    expect(off(plain, 'pitchRange')).toBeGreaterThan(5);
+    expect(off(bgm, 'pitchRange')).toBeLessThan(1.5);
+    expect(off(bgm, 'pitch')).toBeLessThan(off(plain, 'pitch'));
+  });
+});
+
 describe('小さな道具', () => {
   it('quantileOf (linear between ranks)', () => {
     expect(quantileOf([3, 1, 2, 4], 0.5)).toBe(2.5);

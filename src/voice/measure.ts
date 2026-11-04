@@ -97,6 +97,9 @@ export interface MeasureInfo {
   contour?: Contour;
 }
 
+/** bgm の時、いちばん多い高さからこれより離れた枠は、ほかの音とみなす（半音。1 オクターブ） */
+export const BGM_BAND_ST = 12;
+
 /**
  * 1 つのセリフの、高さと大きさの動き（話しはじめから話し終わりまで、CONTOUR_STEP 秒ごと）。
  * 高さは 100 Hz を 0 とした半音（声の無い所は NaN）、大きさはその音の大きい所（95%）を 0 とした dB（-40 まで）。
@@ -114,6 +117,11 @@ export interface MeasureOptions {
   minVoicedSeconds?: number;
   /** 高さと大きさの動き（Contour）も返す */
   contour?: boolean;
+  /**
+   * ほかのタブの音など、BGM やほかの人の声が混ざる音: その人のいちばん多い高さから BGM_BAND_ST 半音より離れた枠を、
+   * 声の高さ（と、それを使う項目）に使わない。マイクの声と、運営が測った声（声を抜き出した音）には使わない（数字が変わるため）
+   */
+  bgm?: boolean;
 }
 
 export type Measured = { ok: true; features: Features; info: MeasureInfo } | { ok: false; reason: MeasureFail; info: Partial<MeasureInfo> };
@@ -677,6 +685,35 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     }
   }
   for (const f of slips) f0[f] = 0;
+  if (opts.bgm) {
+    // (the most common pitch: the centre of the 6-semitone stretch that holds the most voiced frames, weighted toward
+    // its middle; frames far from it are music or someone else)
+    const vals: number[] = [];
+    for (let f = 0; f < nF; f++) if (f0[f]! > 0) vals.push(st[f]!);
+    if (vals.length >= 50) {
+      let lo = Infinity,
+        hi = -Infinity;
+      for (const v of vals) {
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      let mode = 0,
+        best = -1;
+      for (let c = Math.floor(lo); c <= Math.ceil(hi); c += 0.5) {
+        let score = 0;
+        for (const v of vals) {
+          const dd = Math.abs(v - c);
+          if (dd < 3) score += 3 - dd;
+        }
+        if (score > best) {
+          best = score;
+          mode = c;
+        }
+      }
+      for (let f = 0; f < nF; f++) if (f0[f]! > 0 && Math.abs(st[f]! - mode) > BGM_BAND_ST) f0[f] = 0;
+    }
+    for (const [a, b] of runsOf((f) => f0[f]! > 0)) if (b - a + 1 < 3) for (let f = a; f <= b; f++) f0[f] = 0;
+  }
   const voiced = (f: number) => f0[f]! > 0;
   let nVoiced = 0;
   for (let f = 0; f < nF; f++) if (voiced(f)) nVoiced++;

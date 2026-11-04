@@ -226,7 +226,7 @@ async function finish() {
   dropSound();
   show('analysing', M(`${FEATURES.length} 項目を計算しています…`, `Working out ${FEATURES.length} items…`));
   // (the measuring runs in a Worker, the sound handed to it and let go there, while the panel plays its working-out)
-  const [m] = await Promise.all([measureAsync(pcm, rate, { minVoicedSeconds: ONE_LINE_SECONDS }), live.analysing(ANALYSE_MS)]);
+  const [m] = await Promise.all([measureAsync(pcm, rate, { minVoicedSeconds: ONE_LINE_SECONDS, ...(source === 'tab' ? { bgm: true } : {}) }), live.analysing(ANALYSE_MS)]);
   if ((state as State) !== 'analysing') return;
   if (!m.ok) {
     const had = takes.length > 0;
