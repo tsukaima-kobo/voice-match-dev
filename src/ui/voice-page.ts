@@ -5,7 +5,7 @@
 // 終わった時・やめた時・ページが隠れた時は、すぐマイクを止める。声から性別や年齢を判断しない。
 // 言葉は日本語と英語（i18n.ts）。切り替えた時は、お題・案内・結果を、今の言葉で出し直す（数字はそのまま）。
 import { nextPromptIndex, promptText, readingText } from '../prompts/prompts.ts';
-import { openMic, micErrorText, type Mic } from '../voice/listen.ts';
+import { openMic, micErrorText, openTabAudio, tabAudioSupported, tabErrorText, type Mic } from '../voice/listen.ts';
 import { type MeasureFail, type Measured } from '../voice/measure.ts';
 import { createWave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
@@ -39,6 +39,8 @@ const btn = {
   next: $<HTMLButtonElement>('topic-next'),
   read: $<HTMLButtonElement>('topic-read'),
   start: $<HTMLButtonElement>('start'),
+  /** 一時的（2026-11-04 運営の確かめ用）: ほかのタブの音を、マイクを通さずに測る。確かめが終わったら外す */
+  tab: $<HTMLButtonElement>('start-tab'),
   done: $<HTMLButtonElement>('done'),
   cancel: $<HTMLButtonElement>('cancel'),
   more: $<HTMLButtonElement>('more'),
@@ -70,6 +72,9 @@ let state: State = 'idle';
 let statusMsg: Msg = () => '';
 let statusBad = false;
 let mic: Mic | null = null;
+/** 今聞いている音の元（ほかのタブの時は、このページが隠れても止めない） */
+let source: 'mic' | 'tab' = 'mic';
+const TAB_OK = tabAudioSupported();
 let chunks: Float32Array[] = [];
 let got = 0;
 let raf = 0;
@@ -106,6 +111,7 @@ showTopic();
 function texts() {
   statusEl.textContent = statusMsg();
   btn.start.textContent = takes.length ? t('もう一言話して、絞り込む', 'Say one more thing to narrow it down') : state === 'idle' ? t('話しはじめる', 'Start talking') : t('もう一度話す', 'Talk again');
+  btn.tab.textContent = t('ほかのタブの音で試す', 'Try another tab’s sound');
   btn.done.textContent = t('話し終えた', 'Done');
   btn.cancel.textContent = t('やめる', 'Stop');
   btn.reset.textContent = t('最初から', 'Start over');
@@ -119,6 +125,7 @@ function show(next: State, msg: Msg, bad = false) {
   statusEl.classList.toggle('bad', bad);
   const waiting = next === 'idle' || next === 'failed' || next === 'done';
   btn.start.hidden = !waiting;
+  btn.tab.hidden = !waiting || !TAB_OK;
   btn.reset.hidden = !(waiting && takes.length);
   btn.more.disabled = !waiting;
   btn.done.hidden = next !== 'listening';
@@ -154,23 +161,24 @@ function dropSound() {
   got = 0;
   wave.clear();
 }
-async function start() {
+async function start(kind: 'mic' | 'tab' = 'mic') {
   dropSound();
   live.reset();
-  show('asking', M('マイクの許可を待っています…', 'Waiting for microphone permission…'));
+  source = kind;
+  const asking = kind === 'tab' ? M('音を取るタブを選び、「タブの音声も共有」をオンにしてください…', 'Pick the tab to listen to and turn on “Share tab audio”…') : M('マイクの許可を待っています…', 'Waiting for microphone permission…');
+  show('asking', asking);
   try {
-    const m = await openMic(
-      (x) => {
-        if (state !== 'listening') return;
-        chunks.push(x);
-        got += x.length;
-        wave.push(x, m.rate);
-        orb.push(x, m.rate);
-        live.push(x, m.rate);
-      },
-      undefined,
-      mics.get(),
-    );
+    const onChunk = (x: Float32Array) => {
+      if (state !== 'listening') return;
+      // (a tab keeps sending while this page is hidden, when the timer does not run: keep only the first LISTEN_MAX seconds)
+      if (got >= LISTEN_MAX * m.rate) return;
+      chunks.push(x);
+      got += x.length;
+      wave.push(x, m.rate);
+      orb.push(x, m.rate);
+      live.push(x, m.rate);
+    };
+    const m = kind === 'tab' ? await openTabAudio(onChunk, () => void finish()) : await openMic(onChunk, undefined, mics.get());
     if (state !== 'asking') {
       // (cancelled while asking)
       m.stop();
@@ -179,6 +187,16 @@ async function start() {
     mic = m;
     void mics.refresh();
     const label = m.label ?? '';
+    if (kind === 'tab') {
+      show('listening', () =>
+        t(
+          `ほかのタブで動画を流してください。このページに戻って「話し終えた」を押すと測ります（最大 ${LISTEN_MAX} 秒。それより後の音は使いません）。`,
+          `Play the video in the other tab, then come back and press “Done” (up to ${LISTEN_MAX} s; anything after that is not used).`,
+        ),
+      );
+      raf = requestAnimationFrame(tick);
+      return;
+    }
     show('listening', () =>
       t(
         `話してください。一言でもかまいません。話し終えたら「話し終えた」を押してください（最大 ${LISTEN_MAX} 秒）。${label ? `マイク: ${label}` : ''}`,
@@ -188,8 +206,8 @@ async function start() {
     raf = requestAnimationFrame(tick);
   } catch (e) {
     stopMic();
-    if ((e as { name?: string } | null)?.name === 'MicGoneError') mics.reset();
-    show('failed', () => micErrorText(e), true);
+    if (kind === 'mic' && (e as { name?: string } | null)?.name === 'MicGoneError') mics.reset();
+    show('failed', () => (kind === 'tab' ? tabErrorText(e) : micErrorText(e)), true);
   }
 }
 async function finish() {
@@ -233,6 +251,7 @@ function reset() {
   show('idle', M('はじめからにしました。前の回の数字も消しました。', 'Started over. The earlier numbers were cleared too.'));
 }
 btn.start.addEventListener('click', () => void start());
+btn.tab.addEventListener('click', () => void start('tab'));
 btn.more.addEventListener('click', () => {
   stage.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
   void start();
@@ -241,7 +260,7 @@ btn.reset.addEventListener('click', reset);
 btn.done.addEventListener('click', () => void finish());
 btn.cancel.addEventListener('click', cancel);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && (state === 'listening' || state === 'asking')) cancel();
+  if (document.hidden && source === 'mic' && (state === 'listening' || state === 'asking')) cancel();
 });
 window.addEventListener('pagehide', stopMic);
 
