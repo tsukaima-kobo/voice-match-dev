@@ -19,6 +19,11 @@ export interface MatchModel {
   weight: number[];
   /** 白色化の行列（keys.length × keys.length、行ごと）。無ければ単位行列 */
   whiten?: number[][];
+  /**
+   * 来た人の声だけにかかる、決まった向きのずれ（変換後、keys の順）。照合の前に来た人の数字から引く。
+   * ほかのタブの音（BGM 入り）を聞かせた時のモデルが持つ（声を抜き出した音との差の平均、tools/bgm-shift.ts）。
+   */
+  queryShift?: number[];
 }
 
 export interface Profile {
@@ -50,12 +55,12 @@ export function defaultModel(measureVersion: string): MatchModel {
   };
 }
 
-/** 1 つの声を、モデルの目盛りの整数の並びに（無い項目は null） */
-export function standardize(model: MatchModel, f: Features): (number | null)[] {
+/** 1 つの声を、モデルの目盛りの整数の並びに（無い項目は null）。query は来た人の声（queryShift を引く） */
+export function standardize(model: MatchModel, f: Features, query = false): (number | null)[] {
   const z = model.keys.map((k, i) => {
     const v = f[k];
     if (v === null || v === undefined || !Number.isFinite(v)) return null;
-    const x = FEATURE_BY_KEY[k].log ? Math.log(Math.max(v, 1e-9)) : v;
+    const x = (FEATURE_BY_KEY[k].log ? Math.log(Math.max(v, 1e-9)) : v) - (query ? (model.queryShift?.[i] ?? 0) : 0);
     const s = model.spread[i]!;
     return s > 0 ? (x - model.center[i]!) / s : null;
   });
@@ -67,7 +72,7 @@ export function standardize(model: MatchModel, f: Features): (number | null)[] {
 
 /** 近い順（同点は ID の小さい順）。`n` 人まで */
 export function rank(model: MatchModel, user: Features, profiles: readonly Profile[], n = 5): Ranked[] {
-  const u = standardize(model, user);
+  const u = standardize(model, user, true);
   const w = model.weight.map((x) => BigInt(Math.round(Math.max(0, x) * 1000)));
   const scored = profiles.map((p) => {
     const v = standardize(model, p.features);
@@ -101,7 +106,7 @@ export function rank(model: MatchModel, user: Features, profiles: readonly Profi
   }));
 }
 
-/** 近い項目・違う項目（白色化の前の目盛りで、重みのある項目だけ）。小さい順に並べた [key, ずれ] */
+/** 近い項目・違う項目（白色化の前の目盛りで、重みのある項目だけ）。a は来た人の声。小さい順に並べた [key, ずれ] */
 export function closeness(model: MatchModel, a: Features, b: Features): [FeatureKey, number][] {
   const out: [FeatureKey, number][] = [];
   model.keys.forEach((k, i) => {
@@ -109,7 +114,7 @@ export function closeness(model: MatchModel, a: Features, b: Features): [Feature
       y = b[k];
     if (x === null || y === null || !(model.weight[i]! > 0) || !(model.spread[i]! > 0)) return;
     const t = (v: number) => (FEATURE_BY_KEY[k].log ? Math.log(Math.max(v, 1e-9)) : v);
-    out.push([k, Math.abs(t(x) - t(y)) / model.spread[i]!]);
+    out.push([k, Math.abs(t(x) - (model.queryShift?.[i] ?? 0) - t(y)) / model.spread[i]!]);
   });
   return out.sort((p, q) => p[1] - q[1] || (p[0] < q[0] ? -1 : 1));
 }

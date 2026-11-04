@@ -61,6 +61,15 @@ describe('照合', () => {
     expect(c[c.length - 1]![0]).toBe('rate');
     expect(c[0]![1]).toBe(0);
   });
+  it('takes a fixed shift off the visitor only (a BGM model), so a shifted copy of a voice comes back to it', () => {
+    const i = model.keys.indexOf('pitch');
+    // (pitch is on a log scale: a shift of log 1.5 raises it by half)
+    const shifted = { ...people[1]!.features, pitch: people[1]!.features.pitch! * 1.5 };
+    expect(rank(model, shifted, people)[0]!.id).not.toBe('vt-0001');
+    const bgm = { ...model, queryShift: model.keys.map((_, j) => (j === i ? Math.log(1.5) : 0)) };
+    expect(rank(bgm, shifted, people)[0]).toMatchObject({ id: 'vt-0001', distance: 0 });
+    expect(closeness(bgm, shifted, people[1]!.features).find(([k]) => k === 'pitch')![1]).toBeCloseTo(0, 6);
+  });
 });
 
 describe('窓の選別と代表値', () => {

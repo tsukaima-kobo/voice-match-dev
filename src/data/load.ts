@@ -2,8 +2,9 @@
 // 声の名前・リンク・数字は、詰めた別のファイル（vite.config.ts の voicePack、src/data/pack.ts）にして、ページを開いたらすぐ裏で読む。
 // 読み終わるまでは空。使う所は voicesReady を待つ（話し終わる頃には読み終わっている）。
 // ID は、ページの中だけの番号（サイトのデータには入れない）。ページをまたぐリンクには名前を使う。
-// 照合のモデル（data/model.json）は小さいので、ページと一緒に読む。
+// 照合のモデル（data/model.json）は小さいので、ページと一緒に読む。ほかのタブの音（BGM 入り）用は data/model-bgm.json。
 import modelJson from '../../data/model.json';
+import modelBgmJson from '../../data/model-bgm.json';
 import { MEASURE_VERSION } from '../voice/measure.ts';
 import { defaultModel, type MatchModel } from '../match/match.ts';
 import type { Features } from '../voice/features.ts';
@@ -29,3 +30,6 @@ export const voicesReady: Promise<void> = import('virtual:voice-pack')
 /** 照合のモデル（tools/eval.ts が作る）。無い時・版が違う時は、画面の目盛りから作った仮の物 */
 const m = modelJson as unknown as Partial<MatchModel> & { version: string };
 export const MODEL: MatchModel = m.version !== 'none' && m.measureVersion === MEASURE_VERSION && Array.isArray(m.keys) ? (m as MatchModel) : defaultModel(MEASURE_VERSION);
+/** ほかのタブの音（BGM 入り）を聞かせた時のモデル（BGM でずれやすい項目を軽くした物）。無い時は MODEL */
+const mb = modelBgmJson as unknown as Partial<MatchModel> & { version: string };
+export const MODEL_BGM: MatchModel = mb.version !== 'none' && mb.measureVersion === MEASURE_VERSION && Array.isArray(mb.keys) ? (mb as MatchModel) : MODEL;

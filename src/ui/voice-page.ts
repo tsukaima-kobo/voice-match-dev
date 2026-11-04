@@ -17,7 +17,7 @@ import { FEATURE_BY_KEY, FEATURES, FEW_SECONDS, formatFeature, LONG_SECONDS, ONE
 import { CERTAINTY_WORDS, certaintyOf, combineTakes, type Combined, type Take } from '../voice/takes.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { closeness, closenessWord, rank } from '../match/match.ts';
-import { ENTRY_BY_ID, MODEL, PROFILES, voicesReady } from '../data/load.ts';
+import { ENTRY_BY_ID, MODEL, MODEL_BGM, PROFILES, voicesReady } from '../data/load.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 
@@ -75,6 +75,9 @@ let mic: Mic | null = null;
 /** 今聞いている音の元（ほかのタブの時は、このページが隠れても止めない） */
 let source: 'mic' | 'tab' = 'mic';
 const TAB_OK = tabAudioSupported();
+/** ほかのタブの音で測った回があるか（ある時は BGM 用のモデルで比べる） */
+let usedTab = false;
+const modelNow = () => (usedTab ? MODEL_BGM : MODEL);
 let chunks: Float32Array[] = [];
 let got = 0;
 let raf = 0;
@@ -230,6 +233,7 @@ async function finish() {
     show('failed', () => failText(m.reason, m.info.voicedSeconds) + (had ? t('（前までの結果はそのままです）', ' (Your earlier result is kept.)') : ''), true);
     return;
   }
+  if (source === 'tab') usedTab = true;
   takes.push({ features: m.features, voicedSeconds: m.info.voicedSeconds });
   await voicesReady; // (read in the background since the page opened; done long before this)
   if ((state as State) !== 'analysing') return;
@@ -245,6 +249,7 @@ function cancel() {
 }
 function reset() {
   takes = [];
+  usedTab = false;
   lastRank = [];
   shown = null;
   result.hidden = true;
@@ -284,7 +289,7 @@ function failText(reason: MeasureFail, voiced: number | undefined): string {
 /* ---- 結果 ---- */
 function render(c: Combined, m: Extract<Measured, { ok: true }>) {
   const before = lastRank;
-  lastRank = PROFILES.length ? rank(MODEL, c.features, PROFILES, 5).map((r) => r.id) : [];
+  lastRank = PROFILES.length ? rank(modelNow(), c.features, PROFILES, 5).map((r) => r.id) : [];
   shown = { c, m, before };
   draw();
 }
@@ -330,7 +335,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
   $('no-data').hidden = PROFILES.length > 0;
   if (!PROFILES.length) return null;
   const byId = new Map(PROFILES.map((p) => [p.id, p]));
-  const ranked = rank(MODEL, f, PROFILES, 5);
+  const ranked = rank(modelNow(), f, PROFILES, 5);
   ranked.forEach((r, at) => {
     const v = ENTRY_BY_ID.get(r.id)!;
     const li = el('li', 'match');
@@ -350,7 +355,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     }
     li.append(name);
     if (v.group) li.append(el('div', 'why', v.group));
-    const c = closeness(MODEL, f, byId.get(r.id)!.features).filter(([k]) => !FEATURE_BY_KEY[k].detail);
+    const c = closeness(modelNow(), f, byId.get(r.id)!.features).filter(([k]) => !FEATURE_BY_KEY[k].detail);
     const near = c.slice(0, 3).map(([k]) => FEATURE_BY_KEY[k].name);
     const far = c.slice(-2).map(([k]) => FEATURE_BY_KEY[k].name);
     li.append(el('div', 'why', t(`似ている所: ${near.join('・')}　違う所: ${far.join('・')}`, `Alike in: ${near.join(', ')} · Different in: ${far.join(', ')}`)));
