@@ -356,6 +356,9 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     li.append(el('div', 'why', t(`似ている所: ${near.join('・')}　違う所: ${far.join('・')}`, `Alike in: ${near.join(', ')} · Different in: ${far.join(', ')}`)));
     const practice = el('a', 'practice', t('この声で声真似の点数をみる', 'Try imitating this voice'));
     practice.href = `./mimic.html?target=${encodeURIComponent(v.name)}`;
+    // (a new tab, so this page's result stays: nothing of the voice is kept anywhere to bring it back)
+    practice.target = '_blank';
+    practice.rel = 'noopener';
     li.append(practice);
     list.append(li);
   });

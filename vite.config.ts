@@ -20,7 +20,7 @@ const csp = (): Plugin => ({
 // 画像は public/og.jpg（1200×630）。ページごとに題と説明を入れる。
 const SITE_URL = (process.env.VITE_SITE_URL || 'https://tsukaima-kobo.github.io/voice-twin-dev/').replace(/\/?$/, '/');
 const OG: Record<string, { title: string; description: string }> = {
-  'index.html': { title: 'voice-match｜あなたの声は誰に近い？', description: '一言話すと、声を 45 項目で測って、近い声と、あなただけの声紋を出します。登録なし・音は送らない。Say a phrase and see whose voice is closest to yours, plus your own voiceprint.' },
+  'index.html': { title: 'voice-match｜あなたの声は誰に近い？', description: '一言話すと、声を 45 項目で測って、近い声と、あなただけの声紋を出します。登録不要・音は送らない。Say a phrase and see whose voice is closest to yours, plus your own voiceprint.' },
   'mimic.html': { title: '声真似の点数｜voice-match', description: 'お手本のセリフを真似すると、抑揚・タイミング・声の質で点数と直し方を出します。Imitate a line and get a score with tips.' },
   'about.html': { title: 'しくみと約束｜voice-match', description: '声をどう測り、どう比べるか。音を送らない・残さない約束。How voice-match measures voices, and our promises.' },
 };
