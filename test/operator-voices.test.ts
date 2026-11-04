@@ -82,3 +82,18 @@ describe('サイトでのまとめ方', () => {
     expect(m.features).toHaveLength(2);
   });
 });
+
+describe('画面に出す所属の名前', () => {
+  it('調べた時のメモ（かっこの中）を除き、所属区分・個人にそろえる', async () => {
+    const { affiliation } = await import('../tools/operator-voices-lib.ts');
+    expect(affiliation('ホロライブ（現公式タレント一覧/個人profileの本人欄掲載）', 'ホロライブ')).toBe('ホロライブ');
+    expect(affiliation('ホロライブ4期生（2026-11-03公式個人プロフィールおよび本人動画表記）', 'ホロライブ')).toBe('ホロライブ');
+    expect(affiliation('.LIVE（アップランド公式所属一覧掲載）', '.LIVE（ドットライブ）')).toBe('.LIVE');
+    expect(affiliation('すぺしゃりて（本人の公式個人profile掲載。元所属VEEと区別）', '元VEE')).toBe('すぺしゃりて');
+    expect(affiliation('個人勢Vtuber（2026-10-04本人公式の自己申告、10月よりとの記載）', '元VEE')).toBe('個人');
+    expect(affiliation('REJECT', '元VEE')).toBe('REJECT');
+    expect(affiliation(null, 'にじさんじ')).toBe('にじさんじ');
+    expect(affiliation('', '')).toBe('');
+  });
+});
+

@@ -60,11 +60,27 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
       notes.push(`${note} → 公式ページの URL が無いか、使えない形なので入れません`);
       continue;
     }
-    const group = (p.currentAffiliation ?? '').trim() || (p.groupName ?? '').trim();
-    notes.push(note);
+    const group = affiliation(p.currentAffiliation, p.groupName);
+    notes.push(group && group !== (p.currentAffiliation ?? '').trim() ? `${note}、所属「${group}」` : note);
     voices.push({ name: p.name.trim(), ...(group ? { group } : {}), link, features: medianFeatures(kept) });
   }
   return { file: { version: 1, measureVersion: o.measureVersion, voices }, notes };
+}
+
+/** かっこの中（調べた時のメモ）を除く */
+const stripNote = (s: string) => s.replace(/[（(][^（）()]*[）)]/g, '').trim();
+
+/**
+ * 画面に出す所属の名前。シートの「現在所属」には、調べた時のメモ（「ホロライブ（公式個人プロフィール掲載）」など）が入っているので、
+ * かっこの中を除く。「所属区分」で始まる物は所属区分の名前に（「ホロライブ4期生」→「ホロライブ」）、個人で活動している人は「個人」にそろえる。
+ */
+export function affiliation(current: string | null | undefined, kind: string | null | undefined): string {
+  const cur = stripNote(current ?? '');
+  const k = stripNote(kind ?? '');
+  if (!cur) return k;
+  if (k && cur.startsWith(k)) return k;
+  if (/^個人/.test(cur)) return '個人';
+  return cur;
 }
 
 /** 出す人の一覧（1 行 1 人の人物ID。# から後と空の行は無視） */
