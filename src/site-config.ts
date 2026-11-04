@@ -9,7 +9,7 @@ const env = (import.meta as { env?: Record<string, string | undefined> }).env ??
 export const SITE = {
   url: env.VITE_SITE_URL || 'https://tsukaima-kobo.github.io/voice-twin-dev/',
   /** X の投稿に付けるハッシュタグ（# は付けない） */
-  hashtags: ['voicetwin', '声真似練習場'],
+  hashtags: ['voicematch', '声真似練習場'],
   maker: {
     name: '使い魔工房',
     nameEn: 'Tsukaima Kobo',

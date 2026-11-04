@@ -51,7 +51,7 @@ const FILE_RATE = 16000;
 const START_RMS = 0.003;
 
 const $ = <E extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as E;
-mountLang({ ja: '声真似の点数｜voice-twin', en: 'Voice-mimic score | voice-twin' });
+mountLang({ ja: '声真似の点数｜voice-match', en: 'Voice-mimic score | voice-match' });
 mountGithubLink();
 mountFooter();
 /** 結果のシェア（X など） */

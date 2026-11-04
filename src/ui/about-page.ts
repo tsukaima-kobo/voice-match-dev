@@ -3,7 +3,7 @@ import { mountLang } from '../i18n.ts';
 import { githubUrl } from '../site-config.ts';
 import { mountFooter, mountGithubLink } from './share.ts';
 
-mountLang({ ja: 'しくみと約束｜voice-twin', en: 'How it works | voice-twin' });
+mountLang({ ja: 'しくみと約束｜voice-match', en: 'How it works | voice-match' });
 mountGithubLink();
 mountFooter();
 // (オープンソースの節: GitHub のリポジトリが設定されてから出す)

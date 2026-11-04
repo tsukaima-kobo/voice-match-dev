@@ -77,7 +77,7 @@ export function drawCard(d: CardData): HTMLCanvasElement {
   ctx.textBaseline = 'middle';
   ctx.font = `800 44px ${MONO}`;
   ctx.textAlign = 'left';
-  ctx.fillText('voice-twin', 136, 106);
+  ctx.fillText('voice-match', 136, 106);
   ctx.fillStyle = 'rgba(243,240,251,0.6)';
   ctx.font = `700 28px ${FONT()}`;
   ctx.textAlign = 'right';

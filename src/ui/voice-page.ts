@@ -21,7 +21,7 @@ import { ENTRY_BY_ID, MODEL, PROFILES, voicesReady } from '../data/load.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 
-mountLang({ ja: 'voice-twin｜あなたの声は誰に近い？', en: 'voice-twin | Whose voice is yours closest to?' });
+mountLang({ ja: 'voice-match｜あなたの声は誰に近い？', en: 'voice-match | Whose voice is yours closest to?' });
 mountGithubLink();
 mountFooter();
 

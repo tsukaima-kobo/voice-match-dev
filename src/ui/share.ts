@@ -148,7 +148,7 @@ export function mountShare(box: HTMLElement): ShareUi {
   box.replaceChildren(head, row);
 
   // (files can be shared: a phone's share sheet, where X takes the picture too)
-  const probe = typeof File !== 'undefined' ? new File([new Uint8Array(1)], 'voice-twin.png', { type: 'image/png' }) : null;
+  const probe = typeof File !== 'undefined' ? new File([new Uint8Array(1)], 'voice-match.png', { type: 'image/png' }) : null;
   const canShareFiles = !!(probe && navigator.canShare?.({ files: [probe] }));
 
   const labels = () => {
@@ -173,7 +173,7 @@ export function mountShare(box: HTMLElement): ShareUi {
     if (!card) return;
     const a = el('a');
     a.href = card.toDataURL('image/png');
-    a.download = 'voice-twin.png';
+    a.download = 'voice-match.png';
     a.click();
   });
   native.hidden = !canShareFiles;
@@ -182,7 +182,7 @@ export function mountShare(box: HTMLElement): ShareUi {
     const text = shareText(data);
     card.toBlob((b) => {
       if (!b) return;
-      const file = new File([b], 'voice-twin.png', { type: 'image/png' });
+      const file = new File([b], 'voice-match.png', { type: 'image/png' });
       void navigator.share({ files: [file], text: `${text} ${SITE.url} ${SITE.hashtags.map((h) => `#${h}`).join(' ')}` }).catch(() => {});
     }, 'image/png');
   });
