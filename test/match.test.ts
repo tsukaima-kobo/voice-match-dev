@@ -16,7 +16,7 @@ function voiceAt(pos: Record<string, number>): Features {
   return Object.fromEntries(FEATURE_KEYS.map((k) => [k, at(k, pos[k] ?? 0.5)])) as Features;
 }
 /** n 人、1 人 2 本の動画で 8 窓ずつ。人ごとの位置はばらばら、窓ごとの揺れは `noise`（目盛りの割合）。項目の半分は人による差が無い */
-function crowd(n: number, noise: number, seed = 1): Speaker[] {
+function crowd(n: number, noise: number, seed = 1): { id: string; windows: VoiceWindow[] }[] {
   const r = rng(seed);
   return Array.from({ length: n }, (_, i) => {
     const pos = Object.fromEntries(FEATURE_KEYS.map((k, j) => [k, j % 2 === 0 ? 0.2 + 0.6 * r() : 0.5]));

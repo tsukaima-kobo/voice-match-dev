@@ -2,7 +2,9 @@
 // 1. 項目ごとの再現性（ICC）
 // 2. 2 つの作り方（項目ごとの散らばりだけ・白色化）で、1 本の動画を外して本人が 1 位・5 位以内に入る割合
 // 3. よい方を data/model.json に書き、結果を data/eval-report.json に書く
-// 使い方: node tools/eval.ts
+// 使い方: node tools/eval.ts（data/voices/ の窓から）
+//         node tools/eval.ts --sheet data/generated/<シート>.xlsx（運営が測った声の、スプレッドシートの窓から。tools/voices-release.ts と同じ窓を使う）
+// 評価で外した動画は、モデルを作るのにも使わない（外した動画ごとに作り直す）。
 // 経路の差（マイクと配信の音）の散らばりが data/channel.json にあれば、同じ人の中の揺れに足す。
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,17 +12,30 @@ import { MEASURE_VERSION } from '../src/voice/measure.ts';
 import type { Catalog, VoiceFile } from '../src/data/types.ts';
 import type { FeatureKey } from '../src/voice/features.ts';
 import { evaluate, fitModel, itemStats, SELECT, selectWindows, type Speaker } from './lib.ts';
+import { readXlsx } from './xlsx.ts';
+import { sheetWindows, snapshotFromSheet } from './operator-voices-lib.ts';
 
 const root = join(import.meta.dirname, '..');
-const list = JSON.parse(readFileSync(join(root, 'data/catalog.json'), 'utf8')) as Catalog;
-const known = new Set(list.voices.map((v) => v.id));
-const dir = join(root, 'data/voices');
+const sheetAt = process.argv.indexOf('--sheet');
 const speakers: Speaker[] = [];
-for (const name of readdirSync(dir).filter((f) => f.endsWith('.json')).sort()) {
-  const file = JSON.parse(readFileSync(join(dir, name), 'utf8')) as VoiceFile;
-  if (!known.has(file.id)) continue;
-  const { kept } = selectWindows(file.windows, MEASURE_VERSION);
-  if (kept.length >= SELECT.minWindows) speakers.push({ id: file.id, windows: kept });
+if (sheetAt >= 0) {
+  const path = process.argv[sheetAt + 1];
+  if (!path || !existsSync(path)) {
+    console.error('使い方: node tools/eval.ts --sheet <ダウンロードした xlsx>');
+    process.exit(2);
+  }
+  const snap = snapshotFromSheet(readXlsx(readFileSync(path)), MEASURE_VERSION);
+  for (const [id, { kept }] of [...sheetWindows(snap)].sort(([a], [b]) => (a < b ? -1 : 1))) if (kept.length >= SELECT.minWindows) speakers.push({ id, windows: kept });
+} else {
+  const list = JSON.parse(readFileSync(join(root, 'data/catalog.json'), 'utf8')) as Catalog;
+  const known = new Set(list.voices.map((v) => v.id));
+  const dir = join(root, 'data/voices');
+  for (const name of readdirSync(dir).filter((f) => f.endsWith('.json')).sort()) {
+    const file = JSON.parse(readFileSync(join(dir, name), 'utf8')) as VoiceFile;
+    if (!known.has(file.id)) continue;
+    const { kept } = selectWindows(file.windows, MEASURE_VERSION);
+    if (kept.length >= SELECT.minWindows) speakers.push({ id: file.id, windows: kept });
+  }
 }
 if (speakers.length < 3) {
   console.log(`使える人が ${speakers.length} 人です（3 人以上いります）。モデルは作りません。`);
@@ -31,8 +46,8 @@ const channel = existsSync(channelPath) ? (JSON.parse(readFileSync(channelPath, 
 const items = itemStats(speakers);
 const diag = fitModel(speakers, MEASURE_VERSION, { whiten: false, channel });
 const white = fitModel(speakers, MEASURE_VERSION, { whiten: true, channel });
-const rd = evaluate(speakers, diag);
-const rw = evaluate(speakers, white);
+const rd = evaluate(speakers, (train) => fitModel(train, MEASURE_VERSION, { whiten: false, channel }));
+const rw = evaluate(speakers, (train) => fitModel(train, MEASURE_VERSION, { whiten: true, channel }));
 const best = rw.top1 > rd.top1 ? white : diag;
 writeFileSync(join(root, 'data/model.json'), JSON.stringify(best, null, 1) + '\n');
 const report = {

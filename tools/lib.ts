@@ -49,7 +49,8 @@ export const transform = (k: FeatureKey, v: number): number => (FEATURE_BY_KEY[k
 
 export interface Speaker {
   id: string;
-  windows: VoiceWindow[];
+  /** 使う窓（照合のモデルと評価が見るのは、動画と数字だけ） */
+  windows: readonly Pick<VoiceWindow, 'video' | 'features'>[];
 }
 
 /** 項目ごとの、人の間の散らばりと、同じ人の中の散らばり（変換後）。ICC = 人の間 / (人の間 + 人の中) */
@@ -173,7 +174,11 @@ export interface EvalResult {
  * 見分ける力: 動画が 2 本以上ある人ごとに、1 本の動画を外して残りで代表値を作り、外した動画の窓 1 つずつを問いにして、
  * 全員の中で本人が 1 位・5 位以内に入る割合（利用者の 30 秒の声 1 つと同じ条件）
  */
-export function evaluate(speakers: readonly Speaker[], model: MatchModel): EvalResult {
+/**
+ * 1 本の動画を外して、その動画の窓（30 秒ずつ）で本人が 1 位・5 位以内に入る割合。来た人の声 1 回分を、窓 1 つとみなす。
+ * `model` に関数を渡すと、外した動画ごとに、その動画を除いた窓でモデルを作り直す（モデルが答えを見ないように）。
+ */
+export function evaluate(speakers: readonly Speaker[], model: MatchModel | ((train: readonly Speaker[]) => MatchModel)): EvalResult {
   const full: Profile[] = speakers.map((s) => ({ id: s.id, features: medianFeatures(s.windows) }));
   let queries = 0,
     top1 = 0,
@@ -185,8 +190,9 @@ export function evaluate(speakers: readonly Speaker[], model: MatchModel): EvalR
       const rest = s.windows.filter((w) => w.video !== v);
       const held = s.windows.filter((w) => w.video === v);
       const profiles = full.map((p) => (p.id === s.id ? { id: s.id, features: medianFeatures(rest) } : p));
+      const m = typeof model === 'function' ? model(speakers.map((x) => (x.id === s.id ? { id: x.id, windows: rest } : x))) : model;
       for (const q of held) {
-        const r = rank(model, q.features, profiles, 5);
+        const r = rank(m, q.features, profiles, 5);
         queries++;
         if (r[0]?.id === s.id) top1++;
         if (r.some((x) => x.id === s.id)) top5++;

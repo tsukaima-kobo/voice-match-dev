@@ -24,30 +24,48 @@ export interface BuildResult {
 
 const num = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 
-export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string; only: ReadonlySet<string> | null }): BuildResult {
-  const versions = snap.summary?.measureVersions ?? [];
-  if (versions.length !== 1 || versions[0] !== o.measureVersion) throw new Error(`測り方の版が合いません（データ: ${versions.join('・') || '書いていない'}、今のサイト: ${o.measureVersion}）`);
-  const people = new Map<string, Snapshot['peoples'][number]>();
-  for (const p of snap.peoples) if (p.personId && !people.has(p.personId)) people.set(p.personId, p);
-  const rows = new Map<string, { video: string; features: Features }[]>();
+/**
+ * 人ごとの窓: 数字のある窓（all）と、そこから高さが外れた窓を除いた物（kept。tools/lib.ts の SELECT と同じ）。
+ * 代表値（buildOperatorVoices）と、照合のモデル作り（tools/eval.ts --sheet）が同じ窓を使う。
+ */
+export function sheetWindows(snap: Snapshot): Map<string, { all: SheetWindow[]; kept: SheetWindow[] }> {
+  const rows = new Map<string, SheetWindow[]>();
   for (const m of snap.measurements) {
     if (num(m.pitch) === null) continue; // (not measured, or failed)
     const features = Object.fromEntries(FEATURE_KEYS.map((k) => [k, num(m[k])])) as Features;
     (rows.get(m.personId) ?? rows.set(m.personId, []).get(m.personId)!).push({ video: m.videoId, features });
   }
-  const notes: string[] = [];
-  if (o.only) for (const id of o.only) if (!people.has(id)) notes.push(`${id}: データに無い人物ID です`);
-  const voices: OperatorVoices['voices'] = [];
-  for (const id of [...people.keys()].sort()) {
-    if (o.only && !o.only.has(id)) continue;
-    const p = people.get(id)!;
-    const all = rows.get(id) ?? [];
+  const out = new Map<string, { all: SheetWindow[]; kept: SheetWindow[] }>();
+  for (const [id, all] of rows) {
     let kept = all;
     if (all.length >= SELECT.pitchCheckFrom) {
       const st = all.map((w) => 12 * Math.log2(w.features.pitch! / 100));
       const mid = quantileOf(st, 0.5);
       kept = all.filter((_, i) => Math.abs(st[i]! - mid) <= SELECT.maxPitchOffSt);
     }
+    out.set(id, { all, kept });
+  }
+  return out;
+}
+
+export interface SheetWindow {
+  video: string;
+  features: Features;
+}
+
+export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string; only: ReadonlySet<string> | null }): BuildResult {
+  const versions = snap.summary?.measureVersions ?? [];
+  if (versions.length !== 1 || versions[0] !== o.measureVersion) throw new Error(`測り方の版が合いません（データ: ${versions.join('・') || '書いていない'}、今のサイト: ${o.measureVersion}）`);
+  const people = new Map<string, Snapshot['peoples'][number]>();
+  for (const p of snap.peoples) if (p.personId && !people.has(p.personId)) people.set(p.personId, p);
+  const windows = sheetWindows(snap);
+  const notes: string[] = [];
+  if (o.only) for (const id of o.only) if (!people.has(id)) notes.push(`${id}: データに無い人物ID です`);
+  const voices: OperatorVoices['voices'] = [];
+  for (const id of [...people.keys()].sort()) {
+    if (o.only && !o.only.has(id)) continue;
+    const p = people.get(id)!;
+    const { all, kept } = windows.get(id) ?? { all: [], kept: [] };
     const videos = new Set(kept.map((w) => w.video)).size;
     const note = `${id}: 窓 ${all.length} → 使う ${kept.length}（高さが外れる ${all.length - kept.length}）、動画 ${videos} 本`;
     if (kept.length < SELECT.minWindows) {

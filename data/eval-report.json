@@ -1,0 +1,198 @@
+{
+ "measureVersion": "3.1.0",
+ "speakers": 73,
+ "windows": 2374,
+ "diagonal": {
+  "queries": 2364,
+  "top1": 0.5922165820642978,
+  "top5": 0.8164128595600677
+ },
+ "whiten": {
+  "queries": 2364,
+  "top1": 0.6675126903553299,
+  "top5": 0.8553299492385786
+ },
+ "chosen": "whiten",
+ "items": [
+  {
+   "key": "pitch",
+   "icc": 0.922
+  },
+  {
+   "key": "pitchRange",
+   "icc": 0.509
+  },
+  {
+   "key": "pitchSkew",
+   "icc": 0.235
+  },
+  {
+   "key": "pitchMotion",
+   "icc": 0.413
+  },
+  {
+   "key": "f1",
+   "icc": 0.709
+  },
+  {
+   "key": "f2",
+   "icc": 0.534
+  },
+  {
+   "key": "f3",
+   "icc": 0.82
+  },
+  {
+   "key": "f4",
+   "icc": 0.895
+  },
+  {
+   "key": "formantSpacing",
+   "icc": 0.809
+  },
+  {
+   "key": "f1Range",
+   "icc": 0.621
+  },
+  {
+   "key": "f2Range",
+   "icc": 0.599
+  },
+  {
+   "key": "b1",
+   "icc": 0.574
+  },
+  {
+   "key": "b2",
+   "icc": 0.718
+  },
+  {
+   "key": "centroid",
+   "icc": 0.697
+  },
+  {
+   "key": "hammarberg",
+   "icc": 0.678
+  },
+  {
+   "key": "slopeLow",
+   "icc": 0.835
+  },
+  {
+   "key": "slopeMid",
+   "icc": 0.607
+  },
+  {
+   "key": "mfcc1",
+   "icc": 0.821
+  },
+  {
+   "key": "mfcc2",
+   "icc": 0.724
+  },
+  {
+   "key": "mfcc3",
+   "icc": 0.878
+  },
+  {
+   "key": "mfcc4",
+   "icc": 0.788
+  },
+  {
+   "key": "mfcc5",
+   "icc": 0.668
+  },
+  {
+   "key": "mfcc6",
+   "icc": 0.845
+  },
+  {
+   "key": "mfcc7",
+   "icc": 0.708
+  },
+  {
+   "key": "mfcc8",
+   "icc": 0.766
+  },
+  {
+   "key": "mfcc9",
+   "icc": 0.688
+  },
+  {
+   "key": "mfcc10",
+   "icc": 0.744
+  },
+  {
+   "key": "mfcc11",
+   "icc": 0.559
+  },
+  {
+   "key": "mfcc12",
+   "icc": 0.675
+  },
+  {
+   "key": "mfcc13",
+   "icc": 0.607
+  },
+  {
+   "key": "mfccDelta",
+   "icc": 0.64
+  },
+  {
+   "key": "hnr",
+   "icc": 0.723
+  },
+  {
+   "key": "cpp",
+   "icc": 0.56
+  },
+  {
+   "key": "h1h2",
+   "icc": 0.583
+  },
+  {
+   "key": "jitter",
+   "icc": 0.498
+  },
+  {
+   "key": "shimmer",
+   "icc": 0.666
+  },
+  {
+   "key": "rate",
+   "icc": 0.437
+  },
+  {
+   "key": "rateVar",
+   "icc": 0.057
+  },
+  {
+   "key": "pauseShare",
+   "icc": 0.433
+  },
+  {
+   "key": "pauseLen",
+   "icc": 0.242
+  },
+  {
+   "key": "runLen",
+   "icc": 0.158
+  },
+  {
+   "key": "rhythm",
+   "icc": 0.122
+  },
+  {
+   "key": "voicedShare",
+   "icc": 0.454
+  },
+  {
+   "key": "levelRange",
+   "icc": 0.52
+  },
+  {
+   "key": "tilt",
+   "icc": 0.742
+  }
+ ]
+}
