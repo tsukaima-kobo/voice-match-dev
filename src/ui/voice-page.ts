@@ -6,7 +6,7 @@
 // 言葉は日本語と英語（i18n.ts）。切り替えた時は、お題・案内・結果を、今の言葉で出し直す（数字はそのまま）。
 import { nextPromptIndex, nextReadingIndex, promptText, readingText } from '../prompts/prompts.ts';
 import { openMic, micErrorText, openTabAudio, tabAudioSupported, tabErrorText, type Mic } from '../voice/listen.ts';
-import { type MeasureFail, type Measured } from '../voice/measure.ts';
+import { MEASURE_VERSION, type MeasureFail, type Measured } from '../voice/measure.ts';
 import { createWave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
 import { micPicker } from './mic-picker.ts';
@@ -20,6 +20,8 @@ import { closeness, closenessWord, rank } from '../match/match.ts';
 import { ENTRY_BY_ID, MODEL, MODEL_BGM, PROFILES, voicesReady } from '../data/load.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
 import { KIND_BY_ID, KINDS, kindLabel } from '../data/kinds.ts';
+import { clearMine, loadMine } from '../data/mine.ts';
+import type { CatalogEntry } from '../data/types.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 
 mountLang({ ja: 'voice-match｜あなたの声は誰に近い？', en: 'voice-match | Whose voice is yours closest to?' });
@@ -323,15 +325,47 @@ function setKind(mask: number) {
   drawKindChips();
   if (!shown) return;
   // (the arrows of the next take compare within this range)
-  lastRank = rank(modelNow(), shown.c.features, pool(), 5).map((r) => r.id);
+  lastRank = rank(modelNow(), shown.c.features, candidates(), 5).map((r) => r.id);
   draw();
 }
 void voicesReady.then(drawKindChips);
 
+/* ---- じっくり測ったあなたの声（じっくり測るページで入れた時だけ。この端末のブラウザーにある数字。探す範囲に関わらず比べる） ---- */
+const MINE_ID = 'mine';
+let mine = loadMine(MEASURE_VERSION);
+/** 比べる相手: 探す範囲の声と、じっくり測ったあなたの声 */
+function candidates(): typeof PROFILES {
+  return mine ? [...pool(), { id: MINE_ID, features: mine.features, kinds: 0 }] : pool();
+}
+function entryOf(id: string): CatalogEntry {
+  if (id === MINE_ID) return { id, name: t(`あなた（じっくり測った声・${mine?.date ?? ''}）`, `You (measured in depth, ${mine?.date ?? ''})`), links: { profile: './measure.html' } };
+  return ENTRY_BY_ID.get(id)!;
+}
+function drawMineNote() {
+  $('mine-in').hidden = !mine;
+  $('mine-in-text').textContent = t('じっくり測ったあなたの声も、比べる相手に入っています（この端末のブラウザーだけ）。', 'Your voice measured in depth is also among the voices compared (this browser only).');
+  $('mine-clear').textContent = t('外す', 'Remove');
+}
+$('mine-clear').addEventListener('click', () => {
+  clearMine();
+  mine = null;
+  drawMineNote();
+  if (shown) {
+    lastRank = rank(modelNow(), shown.c.features, candidates(), 5).map((r) => r.id);
+    draw();
+  }
+});
+drawMineNote();
+// (added or removed on the in-depth page in another tab)
+window.addEventListener('storage', () => {
+  mine = loadMine(MEASURE_VERSION);
+  drawMineNote();
+});
+
 /* ---- 結果 ---- */
 function render(c: Combined, m: Extract<Measured, { ok: true }>) {
   const before = lastRank;
-  lastRank = PROFILES.length ? rank(modelNow(), c.features, pool(), 5).map((r) => r.id) : [];
+  lastRank = PROFILES.length ? rank(modelNow(), c.features, candidates(), 5).map((r) => r.id) : [];
   shown = { c, m, before };
   draw();
 }
@@ -376,10 +410,11 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
   list.replaceChildren();
   $('no-data').hidden = PROFILES.length > 0;
   if (!PROFILES.length) return null;
-  const byId = new Map(PROFILES.map((p) => [p.id, p]));
-  const ranked = rank(modelNow(), f, pool(), 5);
+  const all = candidates();
+  const byId = new Map(all.map((p) => [p.id, p]));
+  const ranked = rank(modelNow(), f, all, 5);
   ranked.forEach((r, at) => {
-    const v = ENTRY_BY_ID.get(r.id)!;
+    const v = entryOf(r.id);
     const li = el('li', 'match');
     const name = el('div', 'name');
     const a = el('a', undefined, v.name);
@@ -397,6 +432,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     }
     li.append(name);
     if (v.group) li.append(el('div', 'why', v.group));
+    if (r.id === MINE_ID) li.append(el('div', 'why', t('じっくり測るページで入れた、あなたの声（この端末だけ）', 'Your voice, added on the in-depth page (this device only)')));
     const c = closeness(modelNow(), f, byId.get(r.id)!.features).filter(([k]) => !FEATURE_BY_KEY[k].detail);
     const near = c.slice(0, 3).map(([k]) => FEATURE_BY_KEY[k].name);
     const far = c.slice(-2).map(([k]) => FEATURE_BY_KEY[k].name);
@@ -406,10 +442,11 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     // (a new tab, so this page's result stays: nothing of the voice is kept anywhere to bring it back)
     practice.target = '_blank';
     practice.rel = 'noopener';
-    li.append(practice);
+    if (r.id !== MINE_ID) li.append(practice);
     list.append(li);
   });
-  const first = ranked[0];
+  // (the share card and the voiceprint pair you with the first voice of the site, not with yourself)
+  const first = ranked.find((r) => r.id !== MINE_ID);
   return first ? { name: ENTRY_BY_ID.get(first.id)!.name, word: closenessWord(first.distance), features: byId.get(first.id)!.features } : null;
 }
 
@@ -432,6 +469,7 @@ onLang(() => {
   statusEl.classList.toggle('bad', statusBad);
   ticker();
   drawKindChips();
+  drawMineNote();
   if (!result.hidden) draw();
 });
 

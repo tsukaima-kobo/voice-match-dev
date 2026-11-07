@@ -75,6 +75,7 @@
             </div>
             <button type="button" class="primary" id="more">もう一言話して、絞り込む</button>
           </div>
+          <p class="mine-in" id="mine-in" hidden><span id="mine-in-text"></span> <button type="button" id="mine-clear">外す</button></p>
           <div class="kind-filter" id="kind-filter" role="group" aria-label="探す範囲" data-en-aria-label="Search within" hidden>
             <span class="kf-label"><span lang="ja">探す範囲</span><span lang="en">Search within</span></span>
             <div class="kf-chips" id="kind-chips"></div>
@@ -82,6 +83,7 @@
           <ol class="matches" id="matches"></ol>
           <div class="empty-card" id="no-data" hidden><p><span lang="ja">比べる声のデータは、いま準備中です。今はあなたの声の数字だけを出しています。</span><span lang="en">The voices to compare with are still being prepared. For now, only your own numbers are shown.</span></p></div>
           <p class="empty"><span lang="ja">探している声が無い時は、<a href="./mimic.html">声真似の点数のページ</a>でその声をお手本として測り、登録できます。</span><span lang="en">Can’t find the voice you are looking for? Measure it as a model on the <a href="./mimic.html">mimic score page</a> and add it.</span></p>
+          <p class="empty"><span lang="ja">もっと確かに測りたい時は、<a href="./measure.html">じっくり測る</a>（決まった文を 20 分ほど読む）で、あなたの声の代表値を作れます。</span><span lang="en">For a surer result, <a href="./measure.html">measure in depth</a> (read set texts for about 20 minutes) to make your voice’s representative values.</span></p>
 
           <section class="shape-sec" aria-labelledby="shape-title">
             <header class="section-head">
@@ -128,7 +130,7 @@
           <p class="foot-logo">voice<span>-</span>match</p>
           <p><span lang="ja">音は保存も送信もしません。声から性別や年齢を判断しません。</span><span lang="en">Sound is never stored or sent. Gender and age are never guessed from a voice.</span></p>
         </div>
-        <p class="foot-links"><a href="./mimic.html"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a><a href="./about.html"><span lang="ja">しくみと約束</span><span lang="en">How it works</span></a><a href="./about.html#removal"><span lang="ja">データの削除のお願い</span><span lang="en">Ask for removal</span></a></p>
+        <p class="foot-links"><a href="./mimic.html"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a><a href="./about.html"><span lang="ja">しくみと約束</span><span lang="en">How it works</span></a><a href="./measure.html"><span lang="ja">じっくり測る</span><span lang="en">Measure in depth</span></a><a href="./about.html#removal"><span lang="ja">データの削除のお願い</span><span lang="en">Ask for removal</span></a></p>
       </footer>
     </div>
     <script type="module" src="/src/ui/voice-page.ts"></script>

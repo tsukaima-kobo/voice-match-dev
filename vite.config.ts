@@ -89,6 +89,7 @@ export default defineConfig({
         index: fileURLToPath(new URL('./index.html', import.meta.url)),
         about: fileURLToPath(new URL('./about.html', import.meta.url)),
         mimic: fileURLToPath(new URL('./mimic.html', import.meta.url)),
+        measure: fileURLToPath(new URL('./measure.html', import.meta.url)),
       },
     },
   },
