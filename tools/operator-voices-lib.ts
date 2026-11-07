@@ -2,17 +2,19 @@
 // 元: 収集の書き出し（スプレッドシートと同じ数字。snapshot.json の peoples・measurements・summary.measureVersions）。
 // 窓: 数字のある窓だけ → その人の高さの中央値から外れた窓を除く（tools/lib.ts の SELECT と同じ）→ SELECT.minWindows 以上の人だけ。
 // 代表値は項目ごとの中央値（サイトと同じ計算）。公式ページの URL が無い・おかしい人は入れない。
-// 書き出すのは名前・所属・公式ページ・数字だけ（Release は公開なので、人物ID や窓の数は手元の記録だけに出す）。
+// 大枠（VTuber・歌手など）は、シートの「大枠」の列（無ければ make の --kind）から。
+// 書き出すのは名前・所属・大枠・公式ページ・数字だけ（Release は公開なので、人物ID や窓の数は手元の記録だけに出す）。
 import { FEATURE_BY_KEY, FEATURE_KEYS, formatFeature, type Features } from '../src/voice/features.ts';
 import type { Cell } from './xlsx.ts';
 import { quantileOf } from '../src/voice/measure.ts';
 import { checkLink } from '../src/submit/code.ts';
 import type { OperatorVoices } from '../src/data/types.ts';
 import { medianFeatures, SELECT } from './lib.ts';
+import { idsOf, parseKinds } from '../src/data/kinds.ts';
 
 export interface Snapshot {
   summary?: { measureVersions?: string[] };
-  peoples: { personId: string; name: string; groupName?: string | null; currentAffiliation?: string | null; officialProfile?: string | null }[];
+  peoples: { personId: string; name: string; groupName?: string | null; currentAffiliation?: string | null; officialProfile?: string | null; kinds?: string | null }[];
   measurements: ({ personId: string; videoId: string } & Record<string, unknown>)[];
 }
 
@@ -53,7 +55,10 @@ export interface SheetWindow {
   features: Features;
 }
 
-export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string; only: ReadonlySet<string> | null }): BuildResult {
+/**
+ * defaultKinds: 「大枠」が書いていない人に付ける大枠（src/data/kinds.ts の印の束。0 なら付けない＝「すべて」の中でだけ出る）。
+ */
+export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string; only: ReadonlySet<string> | null; defaultKinds?: number }): BuildResult {
   const versions = snap.summary?.measureVersions ?? [];
   if (versions.length !== 1 || versions[0] !== o.measureVersion) throw new Error(`測り方の版が合いません（データ: ${versions.join('・') || '書いていない'}、今のサイト: ${o.measureVersion}）`);
   const people = new Map<string, Snapshot['peoples'][number]>();
@@ -79,8 +84,11 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
       continue;
     }
     const group = affiliation(p.currentAffiliation, p.groupName);
-    notes.push(group && group !== (p.currentAffiliation ?? '').trim() ? `${note}、所属「${group}」` : note);
-    voices.push({ name: p.name.trim(), ...(group ? { group } : {}), link, features: medianFeatures(kept) });
+    const parsed = parseKinds(p.kinds ?? '');
+    const kinds = idsOf(parsed.mask || (o.defaultKinds ?? 0));
+    const extra = [group && group !== (p.currentAffiliation ?? '').trim() ? `所属「${group}」` : '', parsed.unknown.length ? `大枠の読めない言葉「${parsed.unknown.join('・')}」` : '', kinds.length ? '' : '大枠なし'].filter(Boolean);
+    notes.push(extra.length ? `${note}、${extra.join('、')}` : note);
+    voices.push({ name: p.name.trim(), ...(group ? { group } : {}), ...(kinds.length ? { kinds } : {}), link, features: medianFeatures(kept) });
   }
   return { file: { version: 1, measureVersion: o.measureVersion, voices }, notes };
 }
@@ -119,7 +127,7 @@ export function sheetLabel(key: (typeof FEATURE_KEYS)[number]): string {
 
 /**
  * スプレッドシート（xlsx をほどいた表）を、収集の書き出しと同じ形にする。
- * 使うタブ: 人物一覧（人物ID・氏名・所属区分・現在所属・公式プロフィール）と 声の測定値（人物ID・出典動画ID・45 項目）。
+ * 使うタブ: 人物一覧（人物ID・氏名・所属区分・現在所属・公式プロフィール、あれば大枠）と 声の測定値（人物ID・出典動画ID・45 項目）。
  * 見出しは「人物ID」で始まる行。シートには測り方の版が書いていないので、45 項目の見出しが今のサイトと全部同じ時だけ、
  * 今の版（measureVersion）で測った物として扱う。違えば止める。
  */
@@ -132,7 +140,7 @@ export function snapshotFromSheet(tables: ReadonlyMap<string, Cell[][]>, measure
     const at = new Map(rows[h]!.map((c, i) => [String(c ?? '').trim(), i]));
     const missing = need.filter((l) => !at.has(l));
     if (missing.length) throw new Error(`「${name}」に無い見出し: ${missing.join('・')}（測り方や項目が今のサイトと違うかもしれません）`);
-    return rows.slice(h + 1).filter((r) => String(r[0] ?? '').trim()).map((r) => (l: string) => r[at.get(l)!] ?? null);
+    return rows.slice(h + 1).filter((r) => String(r[0] ?? '').trim()).map((r) => (l: string) => (at.has(l) ? (r[at.get(l)!] ?? null) : null));
   };
   const str = (c: Cell) => (c === null ? null : String(c).trim() || null);
   const peoples = table('人物一覧', ['人物ID', '氏名', '所属区分', '現在所属', '公式プロフィール']).map((get) => ({
@@ -141,6 +149,7 @@ export function snapshotFromSheet(tables: ReadonlyMap<string, Cell[][]>, measure
     groupName: str(get('所属区分')),
     currentAffiliation: str(get('現在所属')),
     officialProfile: str(get('公式プロフィール')),
+    kinds: str(get('大枠')),
   }));
   const labels = FEATURE_KEYS.map(sheetLabel);
   const measurements = table('声の測定値', ['人物ID', '出典動画ID', ...labels]).map((get) => ({

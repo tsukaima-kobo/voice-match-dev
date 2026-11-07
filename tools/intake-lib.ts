@@ -26,6 +26,8 @@ export interface Accepted {
   key: string;
   name: string;
   group?: string;
+  /** 大枠の印（src/data/kinds.ts） */
+  kinds: number;
   link: string;
   quality: Submission['q'];
   features: Features;
@@ -36,6 +38,8 @@ export interface UserVoice {
   key: string;
   name: string;
   group?: string;
+  /** 大枠の印: そろった登録の半分以上が選んだ物 */
+  kinds: number;
   link: string;
   used: number;
   features: Features;
@@ -136,7 +140,7 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
     perDay.set(day, (perDay.get(day) ?? 0) + 1);
     perName.set(nk, (perName.get(nk) ?? 0) + 1);
     counts.accepted++;
-    accepted.push({ at: row.at, key, name: s.n.trim(), ...(s.g?.trim() ? { group: s.g.trim() } : {}), link: s.l.trim(), quality: s.q, features: featuresOf(s) });
+    accepted.push({ at: row.at, key, name: s.n.trim(), ...(s.g?.trim() ? { group: s.g.trim() } : {}), kinds: s.k ?? 0, link: s.l.trim(), quality: s.q, features: featuresOf(s) });
   }
 
   // (壁 ③, name by name, in the order each name first came)
@@ -152,10 +156,17 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
     for (let n = 2; used.has(id); n++) id = `${userIdOf(key)}-${n}`;
     used.add(id);
     const group = mostCommon(items.map((a) => a.group ?? '').filter(Boolean));
-    voices.push({ id, key, name: mostCommon(items.map((a) => a.name))!, ...(group ? { group } : {}), link: mostCommon(items.map((a) => a.link))!, used: c.used, features: c.features });
+    voices.push({ id, key, name: mostCommon(items.map((a) => a.name))!, ...(group ? { group } : {}), kinds: majorityKinds(items.map((a) => a.kinds)), link: mostCommon(items.map((a) => a.link))!, used: c.used, features: c.features });
   }
   voices.sort((a, b) => (a.id < b.id ? -1 : 1));
   return { accepted, voices, counts };
+}
+
+/** 大枠: 半分以上の登録が選んだ印だけ（1 件だけのいたずらで、ほかの大枠に出ないように） */
+export function majorityKinds(masks: readonly number[]): number {
+  let out = 0;
+  for (let bit = 0; bit < 16; bit++) if (masks.filter((m) => (m & (1 << bit)) !== 0).length * 2 >= masks.length && masks.length > 0) out |= 1 << bit;
+  return out;
 }
 
 /** 数字の並びを features の順の配列に（ファイルを小さく、読みやすく） */

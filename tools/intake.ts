@@ -17,6 +17,7 @@ import type { Catalog, ProfileList } from '../src/data/types.ts';
 import { intake, rowsFromTable } from './intake-lib.ts';
 import { parseCsv } from './csv.ts';
 import { openSheet } from './sheets.ts';
+import { idsOf } from '../src/data/kinds.ts';
 
 const root = join(import.meta.dirname, '..');
 const out = join(root, 'data', 'generated');
@@ -57,7 +58,7 @@ const model: MatchModel = m.version !== 'none' && m.measureVersion === MEASURE_V
 const r = intake(rowsFromTable(table), { model, ngWords, blocked });
 
 mkdirSync(out, { recursive: true });
-const catalog: Catalog = { version: 1, voices: r.voices.map((v) => ({ id: v.id, name: v.name, ...(v.group ? { group: v.group } : {}), links: { profile: v.link } })) };
+const catalog: Catalog = { version: 1, voices: r.voices.map((v) => ({ id: v.id, name: v.name, ...(v.group ? { group: v.group } : {}), ...(v.kinds ? { kinds: idsOf(v.kinds) } : {}), links: { profile: v.link } })) };
 write('user-catalog.json', catalog);
 const profiles: ProfileList = { version: MEASURE_VERSION, profiles: r.voices.map((v) => ({ id: v.id, version: MEASURE_VERSION, windows: v.used, videos: 0, features: v.features })) };
 write('user-profiles.json', profiles);

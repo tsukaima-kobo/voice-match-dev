@@ -28,6 +28,18 @@ describe('運営が測った声の代表値', () => {
     expect(Object.keys(file.voices[0]!).sort()).toEqual(['features', 'group', 'link', 'name']);
   });
 
+  it('大枠はシートの「大枠」から。書いていない人は --kind の大枠。読めない言葉は記録に出す', () => {
+    const { file, notes } = buildOperatorVoices(
+      snap([person('a', { kinds: 'VTuber、歌手' }), person('b'), person('c', { kinds: 'ぬいぐるみ' })], [...windows('a', 'v1', twelve), ...windows('b', 'v1', twelve), ...windows('c', 'v1', twelve)]),
+      { measureVersion: MEASURE_VERSION, only: null, defaultKinds: 1 },
+    );
+    expect(file.voices.map((v) => v.kinds)).toEqual([['vtuber', 'singer'], ['vtuber'], ['vtuber']]);
+    expect(notes.join('\n')).toMatch(/c:.*大枠の読めない言葉「ぬいぐるみ」/);
+    const none = buildOperatorVoices(snap([person('b')], windows('b', 'v1', twelve)), { measureVersion: MEASURE_VERSION, only: null });
+    expect(none.file.voices[0]!.kinds).toBeUndefined();
+    expect(none.notes.join('')).toMatch(/大枠なし/);
+  });
+
   it('高さが大きく外れた窓（別の人など）は除く', () => {
     const { notes } = buildOperatorVoices(snap([person('a')], windows('a', 'v1', [...twelve, 400, 410])), { measureVersion: MEASURE_VERSION, only: null });
     expect(notes.join('\n')).toMatch(/窓 14 → 使う 12/);

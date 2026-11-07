@@ -1,10 +1,11 @@
 // 声の登録（アキネーター方式）の「送る内容」: 作る・読む・確かめる（壁 ①）。DOM なし・乱数なし。
 // 声真似の点数のページ（mimic.html）が、利用者が聞かせたお手本の数字から作り、利用者が Google フォームに貼って送る。
 // 受け取った後に tools/intake.ts がもう一度確かめる（ページの確認は回り込めるため）。
-// 入るのは数字・名前・所属や作品名・公式ページのリンク・測り方と測れた声の質だけ。音は入らない。送った人の情報も入らない。
+// 入るのは数字・名前・所属や作品名・大枠・公式ページのリンク・測り方と測れた声の質だけ。音は入らない。送った人の情報も入らない。
 import { FEATURE_BY_KEY, FEATURE_KEYS, roundFeature, type FeatureKey, type Features } from '../voice/features.ts';
 import { MEASURE_VERSION } from '../voice/measure.ts';
 import { t } from '../i18n.ts';
+import { KIND_BITS_ALL } from '../data/kinds.ts';
 
 /** 送る内容の頭（フォームの回答の中から見つけるため） */
 export const CODE_PREFIX = 'voice-twin:';
@@ -18,6 +19,8 @@ export interface Submission {
   n: string;
   /** 所属や作品名（任意） */
   g?: string;
+  /** 大枠（src/data/kinds.ts の 16 個の印を 1 つの数にした物。1 つ以上） */
+  k?: number;
   /** 公式ページのリンク */
   l: string;
   /** 測れた声の質: 声の秒数・間の音楽らしさ・声と静かな所の差（dB） */
@@ -95,13 +98,14 @@ export const REQUIRED: readonly FeatureKey[] = ['pitch', 'pitchRange', 'f1', 'f2
 /** 短縮 URL（行き先が分からないので受け付けない） */
 const SHORTENERS = ['bit.ly', 't.co', 'tinyurl.com', 'goo.gl', 'is.gd', 'ow.ly', 'buff.ly', 'rebrand.ly', 'cutt.ly', 'shorturl.at', 'x.gd', 'amzn.to'];
 
-export function makeSubmission(o: { name: string; group?: string; link: string; quality: { voicedSeconds: number; gapTonal: number; snrDb: number }; features: Features; consent: boolean }): Submission {
+export function makeSubmission(o: { name: string; group?: string; kinds: number; link: string; quality: { voicedSeconds: number; gapTonal: number; snrDb: number }; features: Features; consent: boolean }): Submission {
   const g = o.group?.trim();
   return {
     v: 1,
     m: MEASURE_VERSION,
     n: o.name.trim(),
     ...(g ? { g } : {}),
+    k: o.kinds,
     l: o.link.trim(),
     q: { vs: Math.round(o.quality.voicedSeconds * 10) / 10, gt: Math.round(o.quality.gapTonal * 1000) / 1000, snr: Math.round(o.quality.snrDb * 10) / 10 },
     f: FEATURE_KEYS.map((k) => o.features[k]),
@@ -129,6 +133,7 @@ export function decodeSubmission(text: string): Submission | null {
     typeof o.m === 'string' &&
     typeof o.n === 'string' &&
     (o.g === undefined || typeof o.g === 'string') &&
+    (o.k === undefined || (typeof o.k === 'number' && Number.isInteger(o.k))) &&
     typeof o.l === 'string' &&
     typeof q === 'object' &&
     q !== null &&
@@ -154,7 +159,7 @@ export function featuresOf(s: Submission): Features {
 }
 
 export interface Problem {
-  kind: 'version' | 'shape' | 'consent' | 'name' | 'group' | 'link' | 'quality' | 'missing' | 'range' | 'order';
+  kind: 'version' | 'shape' | 'consent' | 'name' | 'group' | 'kinds' | 'link' | 'quality' | 'missing' | 'range' | 'order';
   text: string;
 }
 
@@ -170,6 +175,7 @@ export function checkSubmission(s: Submission): Problem[] {
   const name = s.n.trim();
   if (!name || [...name].length > LIMITS.name || /[\u0000-\u001f\u007f]/.test(name) || /https?:|www\./i.test(name)) out.push({ kind: 'name', text: t(`名前は 1〜${LIMITS.name} 文字で、URL を入れないでください。`, `The name must be 1–${LIMITS.name} characters, without a URL.`) });
   if (s.g !== undefined && ([...s.g].length > LIMITS.group || /[\u0000-\u001f\u007f]/.test(s.g) || /https?:/i.test(s.g))) out.push({ kind: 'group', text: t(`所属・作品名は ${LIMITS.group} 文字までで、URL を入れないでください。`, `The agency or title must be up to ${LIMITS.group} characters, without a URL.`) });
+  if (!(typeof s.k === 'number' && s.k > 0 && (s.k & ~KIND_BITS_ALL) === 0)) out.push({ kind: 'kinds', text: t('大枠（VTuber・歌手など）を 1 つ以上選んでください。', 'Choose at least one category (VTuber, singer, etc.).') });
   const linkProblem = checkLink(s.l);
   if (linkProblem) out.push({ kind: 'link', text: linkProblem });
   if (!(s.q.vs >= LIMITS.minVoiced)) out.push({ kind: 'quality', text: t(`測れた声が ${LIMITS.minVoiced} 秒に足りません。`, `Less than ${LIMITS.minVoiced} s of voice was measured.`) });

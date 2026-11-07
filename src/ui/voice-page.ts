@@ -19,6 +19,7 @@ import { el, itemRow, renderGroups } from './items.ts';
 import { closeness, closenessWord, rank } from '../match/match.ts';
 import { ENTRY_BY_ID, MODEL, MODEL_BGM, PROFILES, voicesReady } from '../data/load.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
+import { KIND_BY_ID, KINDS, kindLabel } from '../data/kinds.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 
 mountLang({ ja: 'voice-match｜あなたの声は誰に近い？', en: 'voice-match | Whose voice is yours closest to?' });
@@ -289,10 +290,48 @@ function failText(reason: MeasureFail, voiced: number | undefined): string {
   }
 }
 
+/* ---- 探す範囲（大枠で絞る。0 はすべて） ---- */
+// (?kind=vtuber opens the page already narrowed to that category)
+const kindParam = KIND_BY_ID.get(new URLSearchParams(location.search).get('kind') ?? '');
+let kindFilter = kindParam ? 1 << kindParam.bit : 0;
+let poolCache: { mask: number; from: typeof PROFILES; list: typeof PROFILES } | null = null;
+/** 比べる相手（今の探す範囲の中の声） */
+function pool(): typeof PROFILES {
+  if (!kindFilter) return PROFILES;
+  if (poolCache?.mask !== kindFilter || poolCache.from !== PROFILES) poolCache = { mask: kindFilter, from: PROFILES, list: PROFILES.filter((p) => (p.kinds & kindFilter) !== 0) };
+  return poolCache.list;
+}
+/** 大枠のボタン（声が 1 つ以上ある大枠だけ）。選んでいる大枠に声が無ければ、すべてに戻す */
+function drawKindChips() {
+  const counts = KINDS.map((k) => [k, PROFILES.filter((p) => (p.kinds & (1 << k.bit)) !== 0).length] as const).filter(([, n]) => n > 0);
+  if (kindFilter && !counts.some(([k]) => 1 << k.bit === kindFilter)) kindFilter = 0;
+  const box = $('kind-filter');
+  box.hidden = !counts.length;
+  const chip = (mask: number, label: string, n: number) => {
+    const b = el('button', 'kind-chip');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(mask === kindFilter));
+    b.append(label, el('span', 'n', String(n)));
+    b.addEventListener('click', () => setKind(mask));
+    return b;
+  };
+  $('kind-chips').replaceChildren(chip(0, t('すべて', 'All'), PROFILES.length), ...counts.map(([k, n]) => chip(1 << k.bit, kindLabel(k), n)));
+}
+function setKind(mask: number) {
+  if (mask === kindFilter) return;
+  kindFilter = mask;
+  drawKindChips();
+  if (!shown) return;
+  // (the arrows of the next take compare within this range)
+  lastRank = rank(modelNow(), shown.c.features, pool(), 5).map((r) => r.id);
+  draw();
+}
+void voicesReady.then(drawKindChips);
+
 /* ---- 結果 ---- */
 function render(c: Combined, m: Extract<Measured, { ok: true }>) {
   const before = lastRank;
-  lastRank = PROFILES.length ? rank(modelNow(), c.features, PROFILES, 5).map((r) => r.id) : [];
+  lastRank = PROFILES.length ? rank(modelNow(), c.features, pool(), 5).map((r) => r.id) : [];
   shown = { c, m, before };
   draw();
 }
@@ -338,7 +377,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
   $('no-data').hidden = PROFILES.length > 0;
   if (!PROFILES.length) return null;
   const byId = new Map(PROFILES.map((p) => [p.id, p]));
-  const ranked = rank(modelNow(), f, PROFILES, 5);
+  const ranked = rank(modelNow(), f, pool(), 5);
   ranked.forEach((r, at) => {
     const v = ENTRY_BY_ID.get(r.id)!;
     const li = el('li', 'match');
@@ -392,6 +431,7 @@ onLang(() => {
   texts();
   statusEl.classList.toggle('bad', statusBad);
   ticker();
+  drawKindChips();
   if (!result.hidden) draw();
 });
 

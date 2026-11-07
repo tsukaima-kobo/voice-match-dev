@@ -8,11 +8,12 @@
 - [x] ライセンス: MIT（2026-11-01 運営が決定。`LICENSE` と README の最後に書いた）。本番のリポジトリにも `LICENSE` をそのまま入れる。
 - [ ] 本番のリポジトリの名前（例: `tsukaima-kobo/voice-match`）。
 - [x] 公開の住所: `https://voice-match.com/`（2026-11-04 運営が Cloudflare で取得。サイトは同じ Cloudflare アカウントの Pages に置く。手順は 3.5）。
-- [ ] 削除のお願いの窓口（about.html の「窓口: 公開の時にここに書きます」を置き換える）。
+- [x] 削除のお願いの窓口（2026-11-07）: Google フォーム「voice-match 削除のお願い」（運営のアカウント。回答はメールで知らせる）・メール contact@voice-match.com（Cloudflare のメール転送で運営の Gmail へ）・GitHub の Issue（`.github/ISSUE_TEMPLATE/removal.yml`）。住所は `src/site-config.ts` の `removal`。
 
 ## 2. ファイルを変える
 
 - [ ] `src/site-config.ts` の `github` に本番のリポジトリ（`"tsukaima-kobo/voice-match"` など）を入れる。これで、見出しの GitHub のリンク・結果の下の「GitHub でスターする」・足元の GitHub・しくみと約束の「オープンソース」の節が出る。スターの数は毎朝のビルドで GitHub から取って、ページに書き込む（見る人のブラウザーは GitHub に問い合わせない）。
+- [ ] `src/site-config.ts` の `removal.issues` を本番のリポジトリにする（しくみと約束の「削除のお願い」の GitHub の Issue の行き先）。本番のリポジトリに `removal` のラベルを作る（`gh label create removal -R <本番> --color d93f0b --description 削除のお願い`）。Issue の型（`.github/ISSUE_TEMPLATE/`）はコードと一緒に入る。
 - [ ] 公開の住所を、本番のリポジトリの Settings → Secrets and variables → Actions → Variables に `VITE_SITE_URL` = `https://voice-match.com/` として入れる（OGP・共有カード・X の投稿に入る住所。`site.yml` はもう読むようになっている）。
 - [ ] README の「サイトを開く」などの住所を本番に変える。
 - [ ] 登録のフォーム（`src/submit/config.ts`）を本番のフォームにする。

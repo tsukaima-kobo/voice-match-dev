@@ -13,8 +13,8 @@ import { unpackVoices } from './pack.ts';
 
 export let CATALOG: readonly CatalogEntry[] = [];
 export let ENTRY_BY_ID: ReadonlyMap<string, CatalogEntry> = new Map();
-/** 今の測り方と同じ版で測った物だけ（版が違う数字とは比べない） */
-export let PROFILES: readonly { id: string; features: Features }[] = [];
+/** 今の測り方と同じ版で測った物だけ（版が違う数字とは比べない）。kinds は大枠の印（src/data/kinds.ts） */
+export let PROFILES: readonly { id: string; features: Features; kinds: number }[] = [];
 
 /** 声のデータを読み終えた時（読めなかった時も、空のまま終わる） */
 export const voicesReady: Promise<void> = import('virtual:voice-pack')
@@ -23,7 +23,7 @@ export const voicesReady: Promise<void> = import('virtual:voice-pack')
     const { voices, profiles } = unpackVoices(pack);
     CATALOG = voices;
     ENTRY_BY_ID = new Map(voices.map((v) => [v.id, v]));
-    PROFILES = profiles as { id: string; features: Features }[];
+    PROFILES = profiles as { id: string; features: Features; kinds: number }[];
   })
   .catch(() => undefined);
 

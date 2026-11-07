@@ -457,6 +457,11 @@ footer.site-foot .foot-links { display: flex; flex-wrap: wrap; gap: 6px 18px; ju
 .register-body { display: grid; gap: 14px; margin-top: 14px; }
 .check { display: flex; gap: 10px; align-items: flex-start; font-size: 0.92em; }
 .check input { margin-top: 0.45em; flex: none; accent-color: var(--a1); width: 1.1em; height: 1.1em; }
+.kind-field { border: 0; padding: 0; margin: 0; min-width: 0; font-size: 0.9em; }
+.kind-field legend { padding: 0; margin-bottom: 8px; font-weight: 600; }
+.kind-field .check { font-size: 1em; }
+.kind-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 12em), 1fr)); gap: 6px 14px; }
+.removal-links { padding-left: 1.3em; display: grid; gap: 4px; }
 .problems { padding-left: 1.3em; color: var(--warn); font-size: 0.9em; display: grid; gap: 2px; }
 .reg-out { display: grid; gap: 10px; }
 .reg-out textarea { font: 0.8rem/1.55 var(--f-num); width: 100%; resize: vertical; overflow-wrap: anywhere; }
@@ -477,6 +482,9 @@ a.button-link { display: inline-block; padding: 0.55em 1.2em; }
 
 /* ---- 確かさと絞り込み（声のページ） ---- */
 .certainty-row { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; justify-content: space-between; }
+.kind-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.kf-label { font-weight: 700; font-size: 0.9em; color: var(--muted); }
+.kf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .certainty { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 14px; align-items: center; flex: 1 1 420px; min-width: 0; }
 .c-bars { grid-row: span 2; display: inline-flex; align-items: flex-end; gap: 4px; height: 30px; }
 .c-bars i { width: 9px; border-radius: 3px; background: color-mix(in oklch, var(--ink) 14%, transparent); transition: background-color 0.4s, box-shadow 0.4s; }
@@ -558,8 +566,9 @@ a.button-link { display: inline-block; padding: 0.55em 1.2em; }
 .shape-guide { display: grid; gap: 12px 28px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); padding: clamp(16px, 2vw, 26px); border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(18px); }
 .shape-group { display: flex; flex-wrap: wrap; align-content: start; align-items: center; gap: 6px; }
 .shape-layer { font-weight: 800; font-size: 0.84em; width: 100%; color: var(--a1); }
-.shape-chip { font-size: 0.82em; padding: 0.3em 0.85em; font-weight: 600; }
-.shape-chip[aria-pressed="true"] { color: var(--on-btn); border-color: transparent; background: var(--grad-btn); box-shadow: var(--glow); }
+.shape-chip, .kind-chip { font-size: 0.82em; padding: 0.3em 0.85em; font-weight: 600; }
+.shape-chip[aria-pressed="true"], .kind-chip[aria-pressed="true"] { color: var(--on-btn); border-color: transparent; background: var(--grad-btn); box-shadow: var(--glow); }
+.kind-chip .n { font-family: var(--f-num); font-weight: 500; opacity: 0.75; margin-left: 0.45em; }
 .shape-note { grid-column: 1 / -1; color: var(--muted); font-size: 0.92em; min-height: 3.4em; padding-top: 10px; border-top: 1px solid var(--line); }
 .shape-note b { color: var(--ink); margin-right: 0.4em; }
 

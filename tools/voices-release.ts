@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { MEASURE_VERSION } from '../src/voice/measure.ts';
 import type { OperatorVoices } from '../src/data/types.ts';
 import { buildOperatorVoices, parseIdList, snapshotFromSheet, type Snapshot } from './operator-voices-lib.ts';
+import { KINDS, parseKinds } from '../src/data/kinds.ts';
 import { readXlsx } from './xlsx.ts';
 
 export const RELEASE_TAG = 'voices-data';
@@ -27,9 +28,9 @@ const opt = (flag: string) => {
   const i = args.indexOf(flag);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const USAGE = '使い方: node tools/voices-release.ts make (--sheet <シート.xlsx> | --snapshot <snapshot.json>) (--only <出す人の一覧.txt> | --all) ／ upload --yes（くわしくは docs/voices-release.md）';
+const USAGE = '使い方: node tools/voices-release.ts make (--sheet <シート.xlsx> | --snapshot <snapshot.json>) (--only <出す人の一覧.txt> | --all) [--kind <大枠>] ／ upload --yes（くわしくは docs/voices-release.md）';
 // (anything unknown, such as --help, stops here before anything is made or sent)
-const ALLOWED: Record<string, { flags: string[]; values: string[] }> = { make: { flags: ['--all'], values: ['--sheet', '--snapshot', '--only'] }, upload: { flags: ['--yes'], values: [] } };
+const ALLOWED: Record<string, { flags: string[]; values: string[] }> = { make: { flags: ['--all'], values: ['--sheet', '--snapshot', '--only', '--kind'] }, upload: { flags: ['--yes'], values: [] } };
 const allowed = ALLOWED[args[0] ?? ''];
 const unknown = !allowed || args.slice(1).some((a, i, rest) => !(allowed.flags.includes(a) || allowed.values.includes(a) || allowed.values.includes(rest[i - 1] ?? '')));
 if (unknown) {
@@ -48,11 +49,20 @@ if (args[0] === 'make') {
   const snap = sheetPath ? snapshotFromSheet(readXlsx(readFileSync(sheetPath)), MEASURE_VERSION) : (JSON.parse(readFileSync(snapPath!, 'utf8')) as Snapshot);
   if (sheetPath) console.log(`シート: 人物 ${snap.peoples.length} 行・測定値 ${snap.measurements.length} 行（シートには測り方の版が無いので、45 項目の見出しが今と同じことで確かめ、版 ${MEASURE_VERSION} として扱います）`);
   const only = onlyPath ? parseIdList(readFileSync(onlyPath, 'utf8')) : null;
-  const { file, notes } = buildOperatorVoices(snap, { measureVersion: MEASURE_VERSION, only });
+  // (--kind: the 大枠 for people whose 大枠 cell is empty, e.g. --kind VTuber)
+  const kindText = opt('--kind');
+  const kind = kindText ? parseKinds(kindText) : { mask: 0, unknown: [] };
+  if (kindText && (kind.unknown.length || !kind.mask)) {
+    console.error(`--kind の大枠が読めません: ${kind.unknown.join('・') || kindText}（使える物: ${KINDS.map((k) => k.ja).join('・')}）`);
+    process.exit(2);
+  }
+  const { file, notes } = buildOperatorVoices(snap, { measureVersion: MEASURE_VERSION, only, defaultKinds: kind.mask });
   for (const n of notes) console.log(n);
   mkdirSync(join(root, 'data', 'generated'), { recursive: true });
   writeFileSync(out, JSON.stringify(file, null, 1) + '\n');
-  console.log(`data/generated/operator-voices.json: ${file.voices.length} 人（測り方の版 ${file.measureVersion}）`);
+  const byKind = KINDS.map((k) => [k.ja, file.voices.filter((v) => v.kinds?.includes(k.id)).length] as const).filter(([, n]) => n > 0);
+  const none = file.voices.filter((v) => !v.kinds?.length).length;
+  console.log(`data/generated/operator-voices.json: ${file.voices.length} 人（測り方の版 ${file.measureVersion}）。大枠: ${byKind.map(([k, n]) => `${k} ${n}`).join('・') || 'なし'}${none ? `・大枠なし ${none}` : ''}`);
 } else if (args[0] === 'upload') {
   if (!existsSync(out)) {
     console.error('先に make で data/generated/operator-voices.json を作ってください。');

@@ -9,6 +9,8 @@ export interface CatalogEntry {
   name: string;
   /** 所属や作品名（任意。画面で名前と一緒に出す） */
   group?: string;
+  /** 大枠（VTuber・歌手など。src/data/kinds.ts の ID。いくつでも。無い声は「すべて」の中でだけ出る） */
+  kinds?: string[];
   links: {
     /** 公式のページ（プロフィールなど） */
     profile: string;
@@ -65,7 +67,7 @@ export interface ProfileList {
 /**
  * 運営が測った声の代表値（1 人 1 件）。リポジトリにはコミットせず、GitHub の Release「voices-data」に
  * operator-voices.json として置く。tools/voices-release.ts が作って置き、サイトを作る時に data/generated/ へ取ってくる。
- * Release は公開なので、サイトと同じく名前・所属・公式ページ・数字だけ（人物ID や窓の数は入れない）。
+ * Release は公開なので、サイトと同じく名前・所属・大枠・公式ページ・数字だけ（人物ID や窓の数は入れない）。
  */
 export interface OperatorVoices {
   version: 1;
@@ -75,6 +77,8 @@ export interface OperatorVoices {
     name: string;
     /** 今の所属や作品名 */
     group?: string;
+    /** 大枠（src/data/kinds.ts の ID） */
+    kinds?: string[];
     /** 公式のページ */
     link: string;
     features: Features;

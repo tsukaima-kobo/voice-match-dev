@@ -14,7 +14,7 @@ export interface VoiceSource {
 export function fromOperatorVoices(file: OperatorVoices): VoiceSource {
   const id = (i: number) => `o-${i}`;
   return {
-    voices: file.voices.map((v, i) => ({ id: id(i), name: v.name, ...(v.group ? { group: v.group } : {}), links: { profile: v.link } })),
+    voices: file.voices.map((v, i) => ({ id: id(i), name: v.name, ...(v.group ? { group: v.group } : {}), ...(v.kinds?.length ? { kinds: v.kinds } : {}), links: { profile: v.link } })),
     profiles: file.voices.map((v, i) => ({ id: id(i), version: file.measureVersion, features: v.features })),
   };
 }

@@ -29,6 +29,7 @@ import { mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 import { checkSubmission, encodeSubmission, makeSubmission } from '../submit/code.ts';
 import { SUBMIT_FORM } from '../submit/config.ts';
+import { KINDS } from '../data/kinds.ts';
 
 /** 聞く長さの最大（秒） */
 const LISTEN_MAX = 35;
@@ -430,6 +431,7 @@ const reg = {
   box: $<HTMLDetailsElement>('register'),
   name: $<HTMLInputElement>('reg-name'),
   group: $<HTMLInputElement>('reg-group'),
+  kinds: $('reg-kinds'),
   link: $<HTMLInputElement>('reg-link'),
   ok: $<HTMLInputElement>('reg-ok'),
   make: $<HTMLButtonElement>('reg-make'),
@@ -440,19 +442,37 @@ const reg = {
   form: $<HTMLAnchorElement>('reg-form'),
   howto: $('reg-howto'),
 };
+// (the category boxes: both languages in the label, like the rest of the page)
+reg.kinds.replaceChildren(
+  ...KINDS.map((k) => {
+    const box = el('input');
+    box.type = 'checkbox';
+    box.value = String(k.bit);
+    const label = el('label', 'check');
+    const ja = el('span', undefined, k.ja);
+    ja.lang = 'ja';
+    const en = el('span', undefined, k.en);
+    en.lang = 'en';
+    label.append(box, ' ', ja, en);
+    return label;
+  }),
+);
+const kindBoxes = () => [...reg.kinds.querySelectorAll<HTMLInputElement>('input[type=checkbox]')];
 function resetRegister(name: string): void {
   reg.box.open = false;
   reg.name.value = name;
   reg.group.value = '';
   reg.link.value = '';
   reg.ok.checked = false;
+  for (const b of kindBoxes()) b.checked = false;
   reg.problems.hidden = reg.out.hidden = true;
   reg.problems.replaceChildren();
   reg.code.value = '';
 }
 reg.make.addEventListener('click', () => {
   if (!target?.reg) return;
-  const sub = makeSubmission({ name: reg.name.value, group: reg.group.value, link: reg.link.value, quality: target.reg.quality, features: target.features, consent: reg.ok.checked });
+  const kinds = kindBoxes().reduce((m, b) => (b.checked ? m | (1 << Number(b.value)) : m), 0);
+  const sub = makeSubmission({ name: reg.name.value, group: reg.group.value, kinds, link: reg.link.value, quality: target.reg.quality, features: target.features, consent: reg.ok.checked });
   const problems = checkSubmission(sub);
   reg.problems.replaceChildren(...problems.map((p) => el('li', undefined, p.text)));
   reg.problems.hidden = !problems.length;

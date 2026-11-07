@@ -81,7 +81,7 @@
           <details class="register" id="register" hidden>
             <summary><span lang="ja">この声をサイトに登録する（ログインなし・だれでも）</span><span lang="en">Add this voice to the site (anyone, no login)</span></summary>
             <div class="register-body">
-              <p class="hint"><span lang="ja">登録すると、この声の数字・名前・リンクが公開され、声をくらべるページの相手になります。毎日まとめて確かめ、別々の 3 人以上の数字がそろった声から出します。音は送りません。あなたの名前やメールも送りません。</span><span lang="en">When added, this voice’s numbers, name and link become public and can be compared on the main page. Entries are checked once a day; a voice appears once three or more separate entries agree. No sound is sent, and neither is your name or email.</span></p>
+              <p class="hint"><span lang="ja">登録すると、この声の数字・名前・所属・大枠・リンクが公開され、声をくらべるページの相手になります。毎日まとめて確かめ、別々の 3 人以上の数字がそろった声から出します。音は送りません。あなたの名前やメールも送りません。</span><span lang="en">When added, this voice’s numbers, name, agency, category and link become public and can be compared on the main page. Entries are checked once a day; a voice appears once three or more separate entries agree. No sound is sent, and neither is your name or email.</span></p>
               <div class="field">
                 <label for="reg-name"><span lang="ja">名前（必須）</span><span lang="en">Name (required)</span></label>
                 <input type="text" id="reg-name" maxlength="40" autocomplete="off" />
@@ -90,6 +90,10 @@
                 <label for="reg-group"><span lang="ja">所属・作品名</span><span lang="en">Agency or title</span></label>
                 <input type="text" id="reg-group" maxlength="40" autocomplete="off" />
               </div>
+              <fieldset class="kind-field">
+                <legend><span lang="ja">大枠（必須・当てはまる物をすべて）</span><span lang="en">Category (required, tick all that apply)</span></legend>
+                <div class="kind-checks" id="reg-kinds"></div>
+              </fieldset>
               <div class="field">
                 <label for="reg-link"><span lang="ja">公式ページの URL（必須）</span><span lang="en">URL of an official page (required)</span></label>
                 <input type="url" id="reg-link" maxlength="300" autocomplete="off" placeholder="https://" aria-describedby="reg-link-hint" />

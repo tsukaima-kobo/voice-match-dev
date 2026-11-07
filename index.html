@@ -75,6 +75,10 @@
             </div>
             <button type="button" class="primary" id="more">もう一言話して、絞り込む</button>
           </div>
+          <div class="kind-filter" id="kind-filter" role="group" aria-label="探す範囲" data-en-aria-label="Search within" hidden>
+            <span class="kf-label"><span lang="ja">探す範囲</span><span lang="en">Search within</span></span>
+            <div class="kf-chips" id="kind-chips"></div>
+          </div>
           <ol class="matches" id="matches"></ol>
           <div class="empty-card" id="no-data" hidden><p><span lang="ja">比べる声のデータは、いま準備中です。今はあなたの声の数字だけを出しています。</span><span lang="en">The voices to compare with are still being prepared. For now, only your own numbers are shown.</span></p></div>
           <p class="empty"><span lang="ja">探している声が無い時は、<a href="./mimic.html">声真似の点数のページ</a>でその声をお手本として測り、登録できます。</span><span lang="en">Can’t find the voice you are looking for? Measure it as a model on the <a href="./mimic.html">mimic score page</a> and add it.</span></p>

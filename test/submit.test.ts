@@ -20,7 +20,7 @@ const voice = (f0: number, seed: number): Features => {
 };
 const A = voice(220, 1);
 const quality = { voicedSeconds: 11.2, gapTonal: 0.02, snrDb: 40 };
-const sub = (o: Partial<Parameters<typeof makeSubmission>[0]> = {}) => makeSubmission({ name: '試験のキャラ', group: '試験の作品', link: 'https://example.com/chara', quality, features: A, consent: true, ...o });
+const sub = (o: Partial<Parameters<typeof makeSubmission>[0]> = {}) => makeSubmission({ name: '試験のキャラ', group: '試験の作品', kinds: 0b1001, link: 'https://example.com/chara', quality, features: A, consent: true, ...o });
 
 describe('送る内容と壁 ①', () => {
   it('goes there and back, and a good one has no problems', () => {
@@ -37,6 +37,8 @@ describe('送る内容と壁 ①', () => {
   it('turns away a missing consent, a bad name, a bad link, a poor recording', () => {
     const kinds = (s: ReturnType<typeof sub>) => checkSubmission(s).map((p) => p.kind);
     expect(kinds(sub({ consent: false }))).toContain('consent');
+    expect(kinds(sub({ kinds: 0 }))).toContain('kinds');
+    expect(kinds(sub({ kinds: 1 << 12 }))).toContain('kinds');
     expect(kinds(sub({ name: '' }))).toContain('name');
     expect(kinds(sub({ name: 'https://spam.example' }))).toContain('name');
     expect(kinds(sub({ link: 'http://example.com' }))).toContain('link');
@@ -94,7 +96,7 @@ describe('取り込み', () => {
     );
     expect(r.counts).toMatchObject({ rows: 5, judgedNg: 1, pending: 1, accepted: 3 });
     expect(r.voices).toHaveLength(1);
-    expect(r.voices[0]).toMatchObject({ id: userIdOf(nameKey('試験のキャラ')), name: '試験のキャラ', link: 'https://example.com/chara', used: 3 });
+    expect(r.voices[0]).toMatchObject({ id: userIdOf(nameKey('試験のキャラ')), name: '試験のキャラ', kinds: 0b1001, link: 'https://example.com/chara', used: 3 });
     // (the same name, written a little differently, is the same ID every day; another name, another ID)
     expect(userIdOf(nameKey('試験の キャラ'))).toBe(r.voices[0]!.id);
     expect(userIdOf(nameKey('べつのこえ'))).not.toBe(r.voices[0]!.id);
@@ -124,11 +126,21 @@ describe('取り込み', () => {
 });
 
 describe('送る内容に入る物', () => {
-  it('数字・名前・所属・公式ページ・測り方と声の質・同意だけ（お手本の聞かせ方は入れない）', () => {
-    expect(Object.keys(sub()).sort()).toEqual(['f', 'g', 'l', 'm', 'n', 'ok', 'q', 'v']);
+  it('数字・名前・所属・大枠・公式ページ・測り方と声の質・同意だけ（お手本の聞かせ方は入れない）', () => {
+    expect(Object.keys(sub()).sort()).toEqual(['f', 'g', 'k', 'l', 'm', 'n', 'ok', 'q', 'v']);
   });
   it('前の形（聞かせ方 s が入った物）も読める。s は使わない', () => {
     const old = { ...sub(), s: 'mic' };
     expect(decodeSubmission(CODE_PREFIX + JSON.stringify(old))?.n).toBe('試験のキャラ');
+  });
+});
+
+describe('登録の大枠', () => {
+  it('そろった登録の半分以上が選んだ大枠だけを付ける', async () => {
+    const { majorityKinds } = await import('../tools/intake-lib.ts');
+    // (VTuber in all three, singer in two, voice actor in one)
+    expect(majorityKinds([0b101, 0b101, 0b1001])).toBe(0b101);
+    expect(majorityKinds([0b1, 0b10])).toBe(0b11);
+    expect(majorityKinds([])).toBe(0);
   });
 });

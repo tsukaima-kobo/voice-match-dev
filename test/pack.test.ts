@@ -17,7 +17,7 @@ function voicesOf(n: number, seed = 1): { voices: CatalogEntry[]; features: Feat
   const voices: CatalogEntry[] = [];
   const features: Features[] = [];
   for (let i = 0; i < n; i++) {
-    voices.push({ id: `v-${String(i).padStart(4, '0')}`, name: `声 ${i}`, ...(i % 3 ? { group: `所属 ${i % 4}` } : {}), links: { profile: `https://example.com/${i}` } });
+    voices.push({ id: `v-${String(i).padStart(4, '0')}`, name: `声 ${i}`, ...(i % 3 ? { group: `所属 ${i % 4}` } : {}), ...(i % 5 ? { kinds: i % 2 ? ['vtuber', 'singer'] : ['other'] } : {}), links: { profile: `https://example.com/${i}` } });
     features.push(
       Object.fromEntries(
         FEATURE_KEYS.map((k) => {
@@ -32,7 +32,7 @@ function voicesOf(n: number, seed = 1): { voices: CatalogEntry[]; features: Feat
 }
 
 describe('声のデータを詰める', () => {
-  it('ほどくと、名前・所属・リンク・無い項目が元のとおり', () => {
+  it('ほどくと、名前・所属・大枠・リンク・無い項目が元のとおり', () => {
     const { voices, features } = voicesOf(37);
     const out = unpackVoices(packVoices(MEASURE_VERSION, voices, features));
     expect(out.voices.map(({ id: _, ...v }) => v)).toEqual(voices.map(({ id: _, ...v }) => v));
@@ -56,10 +56,10 @@ describe('声のデータを詰める', () => {
     });
   });
 
-  it('入れるのは名前・所属・公式ページ・数字だけ（ID は入れない）', () => {
+  it('入れるのは名前・所属・大枠・公式ページ・数字だけ（ID は入れない）', () => {
     const { voices, features } = voicesOf(5, 7);
     const pack = packVoices(MEASURE_VERSION, voices, features);
-    expect(Object.keys(pack).sort()).toEqual(['f', 'g', 'groups', 'keys', 'link', 'lo', 'm', 'name', 'step', 'v']);
+    expect(Object.keys(pack).sort()).toEqual(['f', 'g', 'groups', 'k', 'keys', 'link', 'lo', 'm', 'name', 'step', 'v']);
     expect(JSON.stringify(pack)).not.toContain('v-000');
   });
 
@@ -91,7 +91,7 @@ describe('声のデータを詰める', () => {
     const model = defaultModel(MEASURE_VERSION);
     // (after unpacking, the id is the position in the list)
     const before = voices.map((_, i) => ({ id: String(i), features: features[i]! }));
-    const after = unpackVoices(packVoices(MEASURE_VERSION, voices, features)).profiles as typeof before;
+    const after = unpackVoices(packVoices(MEASURE_VERSION, voices, features)).profiles.map(({ id, features }) => ({ id, features: features as Features }));
     const r = series(9);
     for (let t = 0; t < 40; t++) {
       const base = features[(t * 7) % 300]!;
@@ -106,5 +106,15 @@ describe('声のデータを詰める', () => {
     expect(() => packVoices(MEASURE_VERSION, voices, features.slice(1))).toThrow();
     const pack = packVoices(MEASURE_VERSION, voices, features);
     expect(() => unpackVoices({ ...pack, f: pack.f.slice(4) })).toThrow();
+  });
+});
+
+describe('大枠の印', () => {
+  it('ほどいた数字に、大枠の印（VTuber は 1、歌手は 4、その他は 1<<15）が付く', () => {
+    const { voices, features } = voicesOf(10);
+    const out = unpackVoices(packVoices(MEASURE_VERSION, voices, features));
+    expect(out.profiles[1]!.kinds).toBe(0b101);
+    expect(out.profiles[2]!.kinds).toBe(1 << 15);
+    expect(out.profiles[0]!.kinds).toBe(0);
   });
 });

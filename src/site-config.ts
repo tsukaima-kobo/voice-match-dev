@@ -2,6 +2,7 @@
 // - url: 公開の住所（X の投稿・OGP に入れる）。ビルドの時に VITE_SITE_URL で上書きできる（本番のリポジトリで使う）。
 // - maker: 作った人（使い魔工房）のリンク。https:// で始まる物だけが出る。新しいタブで開く。
 // - github: GitHub のリポジトリ（"owner/name"）。空の間は、スターの導線を一つも出さない（本番のリリースまで空にしておく）。
+// - removal: 削除のお願いの窓口（Google フォーム・メール・GitHub の Issue）。
 export type MakerLinkId = 'x' | 'youtube' | 'note' | 'zenn' | 'qiita';
 
 const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
@@ -23,6 +24,12 @@ export const SITE = {
   },
   /** 例: "tsukaima-kobo/voice-match"。本番のリリースまで空（スターの導線を出さない） */
   github: '',
+  /** 削除のお願いの窓口（しくみと約束の 07）。issues は Issue を立てるリポジトリ（本番のリリースで本番のリポジトリにする） */
+  removal: {
+    form: 'https://docs.google.com/forms/d/e/1FAIpQLSeWtH6Ymeb1bNpSxf8iAe3JI5Qiq_AIDF3TuZgJM35KxaJoJg/viewform',
+    email: 'contact@voice-match.com',
+    issues: 'tsukaima-kobo/voice-match-dev',
+  },
 };
 
 /** 出す順番と、サービスの名前 */

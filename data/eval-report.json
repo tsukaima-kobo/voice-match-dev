@@ -1,211 +1,211 @@
 {
  "measureVersion": "3.1.0",
- "speakers": 163,
- "windows": 5269,
+ "speakers": 288,
+ "windows": 9349,
  "diagonal": {
-  "queries": 5217,
-  "top1": 0.5045045045045045,
-  "top5": 0.7176538240368028
+  "queries": 9321,
+  "top1": 0.44480205986482135,
+  "top5": 0.6560454886814719
  },
  "whiten": {
-  "queries": 5217,
-  "top1": 0.5911443358251869,
-  "top5": 0.7891508529806402
+  "queries": 9321,
+  "top1": 0.5503701319600901,
+  "top5": 0.7467009977470228
  },
  "chosen": "whiten",
  "bgm": {
   "diagonal": {
-   "queries": 5217,
-   "top1": 0.4594594594594595,
-   "top5": 0.6854514088556641
+   "queries": 9321,
+   "top1": 0.4119729642742195,
+   "top5": 0.628580624396524
   },
   "whiten": {
-   "queries": 5217,
-   "top1": 0.52635614337742,
-   "top5": 0.7341383937128618
+   "queries": 9321,
+   "top1": 0.4777384400815363,
+   "top5": 0.6923076923076923
   },
   "chosen": "whiten"
  },
  "items": [
   {
    "key": "pitch",
-   "icc": 0.923
+   "icc": 0.935
   },
   {
    "key": "pitchRange",
-   "icc": 0.565
-  },
-  {
-   "key": "pitchSkew",
-   "icc": 0.25
-  },
-  {
-   "key": "pitchMotion",
-   "icc": 0.411
-  },
-  {
-   "key": "f1",
-   "icc": 0.738
-  },
-  {
-   "key": "f2",
-   "icc": 0.577
-  },
-  {
-   "key": "f3",
-   "icc": 0.81
-  },
-  {
-   "key": "f4",
-   "icc": 0.906
-  },
-  {
-   "key": "formantSpacing",
-   "icc": 0.813
-  },
-  {
-   "key": "f1Range",
-   "icc": 0.625
-  },
-  {
-   "key": "f2Range",
-   "icc": 0.575
-  },
-  {
-   "key": "b1",
-   "icc": 0.598
-  },
-  {
-   "key": "b2",
-   "icc": 0.741
-  },
-  {
-   "key": "centroid",
-   "icc": 0.707
-  },
-  {
-   "key": "hammarberg",
-   "icc": 0.642
-  },
-  {
-   "key": "slopeLow",
-   "icc": 0.847
-  },
-  {
-   "key": "slopeMid",
-   "icc": 0.562
-  },
-  {
-   "key": "mfcc1",
-   "icc": 0.794
-  },
-  {
-   "key": "mfcc2",
-   "icc": 0.708
-  },
-  {
-   "key": "mfcc3",
-   "icc": 0.89
-  },
-  {
-   "key": "mfcc4",
-   "icc": 0.756
-  },
-  {
-   "key": "mfcc5",
-   "icc": 0.676
-  },
-  {
-   "key": "mfcc6",
-   "icc": 0.842
-  },
-  {
-   "key": "mfcc7",
-   "icc": 0.663
-  },
-  {
-   "key": "mfcc8",
-   "icc": 0.765
-  },
-  {
-   "key": "mfcc9",
-   "icc": 0.693
-  },
-  {
-   "key": "mfcc10",
-   "icc": 0.75
-  },
-  {
-   "key": "mfcc11",
-   "icc": 0.539
-  },
-  {
-   "key": "mfcc12",
-   "icc": 0.63
-  },
-  {
-   "key": "mfcc13",
-   "icc": 0.602
-  },
-  {
-   "key": "mfccDelta",
-   "icc": 0.563
-  },
-  {
-   "key": "hnr",
-   "icc": 0.719
-  },
-  {
-   "key": "cpp",
-   "icc": 0.639
-  },
-  {
-   "key": "h1h2",
    "icc": 0.61
   },
   {
-   "key": "jitter",
-   "icc": 0.53
+   "key": "pitchSkew",
+   "icc": 0.261
   },
   {
-   "key": "shimmer",
+   "key": "pitchMotion",
+   "icc": 0.427
+  },
+  {
+   "key": "f1",
+   "icc": 0.75
+  },
+  {
+   "key": "f2",
+   "icc": 0.551
+  },
+  {
+   "key": "f3",
+   "icc": 0.803
+  },
+  {
+   "key": "f4",
+   "icc": 0.912
+  },
+  {
+   "key": "formantSpacing",
+   "icc": 0.807
+  },
+  {
+   "key": "f1Range",
+   "icc": 0.632
+  },
+  {
+   "key": "f2Range",
+   "icc": 0.566
+  },
+  {
+   "key": "b1",
+   "icc": 0.627
+  },
+  {
+   "key": "b2",
+   "icc": 0.747
+  },
+  {
+   "key": "centroid",
+   "icc": 0.7
+  },
+  {
+   "key": "hammarberg",
    "icc": 0.657
   },
   {
+   "key": "slopeLow",
+   "icc": 0.842
+  },
+  {
+   "key": "slopeMid",
+   "icc": 0.611
+  },
+  {
+   "key": "mfcc1",
+   "icc": 0.798
+  },
+  {
+   "key": "mfcc2",
+   "icc": 0.723
+  },
+  {
+   "key": "mfcc3",
+   "icc": 0.892
+  },
+  {
+   "key": "mfcc4",
+   "icc": 0.75
+  },
+  {
+   "key": "mfcc5",
+   "icc": 0.702
+  },
+  {
+   "key": "mfcc6",
+   "icc": 0.851
+  },
+  {
+   "key": "mfcc7",
+   "icc": 0.657
+  },
+  {
+   "key": "mfcc8",
+   "icc": 0.79
+  },
+  {
+   "key": "mfcc9",
+   "icc": 0.707
+  },
+  {
+   "key": "mfcc10",
+   "icc": 0.773
+  },
+  {
+   "key": "mfcc11",
+   "icc": 0.568
+  },
+  {
+   "key": "mfcc12",
+   "icc": 0.633
+  },
+  {
+   "key": "mfcc13",
+   "icc": 0.599
+  },
+  {
+   "key": "mfccDelta",
+   "icc": 0.561
+  },
+  {
+   "key": "hnr",
+   "icc": 0.735
+  },
+  {
+   "key": "cpp",
+   "icc": 0.645
+  },
+  {
+   "key": "h1h2",
+   "icc": 0.631
+  },
+  {
+   "key": "jitter",
+   "icc": 0.574
+  },
+  {
+   "key": "shimmer",
+   "icc": 0.7
+  },
+  {
    "key": "rate",
-   "icc": 0.422
+   "icc": 0.427
   },
   {
    "key": "rateVar",
-   "icc": 0.072
+   "icc": 0.071
   },
   {
    "key": "pauseShare",
-   "icc": 0.433
+   "icc": 0.402
   },
   {
    "key": "pauseLen",
-   "icc": 0.232
+   "icc": 0.193
   },
   {
    "key": "runLen",
-   "icc": 0.168
+   "icc": 0.146
   },
   {
    "key": "rhythm",
-   "icc": 0.13
+   "icc": 0.155
   },
   {
    "key": "voicedShare",
-   "icc": 0.419
+   "icc": 0.467
   },
   {
    "key": "levelRange",
-   "icc": 0.538
+   "icc": 0.518
   },
   {
    "key": "tilt",
-   "icc": 0.717
+   "icc": 0.749
   }
  ]
 }
