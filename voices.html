@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>声の一覧｜voice-match</title>
+    <meta name="description" content="このサイトで比べる相手になる声の一覧です。名前・所属で探して、大枠（VTuber・歌手など）で絞れます。" />
+    <meta name="theme-color" content="#f7f6fd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f0d1c" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0478f'/%3E%3Cstop offset='.55' stop-color='%237a4dff'/%3E%3Cstop offset='1' stop-color='%2362d8ec'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='14' fill='url(%23g)'/%3E%3C/svg%3E" />
+    <script src="./lang.js"></script>
+    <link rel="stylesheet" href="/src/ui/base.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="site">
+        <a class="logo" href="./"><i class="logo-orb" aria-hidden="true"></i>voice<span>-</span>match</a>
+        <nav aria-label="ページ" data-en-aria-label="Pages"><a href="./"><span lang="ja">声をくらべる</span><span lang="en">Compare</span></a><a href="./mimic.html"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a><a href="./voices.html" aria-current="page"><span lang="ja">声の一覧</span><span lang="en">Voices</span></a><a href="./about.html"><span lang="ja">しくみと約束</span><span lang="en">How it works</span></a></nav>
+      </header>
+      <main>
+        <section class="doc-hero">
+          <p class="eyebrow"><span lang="ja">このサイトに入っている声</span><span lang="en">Voices on this site</span></p>
+          <h1><span lang="ja">声の<span class="grad">一覧</span></span><span lang="en">The <span class="grad">voices</span></span></h1>
+          <p class="lead"><span lang="ja">声をくらべるページで、比べる相手になる声です。推しの声が入っているか、名前や所属で探してみてください。</span><span lang="en">These are the voices your voice is compared with. Search by name or agency to see whether a voice you love is here.</span></p>
+        </section>
+
+        <div class="vl-body">
+        <section class="vl-tools card" aria-label="探す" data-en-aria-label="Search">
+          <div class="field vl-search">
+            <label for="vl-q"><span lang="ja">名前・所属で探す</span><span lang="en">Search by name or agency</span></label>
+            <input type="search" id="vl-q" maxlength="60" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="kind-filter" id="kind-filter" role="group" aria-label="大枠" data-en-aria-label="Category" hidden>
+            <span class="kf-label"><span lang="ja">大枠</span><span lang="en">Category</span></span>
+            <div class="kf-chips" id="kind-chips"></div>
+          </div>
+          <p class="vl-count" id="vl-count" role="status" aria-live="polite"></p>
+        </section>
+
+        <div class="vl-groups" id="vl-groups"></div>
+        <div class="actions vl-more-row"><button type="button" id="vl-more" hidden></button></div>
+        </div>
+
+        <section class="card vl-missing" id="vl-missing">
+          <h2><span lang="ja">見つからない時は</span><span lang="en">If a voice is not here</span></h2>
+          <p><span lang="ja">だれでも、ログインなしで声を登録できます。<a href="./mimic.html">声真似の点数</a>のページで、その声のお手本を聞かせると、登録の欄が出ます。名前・所属・大枠の書き方は、この一覧を参考にしてください。</span><span lang="en">Anyone can add a voice, with no login. On the <a href="./mimic.html">Mimic score</a> page, play a sample of that voice and the form to add it appears. Use this list as a guide to how names, agencies and categories are written.</span></p>
+          <p class="hint"><span lang="ja">ご本人や事務所の方で、載せないでほしい時は、<a href="./about.html#removal">データの削除のお願い</a>からお知らせください。</span><span lang="en">If you are the person or their agency and would like a voice taken off, please use <a href="./about.html#removal">Ask for removal</a>.</span></p>
+        </section>
+      </main>
+
+      <footer class="site-foot">
+        <div>
+          <p class="foot-logo">voice<span>-</span>match</p>
+          <p><span lang="ja">音は保存も送信もしません。声から性別や年齢を判断しません。</span><span lang="en">Sound is never stored or sent. Gender and age are never guessed from a voice.</span></p>
+        </div>
+        <p class="foot-links"><a href="./"><span lang="ja">声をくらべる</span><span lang="en">Compare</span></a><a href="./mimic.html"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a><a href="./about.html"><span lang="ja">しくみと約束</span><span lang="en">How it works</span></a><a href="./measure.html"><span lang="ja">じっくり測る</span><span lang="en">Measure in depth</span></a><a href="./about.html#removal"><span lang="ja">データの削除のお願い</span><span lang="en">Ask for removal</span></a></p>
+      </footer>
+    </div>
+    <script type="module" src="/src/ui/voices-page.ts"></script>
+  </body>
+</html>

@@ -22,6 +22,7 @@ const SITE_URL = (process.env.VITE_SITE_URL || 'https://tsukaima-kobo.github.io/
 const OG: Record<string, { title: string; description: string }> = {
   'index.html': { title: 'voice-match｜あなたの声は誰に近い？', description: '一言話すと、声を 45 項目で測って、近い声と、あなただけの声紋を出します。登録不要・音は送らない。Say a phrase and see whose voice is closest to yours, plus your own voiceprint.' },
   'mimic.html': { title: '声真似の点数｜voice-match', description: 'お手本のセリフを真似すると、抑揚・タイミング・声の質で点数と直し方を出します。Imitate a line and get a score with tips.' },
+  'voices.html': { title: '声の一覧｜voice-match', description: 'このサイトで比べる相手になる声の一覧。名前・所属で探して、大枠（VTuber・歌手など）で絞れます。The voices on voice-match, searchable by name or agency.' },
   'about.html': { title: 'しくみと約束｜voice-match', description: '声をどう測り、どう比べるか。音を送らない・残さない約束。How voice-match measures voices, and our promises.' },
 };
 const ogp = (): Plugin => ({
@@ -90,6 +91,7 @@ export default defineConfig({
         about: fileURLToPath(new URL('./about.html', import.meta.url)),
         mimic: fileURLToPath(new URL('./mimic.html', import.meta.url)),
         measure: fileURLToPath(new URL('./measure.html', import.meta.url)),
+        voices: fileURLToPath(new URL('./voices.html', import.meta.url)),
       },
     },
   },
