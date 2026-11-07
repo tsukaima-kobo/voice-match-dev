@@ -4,7 +4,7 @@
 // 音はメモリーの中だけ。数字にしたらすぐ捨てる（前の回の音も残さない。残すのは数字だけ）。どこにも送らない（fetch などを使わない）、端末にも残さない。
 // 終わった時・やめた時・ページが隠れた時は、すぐマイクを止める。声から性別や年齢を判断しない。
 // 言葉は日本語と英語（i18n.ts）。切り替えた時は、お題・案内・結果を、今の言葉で出し直す（数字はそのまま）。
-import { nextPromptIndex, promptText, readingText } from '../prompts/prompts.ts';
+import { nextPromptIndex, nextReadingIndex, promptText, readingText } from '../prompts/prompts.ts';
 import { openMic, micErrorText, openTabAudio, tabAudioSupported, tabErrorText, type Mic } from '../voice/listen.ts';
 import { type MeasureFail, type Measured } from '../voice/measure.ts';
 import { createWave } from '../voice/wave.ts';
@@ -83,6 +83,8 @@ let got = 0;
 let raf = 0;
 let topic = 0;
 let reading = false;
+/** 決まった文の番号 */
+let passage = nextReadingIndex(null);
 /** これまでの回の数字（音は持たない） */
 let takes: Take[] = [];
 /** 前の結果の並び（上がった・下がったを出すため） */
@@ -93,18 +95,19 @@ let shown: { c: Combined; m: Extract<Measured, { ok: true }>; before: string[] }
 /* ---- お題 ---- */
 function showTopic() {
   topicLabel.textContent = reading ? t('決まった文（ふだんの声で読んでください）', 'Set text (read it in your usual voice)') : t('お題（自由に話してください）', 'Prompt (talk freely)');
-  topicText.textContent = reading ? readingText() : promptText(topic);
+  topicText.textContent = reading ? readingText(passage) : promptText(topic);
   topicText.classList.toggle('reading', reading);
   btn.read.textContent = reading ? t('お題にもどす', 'Back to prompts') : t('決まった文を読む', 'Read a set text');
-  btn.next.textContent = t('次のお題', 'Next prompt');
+  btn.next.textContent = reading ? t('次の文', 'Next text') : t('次のお題', 'Next prompt');
 }
 btn.next.addEventListener('click', () => {
-  reading = false;
-  topic = nextPromptIndex(topic);
+  if (reading) passage = nextReadingIndex(passage);
+  else topic = nextPromptIndex(topic);
   showTopic();
 });
 btn.read.addEventListener('click', () => {
   reading = !reading;
+  if (reading) passage = nextReadingIndex(passage);
   showTopic();
 });
 topic = nextPromptIndex(null);

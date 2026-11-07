@@ -24,7 +24,7 @@ import { mountShapes } from './voiceprint.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { adviceFor, differences, mimicScore, scoreWord } from '../mimic/mimic.ts';
 import { ENTRY_BY_ID, PROFILES, voicesReady } from '../data/load.ts';
-import { nextPromptIndex, promptText, readingText } from '../prompts/prompts.ts';
+import { nextPromptIndex, nextReadingIndex, promptText, readingText } from '../prompts/prompts.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 import { checkSubmission, encodeSubmission, makeSubmission } from '../submit/code.ts';
@@ -515,20 +515,23 @@ const lineHint = $('line-hint');
 const topic = { label: $('topic-label'), text: $('topic-text'), next: $<HTMLButtonElement>('topic-next'), read: $<HTMLButtonElement>('topic-read') };
 let prompt = nextPromptIndex(null);
 let reading = false;
+/** 決まった文の番号 */
+let passage = nextReadingIndex(null);
 function showTopic(): void {
   topic.label.textContent = reading ? t('決まった文（お手本の声で読んでください）', 'Set text (read it in the model’s voice)') : t('お題（お手本の声で話してください）', 'Prompt (talk in the model’s voice)');
-  topic.text.textContent = reading ? readingText() : promptText(prompt);
+  topic.text.textContent = reading ? readingText(passage) : promptText(prompt);
   topic.text.classList.toggle('reading', reading);
   topic.read.textContent = reading ? t('お題にもどす', 'Back to prompts') : t('決まった文を読む', 'Read a set text');
-  topic.next.textContent = t('次のお題', 'Next prompt');
+  topic.next.textContent = reading ? t('次の文', 'Next text') : t('次のお題', 'Next prompt');
 }
 topic.next.addEventListener('click', () => {
-  reading = false;
-  prompt = nextPromptIndex(prompt);
+  if (reading) passage = nextReadingIndex(passage);
+  else prompt = nextPromptIndex(prompt);
   showTopic();
 });
 topic.read.addEventListener('click', () => {
   reading = !reading;
+  if (reading) passage = nextReadingIndex(passage);
   showTopic();
 });
 showTopic();
