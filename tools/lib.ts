@@ -7,7 +7,7 @@ import { medianFeatures } from '../src/voice/combine.ts';
 /** 項目ごとの中央値（サイトのお手本と同じ計算。src/voice/combine.ts） */
 /** 項目ごとの中央値（サイトの音声ファイルのお手本と同じ計算。src/voice/combine.ts） */
 export { medianFeatures };
-import { rank, type MatchModel, type Profile } from '../src/match/match.ts';
+import { rank, standardize, type MatchModel, type Profile } from '../src/match/match.ts';
 import type { VoiceWindow } from '../src/data/types.ts';
 
 /** 窓を使う条件 */
@@ -200,4 +200,46 @@ export function evaluate(speakers: readonly Speaker[], model: MatchModel | ((tra
     }
   }
   return { queries, top1: queries ? top1 / queries : NaN, top5: queries ? top5 / queries : NaN };
+}
+
+/** 近さの言葉の目安で、データに居ない人の 1 位が入る割合（「とても似ている」まで・「よく似ている」まで・「似ている」まで） */
+export const LIKENESS_SHARE = [0.4, 0.8, 0.99] as const;
+
+/**
+ * 近さの言葉の目安（model.likeness）: 窓 1 つ（来た人の声 1 回分）ずつを、本人を除いた全員と比べ、
+ * 全員への近さの中央値のふつう（typical）と、1 位の直した近さ（src/match/match.ts の farScale と同じ縮め方）の分布から決める。
+ * データに居ない人の 1 位が、LIKENESS_SHARE の割合で各言葉に入るようにする。
+ */
+export function likenessScale(speakers: readonly Speaker[], model: MatchModel): { typical: number; cuts: [number, number, number] } {
+  const w = model.weight.map((x) => Math.round(Math.max(0, x) * 1000));
+  const z = (f: Features, query: boolean) => standardize(model, f, query);
+  const profiles = speakers.map((s) => z(medianFeatures(s.windows), false));
+  const d2 = (u: (number | null)[], v: (number | null)[]) => {
+    let a = 0,
+      ws = 0;
+    for (let i = 0; i < u.length; i++) {
+      const x = u[i],
+        y = v[i];
+      if (x === null || x === undefined || y === null || y === undefined || !w[i]) continue;
+      a += w[i]! * (x - y) ** 2;
+      ws += w[i]!;
+    }
+    return ws ? a / ws / 1e8 : NaN;
+  };
+  const mids: number[] = [],
+    ones: number[] = [];
+  speakers.forEach((s, si) => {
+    for (const q of s.windows) {
+      const u = z(q.features, true);
+      const d = profiles.flatMap((p, i) => (i === si ? [] : [d2(u, p)])).filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+      if (!d.length) continue;
+      mids.push(Math.sqrt(d.length % 2 ? d[d.length >> 1]! : (d[d.length / 2 - 1]! + d[d.length / 2]!) / 2));
+      ones.push(Math.sqrt(d[0]!));
+    }
+  });
+  if (!mids.length) return { typical: 0, cuts: [0.5, 0.9, 1.4] };
+  const typical = quantileOf(mids, 0.5);
+  const near = ones.map((d, i) => (mids[i]! > typical ? (d * typical) / mids[i]! : d));
+  const r = (x: number) => Math.round(x * 10000) / 10000;
+  return { typical: r(typical), cuts: [r(quantileOf(near, LIKENESS_SHARE[0])), r(quantileOf(near, LIKENESS_SHARE[1])), r(quantileOf(near, LIKENESS_SHARE[2]))] };
 }

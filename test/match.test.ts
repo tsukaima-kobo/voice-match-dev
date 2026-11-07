@@ -1,8 +1,8 @@
 // 照合（src/match/match.ts）と tools/lib.ts の試験。数字は種つきの乱数で作る（声の合成はしない）。
 import { describe, expect, it } from 'vitest';
 import { FEATURE_KEYS, FEATURE_BY_KEY, type Features } from '../src/voice/features.ts';
-import { defaultModel, rank, closeness } from '../src/match/match.ts';
-import { evaluate, fitModel, itemStats, medianFeatures, selectWindows, type Speaker } from '../tools/lib.ts';
+import { defaultModel, rank, closeness, closenessWord, farScale } from '../src/match/match.ts';
+import { evaluate, fitModel, itemStats, LIKENESS_SHARE, likenessScale, medianFeatures, selectWindows, type Speaker } from '../tools/lib.ts';
 import type { VoiceWindow } from '../src/data/types.ts';
 import { gauss, rng } from './voice-synth.ts';
 
@@ -116,5 +116,53 @@ describe('モデルと評価', () => {
     const a = evaluate(speakers, fitModel(speakers, V, { whiten: false }));
     const b = evaluate(noisy, fitModel(noisy, V, { whiten: false }));
     expect(b.top1).toBeLessThan(a.top1);
+  });
+});
+
+describe('近さの言葉', () => {
+  const speakers = crowd(40, 0.12, 3);
+  const fitted = fitModel(speakers, V, { whiten: true });
+  const model = { ...fitted, likeness: likenessScale(speakers, fitted) };
+  const WORDS = ['とても似ている', 'よく似ている', '似ている', '似ている所がある'];
+  /** 窓 1 つずつを、本人を除いた全員と比べた時の、1 位の言葉の割合。shift は来た人の全項目に足すずれ（目盛りの割合） */
+  function shares(shift: number, useScale: boolean): number[] {
+    const n = [0, 0, 0, 0];
+    speakers.forEach((s, si) => {
+      const others = speakers.flatMap((o, oi) => (oi === si ? [] : [{ id: o.id, features: medianFeatures(o.windows) }]));
+      for (const w of s.windows) {
+        const f = Object.fromEntries(FEATURE_KEYS.map((k) => [k, FEATURE_BY_KEY[k].log ? w.features[k]! * Math.exp(shift) : w.features[k]! + shift * (FEATURE_BY_KEY[k].hi - FEATURE_BY_KEY[k].lo)])) as Features;
+        const top = rank(model, f, others, 1)[0]!;
+        const at = WORDS.indexOf(closenessWord(model, top.distance, useScale ? farScale(model, f, others) : 1));
+        n[at] = n[at]! + 1;
+      }
+    });
+    const all = n.reduce((a, b) => a + b, 0);
+    return n.map((x) => x / all);
+  }
+  it('makes the scale from the data: the cuts go up, and the typical distance to everyone is farther than the cuts', () => {
+    const { typical, cuts } = model.likeness!;
+    expect(cuts[0]).toBeLessThan(cuts[1]);
+    expect(cuts[1]).toBeLessThan(cuts[2]);
+    expect(typical).toBeGreaterThan(cuts[2]);
+  });
+  it('gives the first voice of someone not in the data the words in the planned shares', () => {
+    const s = shares(0, true);
+    expect(s[0]).toBeCloseTo(LIKENESS_SHARE[0], 1);
+    expect(s[0]! + s[1]!).toBeCloseTo(LIKENESS_SHARE[1], 1);
+    expect(s[3]).toBeLessThan(0.05);
+  });
+  it('keeps the words when a mic moves the voice away from everyone at once (and would not without the scale)', () => {
+    const plain = shares(0.05, false);
+    const kept = shares(0.05, true);
+    expect(plain[3]).toBeGreaterThan(0.3);
+    expect(kept[3]).toBeLessThan(0.1);
+    expect(kept[0]! + kept[1]!).toBeGreaterThan(0.6);
+  });
+  it('uses the fixed scale when the model has none', () => {
+    const m = defaultModel(V);
+    expect(farScale(m, voiceAt({}), [{ id: 'a', features: voiceAt({ pitch: 0.9 }) }])).toBe(1);
+    expect(closenessWord(m, 0.4)).toBe('とても似ている');
+    expect(closenessWord(m, 1.0)).toBe('似ている');
+    expect(closenessWord(m, 2)).toBe('似ている所がある');
   });
 });

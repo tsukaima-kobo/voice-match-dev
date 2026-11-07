@@ -16,7 +16,7 @@ import { mountShapes } from './voiceprint.ts';
 import { FEATURE_BY_KEY, FEATURES, FEW_SECONDS, formatFeature, LONG_SECONDS, ONE_LINE_SECONDS, type Features } from '../voice/features.ts';
 import { CERTAINTY_WORDS, certaintyOf, combineTakes, type Combined, type Take } from '../voice/takes.ts';
 import { el, itemRow, renderGroups } from './items.ts';
-import { closeness, closenessWord, rank } from '../match/match.ts';
+import { closeness, closenessWord, farScale, rank } from '../match/match.ts';
 import { ENTRY_BY_ID, MODEL, MODEL_BGM, PROFILES, voicesReady } from '../data/load.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
 import { KIND_BY_ID, KINDS, kindLabel } from '../data/kinds.ts';
@@ -412,7 +412,10 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
   if (!PROFILES.length) return null;
   const all = candidates();
   const byId = new Map(all.map((p) => [p.id, p]));
-  const ranked = rank(modelNow(), f, all, 5);
+  const model = modelNow();
+  const ranked = rank(model, f, all, 5);
+  // (how far this voice is from everyone at once, as a mic or a room puts it: taken against the whole site, not the chosen kind)
+  const scale = farScale(model, f, PROFILES);
   ranked.forEach((r, at) => {
     const v = entryOf(r.id);
     const li = el('li', 'match');
@@ -421,7 +424,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     a.href = v.links.profile;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
-    name.append(a, el('span', 'near', closenessWord(r.distance)));
+    name.append(a, el('span', 'near', closenessWord(model, r.distance, scale)));
     if (before.length) {
       // (where it was in the result before this take)
       const was = before.indexOf(r.id);
@@ -447,7 +450,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
   });
   // (the share card and the voiceprint pair you with the first voice of the site, not with yourself)
   const first = ranked.find((r) => r.id !== MINE_ID);
-  return first ? { name: ENTRY_BY_ID.get(first.id)!.name, word: closenessWord(first.distance), features: byId.get(first.id)!.features } : null;
+  return first ? { name: ENTRY_BY_ID.get(first.id)!.name, word: closenessWord(model, first.distance, scale), features: byId.get(first.id)!.features } : null;
 }
 
 function renderMine(f: Features) {

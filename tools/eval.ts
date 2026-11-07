@@ -1,7 +1,7 @@
 // 照合のモデルを作り、見分ける力を測る。data/voices/ の窓から:
 // 1. 項目ごとの再現性（ICC）
 // 2. 2 つの作り方（項目ごとの散らばりだけ・白色化）で、1 本の動画を外して本人が 1 位・5 位以内に入る割合
-// 3. よい方を data/model.json に書き、結果を data/eval-report.json に書く
+// 3. よい方を data/model.json に書き、結果を data/eval-report.json に書く。近さの言葉の目安（likeness）もモデルに入れる
 //    data/bgm-shift.json（BGM 入りの音のずれ。tools/bgm-shift.ts）があれば、それを入れたモデルも data/model-bgm.json に書く
 //    （ほかのタブの音を聞かせた時に使う。揺れは同じ人の中の揺れに足し、向きは来た人の数字から引く）。
 //    マイクで話す時は data/model.json（来た人は BGM なしで話すため）。data/channel.json（マイクと配信の経路の差。tools/channel.ts）は両方に足す。
@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { MEASURE_VERSION } from '../src/voice/measure.ts';
 import type { Catalog, VoiceFile } from '../src/data/types.ts';
 import type { FeatureKey } from '../src/voice/features.ts';
-import { evaluate, fitModel, itemStats, SELECT, selectWindows, type Speaker } from './lib.ts';
+import { evaluate, fitModel, itemStats, likenessScale, SELECT, selectWindows, type Speaker } from './lib.ts';
 import { readXlsx } from './xlsx.ts';
 import { sheetWindows, snapshotFromSheet } from './operator-voices-lib.ts';
 
@@ -50,7 +50,9 @@ const items = itemStats(speakers);
 function choose(ch: Partial<Record<FeatureKey, number>> | undefined) {
   const rd = evaluate(speakers, (train) => fitModel(train, MEASURE_VERSION, { whiten: false, channel: ch }));
   const rw = evaluate(speakers, (train) => fitModel(train, MEASURE_VERSION, { whiten: true, channel: ch }));
-  const best = fitModel(speakers, MEASURE_VERSION, { whiten: rw.top1 > rd.top1, channel: ch });
+  const fitted = fitModel(speakers, MEASURE_VERSION, { whiten: rw.top1 > rd.top1, channel: ch });
+  // (the words' scale is taken on the separated windows, before any BGM shift is put on)
+  const best = { ...fitted, likeness: likenessScale(speakers, fitted) };
   return { best, rd, rw };
 }
 const clean = choose(channel);
@@ -71,8 +73,9 @@ const report = {
   diagonal: rd,
   whiten: rw,
   chosen: best.version,
+  likeness: best.likeness,
   bgm: bgm ? { diagonal: bgm.rd, whiten: bgm.rw, chosen: bgm.best.version } : null,
   items: items.map((i) => ({ key: i.key, icc: Math.round(i.icc * 1000) / 1000 })),
 };
 writeFileSync(join(root, 'data/eval-report.json'), JSON.stringify(report, null, 1) + '\n');
-console.log(JSON.stringify({ speakers: report.speakers, windows: report.windows, diagonal: rd, whiten: rw, chosen: best.version }));
+console.log(JSON.stringify({ speakers: report.speakers, windows: report.windows, diagonal: rd, whiten: rw, chosen: best.version, likeness: best.likeness, likenessBgm: bgm?.best.likeness }));

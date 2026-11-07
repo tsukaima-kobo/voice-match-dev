@@ -24,6 +24,11 @@ export interface MatchModel {
    * ほかのタブの音（BGM 入り）を聞かせた時のモデルが持つ（声を抜き出した音との差の平均、tools/bgm-shift.ts）。
    */
   queryShift?: number[];
+  /**
+   * 近さの言葉の目安（tools/eval.ts が、データに居ない人の 1 位の近さの分布から作る）。
+   * typical: 来た人の声 1 回分から全員への近さの中央値の、ふつうの値。cuts: 「とても似ている」「よく似ている」「似ている」の上限（直した近さで）
+   */
+  likeness?: { typical: number; cuts: [number, number, number] };
 }
 
 export interface Profile {
@@ -70,11 +75,11 @@ export function standardize(model: MatchModel, f: Features, query = false): (num
   return out.map((v) => (v === null ? null : Math.round(v * SCALE)));
 }
 
-/** 近い順（同点は ID の小さい順）。`n` 人まで */
-export function rank(model: MatchModel, user: Features, profiles: readonly Profile[], n = 5): Ranked[] {
+/** 全員との二乗距離（整数のまま。d2/wsum が 1 項目あたりの二乗のずれ × SCALE²） */
+function scoreAll(model: MatchModel, user: Features, profiles: readonly Profile[]) {
   const u = standardize(model, user, true);
   const w = model.weight.map((x) => BigInt(Math.round(Math.max(0, x) * 1000)));
-  const scored = profiles.map((p) => {
+  return profiles.map((p) => {
     const v = standardize(model, p.features);
     let d2 = 0n,
       wsum = 0n,
@@ -90,7 +95,11 @@ export function rank(model: MatchModel, user: Features, profiles: readonly Profi
     }
     return { id: p.id, d2, wsum, used };
   });
-  const usable = scored.filter((s) => s.wsum > 0n);
+}
+
+/** 近い順（同点は ID の小さい順）。`n` 人まで */
+export function rank(model: MatchModel, user: Features, profiles: readonly Profile[], n = 5): Ranked[] {
+  const usable = scoreAll(model, user, profiles).filter((s) => s.wsum > 0n);
   // (compare d2/wsum without dividing: a.d2 · b.wsum vs b.d2 · a.wsum)
   usable.sort((a, b) => {
     const l = a.d2 * b.wsum,
@@ -119,10 +128,32 @@ export function closeness(model: MatchModel, a: Features, b: Features): [Feature
   return out.sort((p, q) => p[1] - q[1] || (p[0] < q[0] ? -1 : 1));
 }
 
-/** 近さの言葉（distance の目安。データがそろったら tools/eval.ts の結果で見直す） */
-export function closenessWord(distance: number): string {
-  if (distance <= 0.5) return t('とても近い', 'Very close');
-  if (distance <= 0.9) return t('近い', 'Close');
-  if (distance <= 1.4) return t('やや近い', 'Fairly close');
+/**
+ * 近さの言葉を選ぶ時の縮め方（0〜1）。マイクや部屋の響きのずれは、来た人の声を全員からまとめて遠ざけるので、
+ * 全員への近さの中央値が、ふつう（model.likeness.typical）より遠い時は、その割合で近さを縮める（近い時は 1 のまま）。
+ * profiles はサイトの全員（絞り込む前）を渡す。目安が無いモデルでは 1
+ */
+export function farScale(model: MatchModel, user: Features, profiles: readonly Profile[]): number {
+  const typical = model.likeness?.typical;
+  if (!typical) return 1;
+  const d = scoreAll(model, user, profiles)
+    .filter((s) => s.wsum > 0n)
+    .map((s) => Math.sqrt(Number(s.d2) / Number(s.wsum)) / SCALE)
+    .sort((a, b) => a - b);
+  if (!d.length) return 1;
+  const mid = d.length % 2 ? d[d.length >> 1]! : (d[d.length / 2 - 1]! + d[d.length / 2]!) / 2;
+  return mid > typical ? typical / mid : 1;
+}
+
+/**
+ * 近さの言葉。目安はモデルが持つ（データに居ない人の 1 位が、4 割「とても似ている」・4 割「よく似ている」・2 割「似ている」になる所）。
+ * scale は farScale の値。目安が無いモデルでは、前からの決まった目安
+ */
+export function closenessWord(model: MatchModel, distance: number, scale = 1): string {
+  const [a, b, c] = model.likeness?.cuts ?? [0.5, 0.9, 1.4];
+  const d = distance * scale;
+  if (d <= a) return t('とても似ている', 'Very similar');
+  if (d <= b) return t('よく似ている', 'Quite similar');
+  if (d <= c) return t('似ている', 'Similar');
   return t('似ている所がある', 'Some likeness');
 }

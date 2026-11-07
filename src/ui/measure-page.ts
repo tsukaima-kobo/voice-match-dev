@@ -10,7 +10,7 @@ import { MEASURE_VERSION, type MeasureFail } from '../voice/measure.ts';
 import { createWave } from '../voice/wave.ts';
 import { formatFeature, type Features } from '../voice/features.ts';
 import { SESSION_MINUTES, SESSION_SELECT, sessionFile, shuffled, summarize, windowSize, WindowCutter, type SessionWindow } from '../voice/session.ts';
-import { closenessWord, rank } from '../match/match.ts';
+import { closenessWord, farScale, rank } from '../match/match.ts';
 import { ENTRY_BY_ID, MODEL, PROFILES, voicesReady } from '../data/load.ts';
 import { clearMine, loadMine, saveMine } from '../data/mine.ts';
 import { micPicker } from './mic-picker.ts';
@@ -244,6 +244,7 @@ function drawResult() {
   const list = $('matches');
   list.replaceChildren();
   if (s.median && PROFILES.length) {
+    const scale = farScale(MODEL, s.median, PROFILES);
     for (const r of rank(MODEL, s.median, PROFILES, 5)) {
       const v = ENTRY_BY_ID.get(r.id)!;
       const li = el('li', 'match');
@@ -252,7 +253,7 @@ function drawResult() {
       a.href = v.links.profile;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
-      name.append(a, el('span', 'near', closenessWord(r.distance)));
+      name.append(a, el('span', 'near', closenessWord(MODEL, r.distance, scale)));
       li.append(name);
       if (v.group) li.append(el('div', 'why', v.group));
       list.append(li);

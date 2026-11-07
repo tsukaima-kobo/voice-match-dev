@@ -13,6 +13,14 @@
   "top5": 0.7467009977470228
  },
  "chosen": "whiten",
+ "likeness": {
+  "typical": 1.7765,
+  "cuts": [
+   1.0396,
+   1.2057,
+   1.3884
+  ]
+ },
  "bgm": {
   "diagonal": {
    "queries": 9321,
