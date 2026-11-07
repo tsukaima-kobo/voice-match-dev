@@ -676,16 +676,15 @@ html[data-lang="en"] body { font-feature-settings: normal; }
 .vl-group { padding: clamp(16px, 2vw, 26px); display: grid; gap: 10px; }
 .vl-group h2 { font-family: var(--f-display); font-size: clamp(1.1rem, 0.8vw + 0.9rem, 1.45rem); font-weight: 800; display: flex; align-items: baseline; gap: 0.6em; flex-wrap: wrap; }
 .vl-group h2 .n { font-family: var(--f-num); font-size: 0.68em; font-weight: 500; color: var(--muted); }
-.vl-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 2px 18px; }
+.vl-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 2px 32px; }
 .vl-item { display: flex; align-items: baseline; gap: 6px 10px; flex-wrap: wrap; padding: 7px 0; border-bottom: 1px solid var(--line); min-width: 0; }
 .vl-name { color: var(--ink); font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
 .vl-name:hover { text-decoration: underline; }
 .vl-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .vl-tag { font-size: 0.74em; padding: 0.05em 0.6em; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); }
-.vl-act { margin-left: auto; font-size: 0.78em; font-weight: 700; color: var(--muted); text-decoration: none; white-space: nowrap; opacity: 0.55; transition: opacity 0.2s; }
+.vl-act { margin-left: auto; font-size: 0.74em; font-weight: 700; color: var(--muted); text-decoration: none; white-space: nowrap; padding: 0.15em 0.75em; border: 1px solid var(--line-strong); border-radius: 999px; opacity: 0.7; transition: opacity 0.2s, color 0.2s; }
 .vl-item:hover .vl-act, .vl-act:focus-visible { opacity: 1; }
-.vl-act:hover { color: var(--ink); text-decoration: underline; }
-.vl-act::after { content: " →"; }
+.vl-act:hover { color: var(--ink); }
 .vl-more-row { justify-content: center; }
 .vl-missing { padding: clamp(16px, 2vw, 26px); display: grid; gap: 10px; }
 .vl-missing h2 { font-family: var(--f-display); font-size: clamp(1.1rem, 0.8vw + 0.9rem, 1.45rem); font-weight: 800; }

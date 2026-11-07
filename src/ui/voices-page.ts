@@ -103,9 +103,9 @@ function draw(): void {
         for (const k of kinds) tags.append(el('span', 'vl-tag', kindLabel(k)));
         li.append(tags);
       }
-      const mim = el('a', 'vl-act', t('声真似', 'Mimic'));
+      const mim = el('a', 'vl-act', t('この声で声真似', 'Mimic this voice'));
       mim.href = `./mimic.html?target=${encodeURIComponent(v.name)}`;
-      mim.title = t('この声で声真似の点数をみる', 'Try imitating this voice');
+      mim.title = t(`${v.name}の声で声真似の点数をみる`, `Try imitating ${v.name}`);
       li.append(mim);
       ul.append(li);
     }
