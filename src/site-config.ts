@@ -7,7 +7,7 @@ export type MakerLinkId = 'x' | 'youtube' | 'note' | 'zenn' | 'qiita';
 const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
 
 export const SITE = {
-  url: env.VITE_SITE_URL || 'https://tsukaima-kobo.github.io/voice-twin-dev/',
+  url: env.VITE_SITE_URL || 'https://tsukaima-kobo.github.io/voice-match-dev/',
   /** X の投稿に付けるハッシュタグ（# は付けない） */
   hashtags: ['voicematch', '声真似練習場'],
   maker: {
@@ -21,7 +21,7 @@ export const SITE = {
       qiita: 'https://qiita.com/tsukaima_kobo',
     } as Readonly<Record<MakerLinkId, string | null>>,
   },
-  /** 例: "tsukaima-kobo/voice-twin"。本番のリリースまで空（スターの導線を出さない） */
+  /** 例: "tsukaima-kobo/voice-match"。本番のリリースまで空（スターの導線を出さない） */
   github: '',
 };
 

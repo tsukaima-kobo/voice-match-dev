@@ -1,18 +1,18 @@
 # 本番のリリースの手順（運営用）
 
-検証用リポジトリ（tsukaima-kobo/voice-twin-dev）で作った物を、本番のリポジトリに 1 コミットで出す時の手順です。
+検証用リポジトリ（tsukaima-kobo/voice-match-dev）で作った物を、本番のリポジトリに 1 コミットで出す時の手順です。
 スターの導線は、ここで初めて出します（それまでは出しません）。
 
 ## 1. 決めておくこと
 
 - [x] ライセンス: MIT（2026-11-01 運営が決定。`LICENSE` と README の最後に書いた）。本番のリポジトリにも `LICENSE` をそのまま入れる。
-- [ ] 本番のリポジトリの名前（例: `tsukaima-kobo/voice-twin`）。
+- [ ] 本番のリポジトリの名前（例: `tsukaima-kobo/voice-match`）。
 - [x] 公開の住所: `https://voice-match.com/`（2026-11-04 運営が Cloudflare で取得。サイトは同じ Cloudflare アカウントの Pages に置く。手順は 3.5）。
 - [ ] 削除のお願いの窓口（about.html の「窓口: 公開の時にここに書きます」を置き換える）。
 
 ## 2. ファイルを変える
 
-- [ ] `src/site-config.ts` の `github` に本番のリポジトリ（`"tsukaima-kobo/voice-twin"` など）を入れる。これで、見出しの GitHub のリンク・結果の下の「GitHub でスターする」・足元の GitHub・しくみと約束の「オープンソース」の節が出る。スターの数は毎朝のビルドで GitHub から取って、ページに書き込む（見る人のブラウザーは GitHub に問い合わせない）。
+- [ ] `src/site-config.ts` の `github` に本番のリポジトリ（`"tsukaima-kobo/voice-match"` など）を入れる。これで、見出しの GitHub のリンク・結果の下の「GitHub でスターする」・足元の GitHub・しくみと約束の「オープンソース」の節が出る。スターの数は毎朝のビルドで GitHub から取って、ページに書き込む（見る人のブラウザーは GitHub に問い合わせない）。
 - [ ] 公開の住所を、本番のリポジトリの Settings → Secrets and variables → Actions → Variables に `VITE_SITE_URL` = `https://voice-match.com/` として入れる（OGP・共有カード・X の投稿に入る住所。`site.yml` はもう読むようになっている）。
 - [ ] README の「サイトを開く」などの住所を本番に変える。
 - [ ] 登録のフォーム（`src/submit/config.ts`）を本番のフォームにする。

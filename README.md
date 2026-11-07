@@ -5,7 +5,7 @@
 <p align="center"><b>あなたの声は、誰に近い？</b> — 一言話すだけで声を 45 項目で測り、近い声と、あなただけの声紋を出す Web サイト。<br>
 <b>Whose voice is yours closest to?</b> Say a single phrase: we measure your voice in 45 ways, find the closest voices, and draw your own voiceprint.</p>
 
-<p align="center"><a href="https://tsukaima-kobo.github.io/voice-twin-dev/"><b>▶ サイトを開く / Try it</b></a>　·　<a href="https://tsukaima-kobo.github.io/voice-twin-dev/?lang=en">English</a>　·　<a href="https://x.com/tsukaima_kobo">X @tsukaima_kobo</a></p>
+<p align="center"><a href="https://tsukaima-kobo.github.io/voice-match-dev/"><b>▶ サイトを開く / Try it</b></a>　·　<a href="https://tsukaima-kobo.github.io/voice-match-dev/?lang=en">English</a>　·　<a href="https://x.com/tsukaima_kobo">X @tsukaima_kobo</a></p>
 
 <p align="center"><img src="docs/images/card-voice.jpg" width="300" alt="共有カード（近い声）"> <img src="docs/images/card-mimic.jpg" width="300" alt="共有カード（声真似の点数）"></p>
 

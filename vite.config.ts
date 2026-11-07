@@ -18,7 +18,7 @@ const csp = (): Plugin => ({
 
 // SNS で共有された時の見た目（OGP・X のカード）。住所は絶対の物が要るので、公開の住所（VITE_SITE_URL、無ければ検証用）から作る。
 // 画像は public/og.jpg（1200×630）。ページごとに題と説明を入れる。
-const SITE_URL = (process.env.VITE_SITE_URL || 'https://tsukaima-kobo.github.io/voice-twin-dev/').replace(/\/?$/, '/');
+const SITE_URL = (process.env.VITE_SITE_URL || 'https://tsukaima-kobo.github.io/voice-match-dev/').replace(/\/?$/, '/');
 const OG: Record<string, { title: string; description: string }> = {
   'index.html': { title: 'voice-match｜あなたの声は誰に近い？', description: '一言話すと、声を 45 項目で測って、近い声と、あなただけの声紋を出します。登録不要・音は送らない。Say a phrase and see whose voice is closest to yours, plus your own voiceprint.' },
   'mimic.html': { title: '声真似の点数｜voice-match', description: 'お手本のセリフを真似すると、抑揚・タイミング・声の質で点数と直し方を出します。Imitate a line and get a score with tips.' },
