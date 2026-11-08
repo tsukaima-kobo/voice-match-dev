@@ -13,6 +13,7 @@ import { SESSION_MINUTES, SESSION_SELECT, sessionFile, shuffled, summarize, wind
 import { closenessWord, farScale, rank } from '../match/match.ts';
 import { ENTRY_BY_ID, MODEL, PROFILES, voicesReady } from '../data/load.ts';
 import { clearMine, loadMine, saveMine } from '../data/mine.ts';
+import { groupOf, nameOf } from '../data/names.ts';
 import { micPicker } from './mic-picker.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
@@ -249,13 +250,14 @@ function drawResult() {
       const v = ENTRY_BY_ID.get(r.id)!;
       const li = el('li', 'match');
       const name = el('div', 'name');
-      const a = el('a', undefined, v.name);
+      const a = el('a', undefined, nameOf(v));
       a.href = v.links.profile;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       name.append(a, el('span', 'near', closenessWord(MODEL, r.distance, scale)));
       li.append(name);
-      if (v.group) li.append(el('div', 'why', v.group));
+      const group = groupOf(v);
+      if (group) li.append(el('div', 'why', group));
       list.append(li);
     }
   }

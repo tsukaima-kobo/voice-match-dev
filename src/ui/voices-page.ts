@@ -1,9 +1,10 @@
-// 声の一覧のページ（voices.html）: サイトに入っている声を、所属ごとに並べる。名前・所属で探す・大枠で絞る。
-// 出すのはサイトのデータにある物だけ（名前・所属・大枠・公式ページ）。探す言葉と大枠は URL（?q= ・?kind=）に入れて、そのまま共有できる。
+// 声の一覧のページ（voices.html）: サイトに入っている声を、所属ごとに並べる。名前・所属（英語の名前でも）で探す・大枠で絞る。
+// 出すのはサイトのデータにある物だけ（名前・英語名・所属・大枠・公式ページ）。英語のページでは、英語名があればそれを出す。探す言葉と大枠は URL（?q= ・?kind=）に入れて、そのまま共有できる。
 import { CATALOG, voicesReady } from '../data/load.ts';
 import { filterCatalog, groupByAffiliation } from '../data/catalog-search.ts';
 import { KIND_BY_ID, KINDS, kindLabel, kindsOf, maskOf } from '../data/kinds.ts';
 import { el } from './items.ts';
+import { nameOf } from '../data/names.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink } from './share.ts';
 
@@ -87,11 +88,11 @@ function draw(): void {
     if (left <= 0) break;
     const sec = el('section', 'vl-group card');
     const head = el('h2');
-    head.append(g.group ?? t('所属なし', 'No agency'), el('span', 'n', t(`${g.entries.length} 人`, String(g.entries.length))));
+    head.append(g.group ? t(g.group, g.groupEn ?? g.group) : t('所属なし', 'No agency'), el('span', 'n', t(`${g.entries.length} 人`, String(g.entries.length))));
     const ul = el('ul', 'vl-list');
     for (const v of g.entries.slice(0, left)) {
       const li = el('li', 'vl-item');
-      const a = el('a', 'vl-name', v.name);
+      const a = el('a', 'vl-name', nameOf(v));
       a.href = v.links.profile;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
@@ -105,7 +106,7 @@ function draw(): void {
       }
       const mim = el('a', 'vl-act', t('この声で声真似', 'Mimic this voice'));
       mim.href = `./mimic.html?target=${encodeURIComponent(v.name)}`;
-      mim.title = t(`${v.name}の声で声真似の点数をみる`, `Try imitating ${v.name}`);
+      mim.title = t(`${v.name}の声で声真似の点数をみる`, `Try imitating ${nameOf(v)}`);
       li.append(mim);
       ul.append(li);
     }

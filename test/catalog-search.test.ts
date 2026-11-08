@@ -26,6 +26,14 @@ describe('声の一覧', () => {
     expect(filterCatalog(list, '  ').length).toBe(list.length);
     expect(filterCatalog(list, 'いない人')).toEqual([]);
   });
+  it('英語の名前・所属の英語の名前でも探せる。所属ごとの見出しには英語の名前を添える', () => {
+    const en = [{ ...list[1]!, nameEn: 'Earu Harusaki', groupEn: 'NIJISANJI' }, list[2]!, list[0]!];
+    expect(filterCatalog(en, 'earu').map((x) => x.id)).toEqual(['v-2']);
+    expect(filterCatalog(en, 'nijisanji').map((x) => x.id)).toEqual(['v-2']);
+    expect(filterCatalog(en, 'にじさんじ').map((x) => x.id)).toEqual(['v-2', 'v-3']);
+    const g = groupByAffiliation(en);
+    expect(g.map((x) => [x.group, x.groupEn])).toEqual([['にじさんじ', 'NIJISANJI'], ['hololive Indonesia 1期生', undefined]]);
+  });
   it('大枠で絞る', () => {
     expect(filterCatalog(list, '', maskOf(['singer'])).map((x) => x.id)).toEqual(['v-4', 'v-5']);
     expect(filterCatalog(list, 'ホロ', maskOf(['singer'])).map((x) => x.id)).toEqual(['v-5']);

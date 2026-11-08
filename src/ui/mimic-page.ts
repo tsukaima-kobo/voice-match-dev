@@ -25,11 +25,12 @@ import { el, itemRow, renderGroups } from './items.ts';
 import { adviceFor, differences, mimicScore, scoreWord } from '../mimic/mimic.ts';
 import { ENTRY_BY_ID, PROFILES, voicesReady } from '../data/load.ts';
 import { nextPromptIndex, nextReadingIndex, promptText, readingText } from '../prompts/prompts.ts';
-import { mountLang, onLang, t } from '../i18n.ts';
+import { lang, mountLang, onLang, t, type Lang } from '../i18n.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 import { checkSubmission, encodeSubmission, makeSubmission } from '../submit/code.ts';
 import { SUBMIT_FORM } from '../submit/config.ts';
 import { KINDS } from '../data/kinds.ts';
+import { groupOf, nameOf } from '../data/names.ts';
 
 /** 聞く長さの最大（秒） */
 const LISTEN_MAX = 35;
@@ -192,6 +193,8 @@ let refToken = 0;
 interface Target {
   features: Features;
   name: string;
+  /** このサイトで測ったお手本の時だけ: 英語の名前（英語のページで出す） */
+  nameEn?: string;
   reg?: { quality: { voicedSeconds: number; gapTonal: number; snrDb: number } };
   /** セリフ真似の時だけ: お手本の高さと大きさの動き */
   contour?: Contour;
@@ -388,8 +391,8 @@ async function refFromFile(f: File): Promise<void> {
 
 /** お手本のまとめの文（言葉を切り替えた時に出し直す） */
 let summaryMsg: Msg = () => '';
-function setTarget(features: Features, name: string, from: Msg, regInfo?: Target['reg'], contour?: Contour, voicedSeconds?: number): void {
-  target = { features, name, ...(regInfo ? { reg: regInfo } : {}), ...(contour ? { contour } : {}), ...(voicedSeconds !== undefined ? { voicedSeconds } : {}) };
+function setTarget(features: Features, name: string, from: Msg, regInfo?: Target['reg'], contour?: Contour, voicedSeconds?: number, nameEn?: string): void {
+  target = { features, name, ...(nameEn ? { nameEn } : {}), ...(regInfo ? { reg: regInfo } : {}), ...(contour ? { contour } : {}), ...(voicedSeconds !== undefined ? { voicedSeconds } : {}) };
   resetRegister(name);
   best = 0;
   tries = 0;
@@ -397,7 +400,7 @@ function setTarget(features: Features, name: string, from: Msg, regInfo?: Target
   const f = features;
   summaryMsg = () => {
     const ja = name ? `「${name}」` : '';
-    const en = name ? `“${name}”` : '';
+    const en = name ? `“${nameEn || name}”` : '';
     return contour
       ? t(`${ja ? `${ja}のセリフ` : 'セリフ'}をお手本にしました（${from()}）。セリフ真似: 抑揚とタイミングまで比べます。声の高さ ${formatFeature('pitch', f.pitch)}。`, `${en ? `A line by ${en}` : 'A line'} is the model (${from()}). Line mimic: intonation and timing are compared too. Pitch ${formatFeature('pitch', f.pitch)}.`)
       : t(`${ja ? `${ja}をお手本にしました` : 'お手本を測りました'}（${from()}）。声の高さ ${formatFeature('pitch', f.pitch)}・抑揚 ${formatFeature('pitchRange', f.pitchRange)}・速さ ${formatFeature('rate', f.rate)}。`, `${en ? `${en} is the model` : 'The model was measured'} (${from()}). Pitch ${formatFeature('pitch', f.pitch)}, intonation ${formatFeature('pitchRange', f.pitchRange)}, rate ${formatFeature('rate', f.rate)}.`);
@@ -498,10 +501,15 @@ reg.copy.addEventListener('click', () => {
   }) ?? reg.code.select();
 });
 
-/* このサイトで事前に測ったお手本（名前で探して選ぶ） */
-const labelOf = (id: string) => {
+/* このサイトで事前に測ったお手本（名前で探して選ぶ。英語のページでは英語名で並べ、日本語の名前でも選べる） */
+const labelOf = (id: string, l: Lang) => {
   const v = ENTRY_BY_ID.get(id)!;
-  return v.group ? `${v.name}（${v.group}）` : v.name;
+  const g = groupOf(v, l);
+  return g ? (l === 'en' ? `${nameOf(v, l)} (${g})` : `${v.name}（${g}）`) : nameOf(v, l);
+};
+const pickCatalog = (p: (typeof PROFILES)[number]) => {
+  const v = ENTRY_BY_ID.get(p.id)!;
+  setTarget(p.features, v.name, M('このサイトで測った代表値', 'a voice measured by this site'), undefined, undefined, undefined, v.nameEn);
 };
 // 声は裏で読む。読み終えたら一覧が出る
 let byLabel = new Map<string, (typeof PROFILES)[number]>();
@@ -509,24 +517,30 @@ ref.catalog.addEventListener('change', () => {
   const p = byLabel.get(ref.catalog.value.trim());
   if (!p) return;
   ref.catalog.value = '';
-  setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, M('このサイトで測った代表値', 'a voice measured by this site'));
+  pickCatalog(p);
 });
+/** お手本の一覧を、今の言葉で並べ直す */
+function fillCatalogList(): void {
+  byLabel = new Map(PROFILES.flatMap((p) => [[labelOf(p.id, 'ja'), p] as const, [labelOf(p.id, 'en'), p] as const]));
+  const labels = PROFILES.map((p) => labelOf(p.id, lang)).sort((a, b) => a.localeCompare(b, 'ja'));
+  $('ref-catalog-list').replaceChildren(
+    ...labels.map((label) => {
+      const o = document.createElement('option');
+      o.value = label;
+      return o;
+    }),
+  );
+}
 if (tabAudioSupported()) ref.tab.hidden = ref.tabNote.hidden = false;
 void voicesReady.then(() => {
-  byLabel = new Map(PROFILES.map((p) => [labelOf(p.id), p]));
   if (!PROFILES.length) return;
+  fillCatalogList();
   ref.catalogBox.hidden = false;
   $('ref-catalog-count').textContent = t(`${PROFILES.length} 件`, `${PROFILES.length}`);
-  const list = $('ref-catalog-list');
-  for (const label of [...byLabel.keys()].sort((a, b) => a.localeCompare(b, 'ja'))) {
-    const o = document.createElement('option');
-    o.value = label;
-    list.append(o);
-  }
-  // 声のページからのリンク: ?target=<名前>
+  // 声のページからのリンク: ?target=<名前>（いつも日本語の名前）
   const wanted = new URLSearchParams(location.search).get('target');
   const p = wanted ? PROFILES.find((x) => ENTRY_BY_ID.get(x.id)!.name === wanted) : undefined;
-  if (p && !target) setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, M('このサイトで測った代表値', 'a voice measured by this site'));
+  if (p && !target) pickCatalog(p);
 });
 
 /* ---- 2. 真似 ---- */
@@ -729,7 +743,8 @@ function paint(): void {
   const { tg, mine, mineContour, score, before } = shown;
   const voice = mimicScore(tg.features, mine);
   const line = tg.contour && mineContour ? compareLines(tg.contour, mineContour) : null;
-  $('score-label').textContent = t(`${tg.name ? `「${tg.name}」` : 'お手本'}との近さ${line ? '（セリフ真似）' : ''}`, `Closeness to ${tg.name ? `“${tg.name}”` : 'the model'}${line ? ' (line mimic)' : ''}`);
+  const tgName = nameOf(tg);
+  $('score-label').textContent = t(`${tg.name ? `「${tg.name}」` : 'お手本'}との近さ${line ? '（セリフ真似）' : ''}`, `Closeness to ${tg.name ? `“${tgName}”` : 'the model'}${line ? ' (line mimic)' : ''}`);
   $('score-word').textContent = scoreWord(score);
   $('best').textContent = tries === 1 ? '' : score > before ? t(`最高点を更新しました（${tries} 回目）`, `New best! (try ${tries})`) : t(`このお手本での最高は ${best} 点です（${tries} 回目）`, `Your best with this model is ${best} (try ${tries})`);
 
@@ -768,9 +783,9 @@ function paint(): void {
     list.append(li);
   }
 
-  share.update({ kind: 'mimic', features: mine, model: { name: tg.name, features: tg.features }, score, word: scoreWord(score), line: !!line });
+  share.update({ kind: 'mimic', features: mine, model: { name: tgName, features: tg.features }, score, word: scoreWord(score), line: !!line });
   mountShapes($('shapes'), $('shape-guide'), [
-    { who: t('お手本', 'Model'), ...(tg.name ? { sub: tg.name } : {}), f: tg.features },
+    { who: t('お手本', 'Model'), ...(tg.name ? { sub: tgName } : {}), f: tg.features },
     { who: t('あなた', 'You'), sub: t(`${tries} 回目`, `Try ${tries}`), f: mine },
   ]);
 
@@ -792,6 +807,9 @@ onLang(() => {
   showTopic();
   if (target) ref.summary.textContent = summaryMsg();
   if (!reg.out.hidden) reg.howto.textContent = howtoMsg();
-  if (PROFILES.length) $('ref-catalog-count').textContent = t(`${PROFILES.length} 件`, `${PROFILES.length}`);
+  if (PROFILES.length) {
+    $('ref-catalog-count').textContent = t(`${PROFILES.length} 件`, `${PROFILES.length}`);
+    fillCatalogList();
+  }
   if (!$('result').hidden) paint();
 });

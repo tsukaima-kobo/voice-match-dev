@@ -58,6 +58,19 @@ describe('運営が測った声の代表値', () => {
     expect(r.notes.join('\n')).toMatch(/zz: データに無い/);
   });
 
+  it('英語名・所属の英語名は、書いてある人だけに付ける（同じ人の後の行だけにあってもよい）。サイトにもそのまま入る', () => {
+    const { file } = buildOperatorVoices(
+      snap([person('a', { nameEn: ' Name A ', groupEn: 'Group EN' }), person('b'), person('b', { nameEn: 'Name B' })], [...windows('a', 'v1', twelve), ...windows('b', 'v1', twelve)]),
+      { measureVersion: MEASURE_VERSION, only: null },
+    );
+    expect(file.voices.map((v) => [v.nameEn, v.groupEn])).toEqual([['Name A', 'Group EN'], ['Name B', undefined]]);
+    const site = fromOperatorVoices(file).voices;
+    expect(site.map((v) => [v.nameEn, v.groupEn])).toEqual([['Name A', 'Group EN'], ['Name B', undefined]]);
+    // 英語名の無い人は、今までと同じ形（キーも増えない）
+    const old = buildOperatorVoices(snap([person('c')], windows('c', 'v1', twelve)), { measureVersion: MEASURE_VERSION, only: null });
+    expect(Object.keys(old.file.voices[0]!).sort()).toEqual(['features', 'group', 'link', 'name']);
+  });
+
   it('今の所属があれば、それを出す', () => {
     const { file } = buildOperatorVoices(snap([person('a', { currentAffiliation: '今の所属' })], windows('a', 'v1', twelve)), { measureVersion: MEASURE_VERSION, only: null });
     expect(file.voices[0]!.group).toBe('今の所属');

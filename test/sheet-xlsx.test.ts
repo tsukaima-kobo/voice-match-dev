@@ -122,6 +122,16 @@ describe('シートから、運営が測った声の代表値を作る', () => {
     expect(notes.join('\n')).toMatch(/b: .*公式ページ/);
   });
 
+  it('人物一覧の「英語名」「所属の英語名」の列があれば読む（無いシートでも動く）', () => {
+    const head = [...PEOPLE_HEAD, '英語名', '所属の英語名'];
+    const ppl: Cell[][] = [head, ['a', '名前 a', 'g', '所属区分', '今の所属', 'v1', 'https://example.com/a', 'Name A', 'Agency A'], ['b', '名前 b', 'g', '所属区分', '今の所属', 'v1', 'https://example.com/b', null, null]];
+    const ms: Cell[][] = [MEASURE_HEAD, ...pitches.map((p) => measureRow('a', 'v1', p)), ...pitches.map((p) => measureRow('b', 'v1', p))];
+    const snap = snapshotFromSheet(readXlsx(xlsx({ 人物一覧: ppl, 声の測定値: ms })), MEASURE_VERSION);
+    expect(snap.peoples.map((p) => [p.nameEn, p.groupEn])).toEqual([['Name A', 'Agency A'], [null, null]]);
+    const { file } = buildOperatorVoices(snap, { measureVersion: MEASURE_VERSION, only: null });
+    expect(file.voices.map((v) => [v.name, v.nameEn, v.groupEn])).toEqual([['名前 a', 'Name A', 'Agency A'], ['名前 b', undefined, undefined]]);
+  });
+
   it('追加10分の測定値のタブがあれば、同じ人の窓に足す（見出しは人物ID で始まらなくてよい）。版が違えば止める', () => {
     const EXTRA_HEAD = ['追加タスクID', '人物ID', '追加動画ID', '測定バージョン', ...FEATURE_KEYS.map(sheetLabel)];
     const extraRow = (id: string, video: string, pitch: number, ver = MEASURE_VERSION): Cell[] => ['task', id, video, ver, ...measureRow(id, video, pitch).slice(8)];

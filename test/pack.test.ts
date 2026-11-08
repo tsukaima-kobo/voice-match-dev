@@ -109,6 +109,26 @@ describe('声のデータを詰める', () => {
   });
 });
 
+describe('英語の名前', () => {
+  it('英語名・所属の英語名があれば、ほどいても元のとおり。無い声は日本語だけ', () => {
+    const { voices, features } = voicesOf(6, 3);
+    const withEn = voices.map((v, i) => ({ ...v, ...(i % 2 ? { nameEn: `Voice ${i}` } : {}), ...(v.group && i % 3 === 1 ? { groupEn: `Agency ${i % 4}` } : {}) }));
+    const pack = packVoices(MEASURE_VERSION, withEn, features);
+    expect(pack.nameEn).toHaveLength(6);
+    const out = unpackVoices(pack);
+    expect(out.voices.map((v) => v.nameEn)).toEqual(withEn.map((v) => v.nameEn));
+    // 所属の英語の名前は所属ごとに 1 つ。同じ所属の声には同じ英語の名前が付く
+    for (const v of out.voices) if (v.group) expect(v.groupEn).toBe(out.voices.find((x) => x.group === v.group && x.groupEn)?.groupEn);
+  });
+  it('誰にも英語名が無ければ、英語の並びを入れない（前と同じ形。前の形のデータもほどける）', () => {
+    const { voices, features } = voicesOf(4, 5);
+    const pack = packVoices(MEASURE_VERSION, voices, features);
+    expect(pack.nameEn).toBeUndefined();
+    expect(pack.groupsEn).toBeUndefined();
+    expect(unpackVoices(pack).voices.every((v) => !('nameEn' in v) && !('groupEn' in v))).toBe(true);
+  });
+});
+
 describe('大枠の印', () => {
   it('ほどいた数字に、大枠の印（VTuber は 1、歌手は 4、その他は 1<<15）が付く', () => {
     const { voices, features } = voicesOf(10);

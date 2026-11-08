@@ -1,4 +1,4 @@
-// 声の一覧（voices.html）の、画面の無い部分。名前・所属で探す・大枠で絞る・所属ごとに分ける。DOM なし・乱数なし。
+// 声の一覧（voices.html）の、画面の無い部分。名前・所属（英語の名前でも）で探す・大枠で絞る・所属ごとに分ける。DOM なし・乱数なし。
 // 探す言葉は、全角と半角・大文字と小文字・ひらがなとカタカナ・空白と「・」の違いを気にしない。
 import type { CatalogEntry } from './types.ts';
 import { maskOf } from './kinds.ts';
@@ -21,13 +21,13 @@ export function filterCatalog(entries: readonly CatalogEntry[], query: string, k
   return entries.filter((e) => {
     if (kindMask && (maskOf(e.kinds ?? []) & kindMask) === 0) return false;
     if (!words.length) return true;
-    const hay = searchKey(`${e.name} ${e.group ?? ''}`);
+    const hay = searchKey([e.name, e.nameEn, e.group, e.groupEn].filter(Boolean).join(' '));
     return words.every((w) => hay.includes(w));
   });
 }
 
-/** 所属ごとに分ける。人の多い所属から（同じ数なら名前順）。所属の無い声は最後。中は名前順 */
-export function groupByAffiliation(entries: readonly CatalogEntry[]): { group: string | null; entries: CatalogEntry[] }[] {
+/** 所属ごとに分ける。人の多い所属から（同じ数なら名前順）。所属の無い声は最後。中は名前順。groupEn は、その所属の英語の名前（誰かにあれば） */
+export function groupByAffiliation(entries: readonly CatalogEntry[]): { group: string | null; groupEn?: string; entries: CatalogEntry[] }[] {
   const by = new Map<string | null, CatalogEntry[]>();
   for (const e of entries) {
     const g = e.group?.trim() || null;
@@ -37,6 +37,9 @@ export function groupByAffiliation(entries: readonly CatalogEntry[]): { group: s
   }
   const cmp = (a: string, b: string) => a.localeCompare(b, 'ja');
   return [...by]
-    .map(([group, list]) => ({ group, entries: list.sort((a, b) => cmp(a.name, b.name) || cmp(a.id, b.id)) }))
+    .map(([group, list]) => {
+      const groupEn = list.find((e) => e.groupEn)?.groupEn;
+      return { group, ...(group && groupEn ? { groupEn } : {}), entries: list.sort((a, b) => cmp(a.name, b.name) || cmp(a.id, b.id)) };
+    })
     .sort((a, b) => (a.group === null ? 1 : 0) - (b.group === null ? 1 : 0) || b.entries.length - a.entries.length || cmp(a.group ?? '', b.group ?? ''));
 }

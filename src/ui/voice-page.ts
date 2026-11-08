@@ -22,6 +22,7 @@ import { mountLang, onLang, t } from '../i18n.ts';
 import { KIND_BY_ID, KINDS, kindLabel } from '../data/kinds.ts';
 import { clearMine, loadMine } from '../data/mine.ts';
 import type { CatalogEntry } from '../data/types.ts';
+import { groupOf, nameOf } from '../data/names.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
 
 mountLang({ ja: 'voice-match｜あなたの声は誰に近い？', en: 'voice-match | Whose voice is yours closest to?' });
@@ -393,7 +394,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     const v = entryOf(r.id);
     const li = el('li', 'match');
     const name = el('div', 'name');
-    const a = el('a', undefined, v.name);
+    const a = el('a', undefined, nameOf(v));
     a.href = v.links.profile;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
@@ -407,7 +408,8 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
       name.append(mv);
     }
     li.append(name);
-    if (v.group) li.append(el('div', 'why', v.group));
+    const group = groupOf(v);
+    if (group) li.append(el('div', 'why', group));
     if (r.id === MINE_ID) li.append(el('div', 'why', t('じっくり測るページで入れた、あなたの声（この端末だけ）', 'Your voice, added on the in-depth page (this device only)')));
     const c = closeness(MODEL, f, byId.get(r.id)!.features).filter(([k]) => !FEATURE_BY_KEY[k].detail);
     const near = c.slice(0, 3).map(([k]) => FEATURE_BY_KEY[k].name);
@@ -423,7 +425,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
   });
   // 共有カードと声紋では、あなたをサイトの声の 1 位と並べる（自分の声とは並べない）
   const first = ranked.find((r) => r.id !== MINE_ID);
-  return first ? { name: ENTRY_BY_ID.get(first.id)!.name, word: closenessWord(model, first.distance, scale), features: byId.get(first.id)!.features } : null;
+  return first ? { name: nameOf(ENTRY_BY_ID.get(first.id)!), word: closenessWord(model, first.distance, scale), features: byId.get(first.id)!.features } : null;
 }
 
 function renderMine(f: Features) {
