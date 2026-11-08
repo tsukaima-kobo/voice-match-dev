@@ -165,9 +165,16 @@ export function mountShare(box: HTMLElement): ShareUi {
   };
   const refresh = () => {
     if (!data) return;
-    card = drawCard(data);
-    preview.src = card.toDataURL('image/png');
     xBtn.href = xIntent(shareText(data));
+    // カードが描けない古いブラウザーでも、結果と X への投稿は出す（カードの見本と保存だけ隠す）
+    try {
+      card = drawCard(data);
+      preview.src = card.toDataURL('image/png');
+    } catch {
+      card = null;
+    }
+    preview.hidden = save.hidden = !card;
+    native.hidden = !card || !canShareFiles;
   };
   save.addEventListener('click', () => {
     if (!card) return;
@@ -194,7 +201,11 @@ export function mountShare(box: HTMLElement): ShareUi {
   return {
     update(d) {
       data = d;
-      refresh();
+      try {
+        refresh();
+      } catch {
+        /* シェアの所が描けなくても、結果は止めない */
+      }
     },
   };
 }

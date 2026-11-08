@@ -25,7 +25,15 @@ export interface Finished {
   t1: number;
 }
 
-/** 音のかたまりを受けて、30 秒たまったら 1 つの窓を返す */
+/**
+ * かたまりの終わりの、動画の時刻。ページが measureVoice で 0.5 秒ほど止まる間に届いたかたまりは、後でまとめて読まれ、
+ * どれも同じ「今の再生位置」になってしまう。そこで、今の再生位置から、遅れた分（AudioContext の時計で、今とかたまりの終わりの差）を引く。
+ */
+export function chunkTime(mediaNow: number, rate: number, audioNow: number, chunkEnd: number): number {
+  return mediaNow - Math.max(0, audioNow - chunkEnd) * rate;
+}
+
+/** 音のかたまりを受けて、30 秒たまったら 1 つの窓を返す。PlayState の time は、そのかたまりの終わりの動画の時刻（chunkTime） */
 export class Windower {
   private chunks: Float32Array[] = [];
   private got = 0;

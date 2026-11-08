@@ -6,8 +6,8 @@
 // YouTube のページは Trusted Types を求めるので、innerHTML を使わず、要素を 1 つずつ作る。
 import catalog from '../../data/catalog.json';
 import { MEASURE_VERSION, measureVoice } from '../../src/voice/measure.ts';
-import type { Catalog, VoiceFile } from '../../src/data/types.ts';
-import { addWindow, videoIdOf, windowOf, Windower, WINDOW_SECONDS, type BreakReason } from './windowing.ts';
+import type { Catalog, VoiceFile, VoiceWindow } from '../../src/data/types.ts';
+import { addWindow, chunkTime, videoIdOf, windowOf, Windower, WINDOW_SECONDS, type BreakReason } from './windowing.ts';
 
 const LIST = (catalog as Catalog).voices;
 const MIN_VOICED = 8;
@@ -98,6 +98,7 @@ let file: VoiceFile | null = null;
 const tally: Record<string, number> = {};
 let graph: { video: HTMLVideoElement; ctx: AudioContext; out: GainNode; win: Windower; stop: () => void } | null = null;
 let busy = false;
+let starting = false;
 
 const validId = (s: string) => /^[a-z0-9][a-z0-9-]{0,40}$/.test(s);
 const today = () => {
@@ -112,6 +113,21 @@ async function loadFile(id: string): Promise<VoiceFile> {
 }
 async function saveFile(f: VoiceFile): Promise<void> {
   await chrome.storage.local.set({ [keyOf(f.id)]: f });
+}
+/**
+ * 同じ ID をいくつかのタブで同時に測っても、記録を取りこぼさない: 読む→足す→書くを、タブをまたぐ鍵の中で行う
+ * （鍵は YouTube のページどうしで共通。無いブラウザーでは鍵なし）
+ */
+function locked<T>(id: string, f: () => Promise<T>): Promise<T> {
+  return navigator.locks ? navigator.locks.request(`voice-match-collector:${id}`, f) : f();
+}
+async function addToFile(id: string, w: VoiceWindow): Promise<{ f: VoiceFile; added: boolean }> {
+  return locked(id, async () => {
+    const f = await loadFile(id);
+    const added = addWindow(f, w);
+    if (added) await saveFile(f);
+    return { f, added };
+  });
 }
 
 function render() {
@@ -143,9 +159,13 @@ function playState(video: HTMLVideoElement) {
   };
 }
 
-function onChunk(samples: Float32Array) {
+/** end: かたまりの終わりの時刻（AudioContext の時計、秒） */
+function onChunk(samples: Float32Array, end: number) {
   if (!running || !graph) return;
-  const done = graph.win.push(samples, playState(graph.video));
+  const s = playState(graph.video);
+  // 届くのが遅れたかたまりも、音の通りの時刻に（窓の時刻と、再生位置が飛んだかどうかを、かたまりごとに正しく）
+  s.time = chunkTime(s.time, s.rate, graph.ctx.currentTime, end);
+  const done = graph.win.push(samples, s);
   const sec = graph.win.seconds();
   barFill.style.width = `${Math.min(100, (sec / WINDOW_SECONDS) * 100)}%`;
   warn.textContent = graph.win.lastBreak ? BREAK_TEXT[graph.win.lastBreak] : '';
@@ -169,9 +189,8 @@ function onChunk(samples: Float32Array) {
         tally[reason] = (tally[reason] ?? 0) + 1;
         status.textContent = `${done.t0.toFixed(0)}〜${done.t1.toFixed(0)} 秒: 除きました（${FAIL_TEXT[reason] ?? reason}）`;
       } else {
-        const f = await loadFile(id);
-        if (addWindow(f, w)) {
-          await saveFile(f);
+        const { f, added } = await addToFile(id, w);
+        if (added) {
           status.textContent = `${done.t0.toFixed(0)}〜${done.t1.toFixed(0)} 秒: 記録しました（声 ${w.voicedSeconds.toFixed(1)} 秒・高さ ${w.features.pitch} Hz）`;
         } else {
           tally.overlap = (tally.overlap ?? 0) + 1;
@@ -188,9 +207,16 @@ function onChunk(samples: Float32Array) {
 
 async function hook(video: HTMLVideoElement) {
   if (graph && graph.video === video) return graph;
-  // 動画の要素を AudioContext に取り込めるのは 1 回だけ: ここから先、その音はこのグラフを通る
+  // 動画の要素を AudioContext に取り込めるのは 1 回だけ: ここから先、その音はこのグラフを通る。
+  // ほかの物（別の拡張機能・読み直す前のこの拡張機能）が先に取り込んでいると失敗する: 作った AudioContext は閉じて、呼んだ側が知らせる
   const ctx = new AudioContext();
-  const src = ctx.createMediaElementSource(video);
+  let src: MediaElementAudioSourceNode;
+  try {
+    src = ctx.createMediaElementSource(video);
+  } catch (e) {
+    void ctx.close();
+    throw e;
+  }
   const out = ctx.createGain();
   out.gain.value = audible.checked ? 1 : 0;
   src.connect(out).connect(ctx.destination);
@@ -199,7 +225,7 @@ async function hook(video: HTMLVideoElement) {
   try {
     await ctx.audioWorklet.addModule(chrome.runtime.getURL('capture.worklet.js'));
     const node = new AudioWorkletNode(ctx, 'voice-match-capture', { numberOfOutputs: 1, outputChannelCount: [1] });
-    node.port.onmessage = (e: MessageEvent<Float32Array>) => onChunk(e.data);
+    node.port.onmessage = (e: MessageEvent<{ pcm: Float32Array; end: number }>) => onChunk(e.data.pcm, e.data.end);
     src.connect(node);
     node.connect(ctx.destination);
     stop = () => node.port.postMessage('stop');
@@ -213,7 +239,8 @@ async function hook(video: HTMLVideoElement) {
         const d = b.getChannelData(c);
         for (let i = 0; i < x.length; i++) x[i] = x[i]! + d[i]! / b.numberOfChannels;
       }
-      onChunk(x);
+      // 時刻はおおよそ（ずれは 0.1 秒ほどで、窓の区切りには効かない）
+      onChunk(x, e.playbackTime - b.length / ctx.sampleRate);
     };
     src.connect(sp);
     sp.connect(ctx.destination);
@@ -238,18 +265,30 @@ startBtn.addEventListener('click', async () => {
     render();
     return;
   }
+  if (starting) return;
   const video = document.querySelector<HTMLVideoElement>('video.html5-main-video') ?? document.querySelector('video');
   if (!video) {
     status.textContent = '動画が見つかりません。再生ページで押してください。';
     return;
   }
-  const g = await hook(video);
-  await g.ctx.resume();
-  g.win.reset(null);
-  file = await loadFile(currentId);
-  running = true;
-  status.textContent = `測っています（${WINDOW_SECONDS} 秒ごと）。動画を再生してください。`;
-  render();
+  starting = true;
+  try {
+    let g: NonNullable<typeof graph>;
+    try {
+      g = await hook(video);
+      await g.ctx.resume();
+    } catch {
+      status.textContent = '動画の音を受け取れませんでした。ページを読み直してから、もう一度「測る」を押してください。';
+      return;
+    }
+    g.win.reset(null);
+    file = await loadFile(currentId);
+    running = true;
+    status.textContent = `測っています（${WINDOW_SECONDS} 秒ごと）。動画を再生してください。`;
+  } finally {
+    starting = false;
+    render();
+  }
 });
 audible.addEventListener('change', () => {
   if (graph) graph.out.gain.value = audible.checked ? 1 : 0;
@@ -275,8 +314,9 @@ clearBtn.addEventListener('click', async () => {
     }, 4000);
     return;
   }
-  await chrome.storage.local.remove(keyOf(currentId));
-  file = { id: currentId, windows: [] };
+  const id = currentId;
+  await locked(id, () => chrome.storage.local.remove(keyOf(id)));
+  file = { id, windows: [] };
   clearBtn.dataset.sure = '';
   clearBtn.textContent = '記録を消す';
   render();

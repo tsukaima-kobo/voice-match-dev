@@ -1,6 +1,7 @@
 // 声の玉: 録っている声の大きさと明るさ（ゼロ交差の多さ）に合わせて、形と色が動く玉（WebGL）。録った長さは玉のまわりの輪で出す。
 // 持つのは、いまの大きさと明るさの 2 つの数だけで、音そのものは持たない。測定・照合には使わない（見た目だけ）。
 // WebGL が使えない時は CSS の玉（.orb.css）にして、大きさだけ CSS 変数 --level で動かす。
+// WebGL の文脈を失った間は描くのをやめて CSS の玉を見せ、戻ったらプログラムなどを作り直して WebGL に戻る。
 // 動きを減らす設定では、模様を止めて、声の大きさに合わせた大きさだけを変える。画面に見えない時・ページが隠れた時は描かない。
 // 色は CSS 変数 --orb-1〜3（濃い色・薄い色の両方を base.css で決める）。
 
@@ -104,7 +105,7 @@ export function createOrb(box: HTMLElement): Orb {
   const canvas = document.createElement('canvas');
   canvas.setAttribute('aria-hidden', 'true');
   const gl = canvas.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false, powerPreference: 'low-power' });
-  const program = gl && build(gl);
+  let program = gl && build(gl);
   if (!gl || !program) {
     // WebGL が無い時: CSS の玉。大きさは音の大きさで決める
     box.classList.add('css');
@@ -133,8 +134,9 @@ export function createOrb(box: HTMLElement): Orb {
   box.classList.add('gl');
 
   const probe = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
-  const u = (name: string) => gl.getUniformLocation(program, name);
-  const U = { res: u('uRes'), time: u('uTime'), level: u('uLevel'), bright: u('uBright'), prog: u('uProg'), listen: u('uListen'), busy: u('uBusy'), pulse: u('uPulse'), c1: u('uC1'), c2: u('uC2'), c3: u('uC3'), ring: u('uRing') };
+  const u = (name: string) => gl!.getUniformLocation(program!, name);
+  const locate = () => ({ res: u('uRes'), time: u('uTime'), level: u('uLevel'), bright: u('uBright'), prog: u('uProg'), listen: u('uListen'), busy: u('uBusy'), pulse: u('uPulse'), c1: u('uC1'), c2: u('uC2'), c3: u('uC3'), ring: u('uRing') });
+  let U = locate();
   function colors() {
     const cs = getComputedStyle(box);
     gl!.uniform3fv(U.c1, cssColor(probe, cs.getPropertyValue('--orb-1').trim(), [0.95, 0.3, 0.6]));
@@ -152,7 +154,8 @@ export function createOrb(box: HTMLElement): Orb {
   let visible = true,
     raf = 0,
     last = performance.now(),
-    clock = 0;
+    clock = 0,
+    lost = false;
   function fit() {
     const d = Math.min(1.5, window.devicePixelRatio || 1);
     const w = Math.max(1, Math.round(box.clientWidth * d)),
@@ -166,6 +169,7 @@ export function createOrb(box: HTMLElement): Orb {
   }
   function frame(now: number) {
     raf = 0;
+    if (lost) return;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const still = reduce.matches;
@@ -190,7 +194,7 @@ export function createOrb(box: HTMLElement): Orb {
     if (visible && !document.hidden && (!still || settling)) raf = requestAnimationFrame(frame);
   }
   function wake() {
-    if (!raf && visible && !document.hidden) {
+    if (!raf && visible && !document.hidden && !lost) {
       last = performance.now();
       raf = requestAnimationFrame(frame);
     }
@@ -201,22 +205,50 @@ export function createOrb(box: HTMLElement): Orb {
   }).observe(box);
   document.addEventListener('visibilitychange', wake);
   new ResizeObserver(wake).observe(box);
-  canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
+  // 文脈を失ったら: 描くのをやめ、CSS の玉にする。止めておくと戻ってくるので、その時に作り直して WebGL に戻す
+  const css = (on: boolean) => {
+    box.classList.toggle('css', on);
+    box.classList.toggle('gl', !on);
+    canvas.style.visibility = on ? 'hidden' : '';
+  };
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    lost = true;
+    cancelAnimationFrame(raf);
+    raf = 0;
+    css(true);
+  });
+  canvas.addEventListener('webglcontextrestored', () => {
+    const p = build(gl);
+    if (!p) return;
+    program = p;
+    gl.useProgram(p);
+    U = locate();
+    colors();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    lost = false;
+    css(false);
+    wake();
+  });
   wake();
 
   return {
     push(x, rate) {
       sound.push(x, rate);
+      // CSS の玉の間は、大きさだけ動かす
+      if (lost) box.style.setProperty('--level', target.toFixed(3));
       wake();
     },
     mode(m) {
       if (m === 'done' && mode !== 'done') pulse = 1;
       mode = m;
       box.dataset.mode = m;
+      if (lost && m !== 'listening') box.style.setProperty('--level', '0');
       wake();
     },
     progress(p) {
       prog = Math.max(0, Math.min(1, p));
+      box.style.setProperty('--progress', String(prog));
     },
   };
 }

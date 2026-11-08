@@ -30,9 +30,20 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, x: number, y: numb
   return s;
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+/** 角の丸い四角の道筋。roundRect の無いブラウザー（Safari 15 まで など）では arcTo で描く */
+export function roundRect(ctx: Pick<CanvasRenderingContext2D, 'beginPath' | 'moveTo' | 'arcTo' | 'closePath'> & { roundRect?: CanvasRenderingContext2D['roundRect'] }, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, r);
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, r);
+    return;
+  }
+  const k = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.moveTo(x + k, y);
+  ctx.arcTo(x + w, y, x + w, y + h, k);
+  ctx.arcTo(x + w, y + h, x, y + h, k);
+  ctx.arcTo(x, y + h, x, y, k);
+  ctx.arcTo(x, y, x + w, y, k);
+  ctx.closePath();
 }
 
 export function drawCard(d: CardData): HTMLCanvasElement {

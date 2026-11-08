@@ -47,8 +47,11 @@ const REG_MIN_VOICED = LONG_SECONDS;
 const PAD_FILE_MAX_SECONDS = 15;
 /** お手本の音声ファイルの大きさの上限 */
 const FILE_MAX_BYTES = 20 * 1024 * 1024;
-/** 音声ファイルは、この速さで読む（measure.ts もこの速さにしてから測る） */
-const FILE_RATE = 16000;
+/**
+ * 音声ファイルは、この速さで読む。マイク（多くは 48 kHz）とサイトの声（48 kHz で測る）と同じ速さにして、measure.ts の 16 kHz への
+ * 直し方（低域通過）も同じにする（ブラウザーに 16 kHz で読ませると、声の澄み具合などが少しずれる）
+ */
+const FILE_RATE = 48000;
 /** お手本を聞かせる時、これより小さい音は「まだ始まっていない」として数えない（RMS） */
 const START_RMS = 0.003;
 
@@ -110,6 +113,9 @@ class Take {
     if (this.got / this.rate >= LISTEN_MAX) this.onFull();
   };
   begin(mic: Mic): void {
+    // 前のマイクが残っていたら止める（開いたまま隠れないように）
+    if (this.mic && this.mic !== mic) this.mic.stop();
+    cancelAnimationFrame(this.raf);
     this.mic = mic;
     this.rate = mic.rate;
     this.live = true;
@@ -210,13 +216,14 @@ let refMsg: Msg = () => '',
   refBad = false,
   mimMsg: Msg = () => '',
   mimBad = false;
-function showRef(next: RefState, msg: Msg, bad = false): void {
+/** お手本の所を描く。`redraw` は言葉を切り替えた時（声の玉はそのまま。お手本を録っている間に止まって見えないように） */
+function showRef(next: RefState, msg: Msg, bad = false, redraw = false): void {
   refState = next;
   refMsg = msg;
   refBad = bad;
   ref.stage.dataset.state = next;
   refLive.mode(next === 'listening' ? 'listening' : next === 'analysing' && refAnalysingMic ? 'analysing' : 'off');
-  orb.mode(ORB_MODE[next] ?? 'idle');
+  if (!redraw) orb.mode(ORB_MODE[next] ?? 'idle');
   lockMics();
   ref.status.textContent = msg();
   ref.status.classList.toggle('bad', bad);
@@ -461,6 +468,18 @@ reg.kinds.replaceChildren(
   }),
 );
 const kindBoxes = () => [...reg.kinds.querySelectorAll<HTMLInputElement>('input[type=checkbox]')];
+/** 「コピー」のボタン（コピーした後は「コピーしました」。送る内容が変わったら戻す） */
+let copied = false;
+function drawCopy(): void {
+  reg.copy.textContent = copied ? t('コピーしました', 'Copied') : t('コピー', 'Copy');
+}
+/** 直してほしい所を出した時の、送る内容（言葉を切り替えた時に、今の言葉で出し直すため） */
+let problemSub: ReturnType<typeof makeSubmission> | null = null;
+function drawProblems(): void {
+  const problems = problemSub ? checkSubmission(problemSub) : [];
+  reg.problems.replaceChildren(...problems.map((p) => el('li', undefined, p.text)));
+  reg.problems.hidden = !problems.length;
+}
 function resetRegister(name: string): void {
   reg.box.open = false;
   reg.name.value = name;
@@ -470,18 +489,25 @@ function resetRegister(name: string): void {
   for (const b of kindBoxes()) b.checked = false;
   reg.problems.hidden = reg.out.hidden = true;
   reg.problems.replaceChildren();
+  problemSub = null;
   reg.code.value = '';
+  copied = false;
+  drawCopy();
 }
 reg.make.addEventListener('click', () => {
   if (!target?.reg) return;
   const kinds = kindBoxes().reduce((m, b) => (b.checked ? m | (1 << Number(b.value)) : m), 0);
   const sub = makeSubmission({ name: reg.name.value, group: reg.group.value, kinds, link: reg.link.value, quality: target.reg.quality, features: target.features, consent: reg.ok.checked });
   const problems = checkSubmission(sub);
-  reg.problems.replaceChildren(...problems.map((p) => el('li', undefined, p.text)));
-  reg.problems.hidden = !problems.length;
+  problemSub = problems.length ? sub : null;
+  drawProblems();
   reg.out.hidden = problems.length > 0;
   if (problems.length) return;
   const code = encodeSubmission(sub);
+  if (code !== reg.code.value) {
+    copied = false;
+    drawCopy();
+  }
   reg.code.value = code;
   if (SUBMIT_FORM.url) {
     reg.form.hidden = false;
@@ -495,8 +521,14 @@ reg.make.addEventListener('click', () => {
 });
 let howtoMsg: Msg = () => '';
 reg.copy.addEventListener('click', () => {
-  const done = () => (reg.copy.textContent = t('コピーしました', 'Copied'));
-  navigator.clipboard?.writeText(reg.code.value).then(done, () => {
+  const code = reg.code.value;
+  const done = () => {
+    // コピーの間に送る内容が変わっていたら、「コピーしました」にしない
+    if (reg.code.value !== code) return;
+    copied = true;
+    drawCopy();
+  };
+  navigator.clipboard?.writeText(code).then(done, () => {
     reg.code.select();
   }) ?? reg.code.select();
 });
@@ -509,6 +541,13 @@ const labelOf = (id: string, l: Lang) => {
 };
 const pickCatalog = (p: (typeof PROFILES)[number]) => {
   const v = ENTRY_BY_ID.get(p.id)!;
+  // お手本を録っている・計算している途中なら、先に止めて音を捨てる
+  if (isBusy(refState)) {
+    refToken++;
+    refAnalysingMic = false;
+    refTake.stop();
+    refTake.drop();
+  }
   setTarget(p.features, v.name, M('このサイトで測った代表値', 'a voice measured by this site'), undefined, undefined, undefined, v.nameEn);
 };
 // 声は裏で読む。読み終えたら一覧が出る
@@ -540,7 +579,8 @@ void voicesReady.then(() => {
   // 声のページからのリンク: ?target=<名前>（いつも日本語の名前）
   const wanted = new URLSearchParams(location.search).get('target');
   const p = wanted ? PROFILES.find((x) => ENTRY_BY_ID.get(x.id)!.name === wanted) : undefined;
-  if (p && !target) pickCatalog(p);
+  // 読み終える前に、マイク・タブ・ファイルでお手本を聞かせはじめていたら、そちらを使う
+  if (p && !target && !isBusy(refState)) pickCatalog(p);
 });
 
 /* ---- 2. 真似 ---- */
@@ -584,13 +624,14 @@ type MimState = 'locked' | 'idle' | 'asking' | 'listening' | 'analysing' | 'done
 let mimState: MimState = 'locked';
 let mimToken = 0;
 
-function showMim(next: MimState, msg: Msg, bad = false): void {
+/** 真似の所を描く。`redraw` は言葉を切り替えた時（声の玉はそのまま） */
+function showMim(next: MimState, msg: Msg, bad = false, redraw = false): void {
   mimState = next;
   mimMsg = msg;
   mimBad = bad;
   mim.stage.dataset.state = next;
   mimLive.mode(next === 'listening' ? 'listening' : next === 'analysing' ? 'analysing' : 'off');
-  orb.mode(ORB_MODE[next] ?? 'idle');
+  if (!redraw) orb.mode(ORB_MODE[next] ?? 'idle');
   lockMics();
   mim.status.textContent = msg();
   mim.status.classList.toggle('bad', bad);
@@ -733,8 +774,8 @@ function render(tg: Target, mine: Features, mineContour?: Contour): boolean {
   best = Math.max(best, score);
   shown = { tg, mine, ...(mineContour ? { mineContour } : {}), score, before };
   showScore(score);
-  paint();
   $('result').hidden = false;
+  paint();
   return true;
 }
 /** 結果の言葉と図（今の言葉で。点数の数えあがりはしない） */
@@ -783,12 +824,6 @@ function paint(): void {
     list.append(li);
   }
 
-  share.update({ kind: 'mimic', features: mine, model: { name: tgName, features: tg.features }, score, word: scoreWord(score), line: !!line });
-  mountShapes($('shapes'), $('shape-guide'), [
-    { who: t('お手本', 'Model'), ...(tg.name ? { sub: tgName } : {}), f: tg.features },
-    { who: t('あなた', 'You'), sub: t(`${tries} 回目`, `Try ${tries}`), f: mine },
-  ]);
-
   renderGroups($('compare'), (d) => {
     const a = tg.features[d.key],
       b = mine[d.key];
@@ -796,17 +831,36 @@ function paint(): void {
     value.append(el('span', undefined, t(`お手本 ${formatFeature(d.key, a)}`, `Model ${formatFeature(d.key, a)}`)), el('span', undefined, t(`あなた ${formatFeature(d.key, b)}`, `You ${formatFeature(d.key, b)}`)));
     return itemRow(d, [{ value: a, cls: 'ref' }, { value: b }], value);
   });
+
+  // 飾り（共有カード・声紋）は最後に。古いブラウザーで描けなくても、点数と直し方は出す
+  decor(() => share.update({ kind: 'mimic', features: mine, model: { name: tgName, features: tg.features }, score, word: scoreWord(score), line: !!line }));
+  decor(() =>
+    mountShapes($('shapes'), $('shape-guide'), [
+      { who: t('お手本', 'Model'), ...(tg.name ? { sub: tgName } : {}), f: tg.features },
+      { who: t('あなた', 'You'), sub: t(`${tries} 回目`, `Try ${tries}`), f: mine },
+    ]),
+  );
+}
+/** 飾りを描く。描けない時は飛ばす（結果と案内は止めない） */
+function decor(f: () => void): void {
+  try {
+    f();
+  } catch {
+    /* 描けない時は、その飾りだけ出さない */
+  }
 }
 
 showRef('idle', M('お手本の聞かせ方を選んでください。', 'Choose how to play the model.'));
 showMim('locked', M('先にお手本を聞かせてください。', 'Play the model first.'));
 
 onLang(() => {
-  showRef(refState, refMsg, refBad);
-  showMim(mimState, mimMsg, mimBad);
+  showRef(refState, refMsg, refBad, true);
+  showMim(mimState, mimMsg, mimBad, true);
   showTopic();
   if (target) ref.summary.textContent = summaryMsg();
   if (!reg.out.hidden) reg.howto.textContent = howtoMsg();
+  drawCopy();
+  if (problemSub) drawProblems();
   if (PROFILES.length) {
     $('ref-catalog-count').textContent = t(`${PROFILES.length} 件`, `${PROFILES.length}`);
     fillCatalogList();

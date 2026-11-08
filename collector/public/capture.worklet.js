@@ -1,4 +1,6 @@
-// マイク（サイト）や再生中の動画（収集の拡張機能）の音を、そのまま 2048 サンプルずつ渡すだけの AudioWorklet。
+// 再生中の動画（収集の拡張機能）の音を、そのまま 2048 サンプルずつ渡すだけの AudioWorklet。
+// サイトの src/voice/capture.worklet.js と同じだが、かたまりの終わりの時刻（AudioContext の時計、秒）も一緒に渡す:
+// ページが測っている間に届いたかたまりは、まとめて遅れて読まれるので、その時の再生位置ではなく、この時刻で並べる。
 // 音を変えず、出力は無音。「stop」を受けたら、それきり動かない。
 class VoiceMatchCapture extends AudioWorkletProcessor {
   constructor() {
@@ -22,7 +24,7 @@ class VoiceMatchCapture extends AudioWorkletProcessor {
         for (let c = 0; c < input.length; c++) v += input[c][i];
         this.buf[this.n++] = v / input.length;
         if (this.n === this.buf.length) {
-          this.port.postMessage(this.buf, [this.buf.buffer]);
+          this.port.postMessage({ pcm: this.buf, end: (currentFrame + i + 1) / sampleRate }, [this.buf.buffer]);
           this.buf = new Float32Array(2048);
           this.n = 0;
         }

@@ -62,7 +62,8 @@ void main(){
   float v=u*nR+.65*warp*smoothstep(0.,.35,u)+thc/TAU-uT*(.1+.6*uMotion);
   float ri=floor(v),fr=fract(v);
   float dv=abs(fr-.5);
-  float aa=fwidth(v)*1.2+.2*uSoft;
+  // v は左の継ぎ目（−π と π）で 1 跳ぶ。ぼかしの幅は、継ぎ目を右へ移した v でも測って小さい方を使う（継ぎ目に光る線が出ないように）
+  float aa=min(fwidth(v),fwidth(v+step(thc,0.)))*1.2+.2*uSoft;
   float hw=.07+.1*uPower;
   float line=1.-smoothstep(hw,hw+aa,dv);
   // 切れ目と粒の模様は、角度を cos・sin で持って、左の継ぎ目（−π と π）でずれないように
@@ -254,6 +255,8 @@ const rOf = (g: Geo, th: number) => g.S * (1 + g.A * g.w.reduce((s, w, i) => s +
 export interface Voiceprint {
   set(f: Features): void;
   focus(layer: ShapeLayer | null, item: FeatureKey | null): void;
+  /** 使い終えた時: WebGL の文脈を手放し、見張りと聞き耳を外す */
+  dispose(): void;
 }
 
 const LAYER_INDEX: Record<ShapeLayer, number> = { shape: 1, core: 2, mist: 3, orbit: 4, size: 5 };
@@ -269,18 +272,59 @@ export interface VpPalette {
 /** 共有カードなどに使う、いつも夜の色（濃い画面の --a3・--a2・--a1） */
 export const NIGHT: VpPalette = { low: [0.4, 0.86, 0.92], mid: [0.66, 0.5, 1], high: [1, 0.42, 0.66], glint: [1, 0.97, 0.99], light: false };
 
-/** canvas に声紋を描く物（WebGL2 が使えなければ null） */
-function makeRenderer(canvas: HTMLCanvasElement, preserve = false): { draw(p: ShapeParams, t: number, reveal: number, focus: number, W: number, pal: VpPalette): Geo } | null {
+interface Renderer {
+  /** 描く。WebGL の文脈を失っている間は描かずに null */
+  draw(p: ShapeParams, t: number, reveal: number, focus: number, W: number, pal: VpPalette): Geo | null;
+  /** 文脈を失っている間は true */
+  readonly lost: boolean;
+  /** 文脈を手放す（もう描かない） */
+  dispose(): void;
+}
+const NAMES = ['uRes', 'uT', 'uReveal', 'uS', 'uA', 'uSkewK', 'uPitch', 'uMotion', 'uSpacing', 'uBright', 'uHnr', 'uSoft', 'uJit', 'uShim', 'uRate', 'uPause', 'uRhythm', 'uPower', 'uLight', 'uSt', 'uCore', 'uW', 'uPh', 'uTim', 'uStar', 'uLow', 'uMid', 'uHigh', 'uGlint', 'uFocus'];
+
+/**
+ * canvas に声紋を描く物（WebGL2 が使えなければ null）。
+ * 文脈を失ったら描くのをやめ、戻ったらプログラム・三角形・uniform の場所を作り直して onRestore を呼ぶ。
+ */
+function makeRenderer(canvas: HTMLCanvasElement, preserve = false, onRestore?: () => void): Renderer | null {
   const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: preserve });
   if (!gl) return null;
-  const prog = build(gl);
-  if (!prog) return null;
-  gl.useProgram(prog);
-  const names = ['uRes', 'uT', 'uReveal', 'uS', 'uA', 'uSkewK', 'uPitch', 'uMotion', 'uSpacing', 'uBright', 'uHnr', 'uSoft', 'uJit', 'uShim', 'uRate', 'uPause', 'uRhythm', 'uPower', 'uLight', 'uSt', 'uCore', 'uW', 'uPh', 'uTim', 'uStar', 'uLow', 'uMid', 'uHigh', 'uGlint', 'uFocus'];
-  const L = Object.fromEntries(names.map((n) => [n, gl.getUniformLocation(prog, n)])) as Record<string, WebGLUniformLocation | null>;
-  canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
+  let L: Record<string, WebGLUniformLocation | null> = {},
+    lost = false,
+    gone = false;
+  const setup = (): boolean => {
+    const prog = build(gl);
+    if (!prog) return false;
+    gl.useProgram(prog);
+    L = Object.fromEntries(NAMES.map((n) => [n, gl.getUniformLocation(prog, n)]));
+    return true;
+  };
+  if (!setup()) return null;
+  const onLost = (e: Event) => {
+    // 止めておくと、戻ってくる（webglcontextrestored）
+    e.preventDefault();
+    lost = true;
+  };
+  const onRestored = () => {
+    if (gone) return;
+    lost = !setup();
+    if (!lost) onRestore?.();
+  };
+  canvas.addEventListener('webglcontextlost', onLost);
+  canvas.addEventListener('webglcontextrestored', onRestored);
+  const isLost = () => lost || gl.isContextLost();
   return {
+    get lost() {
+      return isLost();
+    },
+    dispose() {
+      gone = true;
+      canvas.removeEventListener('webglcontextlost', onLost);
+      canvas.removeEventListener('webglcontextrestored', onRestored);
+      (gl.getExtension('WEBGL_lose_context') as { loseContext(): void } | null)?.loseContext();
+    },
     draw(p, t, reveal, focus, W, pal) {
+      if (isLost()) return null;
       if (canvas.width !== W || canvas.height !== W) canvas.width = canvas.height = W;
       gl.viewport(0, 0, W, W);
       const g = geometry(p, t);
@@ -324,7 +368,7 @@ function makeRenderer(canvas: HTMLCanvasElement, preserve = false): { draw(p: Sh
 }
 
 /**
- * 声紋を 1 枚の絵に（共有カード用。いつも同じ時刻・描き出しの後・夜の色）。WebGL2 が無ければ 2D の図。
+ * 声紋を 1 枚の絵に（共有カード用。いつも同じ時刻・描き出しの後・夜の色）。WebGL2 が無い時・文脈を失っている時は 2D の図。
  * 描いたすぐ後に写すので、描いた物を残す設定は要らない。描き終えたら WebGL の文脈を手放す。
  */
 export function renderSnapshot(f: Features, size: number, pal: VpPalette = NIGHT): HTMLCanvasElement {
@@ -333,11 +377,10 @@ export function renderSnapshot(f: Features, size: number, pal: VpPalette = NIGHT
   const ctx = out.getContext('2d')!;
   const gc = document.createElement('canvas');
   const r = makeRenderer(gc, true);
-  if (r) {
-    r.draw(shapeParams(f), 2.4, 1, 0, size, pal);
-    ctx.drawImage(gc, 0, 0);
-    (gc.getContext('webgl2')?.getExtension('WEBGL_lose_context') as { loseContext(): void } | null)?.loseContext();
-  } else {
+  const drawn = r?.draw(shapeParams(f), 2.4, 1, 0, size, pal);
+  if (drawn) ctx.drawImage(gc, 0, 0);
+  r?.dispose();
+  if (!drawn) {
     const to255 = (c: RGB): [number, number, number] => [c[0] * 255, c[1] * 255, c[2] * 255];
     drawShape(ctx, size, shapeParams(f), { low: to255(pal.low), mid: to255(pal.mid), high: to255(pal.high), ink: [240, 236, 250], glint: to255(pal.glint), light: pal.light }, { t: 2.4, focus: null });
   }
@@ -349,7 +392,8 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
   const canvas = document.createElement('canvas');
   canvas.className = 'vp-gl';
   canvas.setAttribute('aria-hidden', 'true');
-  const renderer = makeRenderer(canvas);
+  // 文脈を失っている間は描かない。戻ったら描き直す
+  const renderer = makeRenderer(canvas, false, () => wake());
   if (!renderer) return null;
   const over = document.createElement('canvas');
   over.className = 'vp-over';
@@ -374,14 +418,15 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
     const c = (n: string, fb: RGB) => cssColor(probe, cs.getPropertyValue(n).trim(), fb);
     return { low: c('--a3', [0.4, 0.85, 0.93]), mid: c('--a2', [0.48, 0.3, 1]), high: c('--a1', [0.94, 0.28, 0.56]), glint: dark.matches ? [1, 0.97, 0.99] : [1, 1, 1], light: !dark.matches };
   }
-  dark.addEventListener('change', () => {
+  const onScheme = () => {
     pal = null;
     wake();
-  });
+  };
+  dark.addEventListener('change', onScheme);
 
   function frame(now: number) {
     raf = 0;
-    if (!params || !canvas.isConnected) return;
+    if (!params || !canvas.isConnected || renderer!.lost) return;
     pal ??= colors();
     if (!t0) t0 = now;
     const still = reduce.matches;
@@ -391,11 +436,12 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
     const W = Math.max(1, Math.round(box.clientWidth * d));
     if (over.width !== W || over.height !== W) over.width = over.height = W;
     const g = renderer!.draw(params, t, reveal, focusLayer ? LAYER_INDEX[focusLayer] : 0, W, pal);
+    if (!g) return;
     drawCallout(octx, W, d, g, params, reveal);
     if (visible && !document.hidden && (!still || reveal < 1)) raf = requestAnimationFrame(frame);
   }
   function wake() {
-    if (!raf && params && visible && !document.hidden) raf = requestAnimationFrame(frame);
+    if (!raf && params && visible && !document.hidden && !renderer!.lost) raf = requestAnimationFrame(frame);
   }
 
   /** 選んだ項目の場所に、印と引き出し線と数字 */
@@ -537,7 +583,7 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
     ctx.fillStyle = cs.getPropertyValue('--surface-solid').trim() || '#111';
     ctx.globalAlpha = 0.92;
     ctx.beginPath();
-    ctx.roundRect(lx, ly, tw, th, 8 * d);
+    roundRectPath(ctx, lx, ly, tw, th, 8 * d);
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.strokeStyle = accent;
@@ -553,12 +599,14 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
     }
   }
 
-  new IntersectionObserver((es) => {
+  const io = new IntersectionObserver((es) => {
     visible = es.some((e) => e.isIntersecting);
     wake();
-  }).observe(box);
+  });
+  io.observe(box);
   document.addEventListener('visibilitychange', wake);
-  new ResizeObserver(wake).observe(box);
+  const ro = new ResizeObserver(wake);
+  ro.observe(box);
 
   return {
     set(f) {
@@ -577,7 +625,32 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
       focusItem = item;
       wake();
     },
+    dispose() {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      params = null;
+      io.disconnect();
+      ro.disconnect();
+      document.removeEventListener('visibilitychange', wake);
+      dark.removeEventListener('change', onScheme);
+      renderer.dispose();
+    },
   };
+}
+
+/** 角の丸い四角の道。roundRect の無いブラウザー（Safari 16 より前）では arcTo で */
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, r);
+    return;
+  }
+  const k = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.moveTo(x + k, y);
+  ctx.arcTo(x + w, y, x + w, y + h, k);
+  ctx.arcTo(x + w, y + h, x, y + h, k);
+  ctx.arcTo(x, y + h, x, y, k);
+  ctx.arcTo(x, y, x + w, y, k);
+  ctx.closePath();
 }
 
 function build(gl: WebGL2RenderingContext): WebGLProgram | null {
@@ -609,6 +682,8 @@ const mounted = new WeakMap<HTMLElement, { views: ShapeView[]; caps: HTMLElement
 export function mountShapes(box: HTMLElement, guide: HTMLElement, entries: readonly { who: string; sub?: string; f: Features }[]): void {
   let m = mounted.get(box);
   if (!m || m.views.length !== entries.length) {
+    // 数が変わった時は、前の図を手放す（WebGL の文脈・見張り・聞き耳）。残すと、文脈がたまっていく
+    for (const v of m?.views ?? []) v.dispose();
     const views: ShapeView[] = [],
       caps: HTMLElement[] = [],
       figs: HTMLElement[] = [];

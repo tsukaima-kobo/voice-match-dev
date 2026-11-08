@@ -174,7 +174,7 @@ async function start() {
       orb.push(x, m.rate);
       live.push(x, m.rate);
     };
-    const m = await openMic(onChunk, undefined, mics.get());
+    const m = await openMic(onChunk, micEnded, mics.get());
     if (state !== 'asking') {
       // 許可を待つ間に取り消された
       m.stop();
@@ -208,7 +208,7 @@ async function finish() {
   }
   dropSound();
   show('analysing', M(`${FEATURES.length} 項目を計算しています…`, `Working out ${FEATURES.length} items…`));
-  // 測るのは Worker。音はそちらに渡して、そこで手放す。その間、パネルは計算中の演出を見せる
+  // 測るのは Worker（使えなければ、その場で）。音はそちらに渡し、測り終えたら 0 で埋まる。その間、パネルは計算中の演出を見せる
   const [m] = await Promise.all([measureAsync(pcm, rate, { minVoicedSeconds: ONE_LINE_SECONDS }), live.analysing(ANALYSE_MS)]);
   if ((state as State) !== 'analysing') return;
   if (!m.ok) {
@@ -223,6 +223,18 @@ async function finish() {
   const n = takes.length;
   show('done', n > 1 ? M(`${n} 回分をまとめて、絞り込みました。結果は下にあります。`, `Narrowed down using ${n} takes. The result is below.`) : M('測りました。結果は下にあります。', 'Measured. The result is below.'));
   result.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+}
+/** マイクが外れた時（抜いた・ほかのアプリに取られたなど）: それまでの声で測る。ほとんど録れていなければ、外れたことを伝える */
+function micEnded() {
+  if (state !== 'listening' || !mic) return;
+  if (got / mic.rate >= DONE_AFTER) {
+    void finish();
+    return;
+  }
+  stopMic();
+  dropSound();
+  const had = takes.length > 0;
+  show('failed', () => t('マイクが外れたので止めました。つなぎ直して、もう一度押してください。', 'The microphone went away, so this stopped. Plug it back in and press again.') + (had ? t('（前までの結果はそのままです）', ' (Your earlier result is kept.)') : ''), true);
 }
 function cancel() {
   stopMic();
@@ -270,6 +282,8 @@ function failText(reason: MeasureFail, voiced: number | undefined): string {
 // ?kind=vtuber なら、最初からその大枠に絞った状態でページを開く
 const kindParam = KIND_BY_ID.get(new URLSearchParams(location.search).get('kind') ?? '');
 let kindFilter = kindParam ? 1 << kindParam.bit : 0;
+/** 声を読み終えたか（読む前は大枠のボタンを作らない。空の一覧で ?kind= を消さないように） */
+let ready = false;
 let poolCache: { mask: number; from: typeof PROFILES; list: typeof PROFILES } | null = null;
 /** 比べる相手（今の探す範囲の中の声） */
 function pool(): typeof PROFILES {
@@ -302,7 +316,10 @@ function setKind(mask: number) {
   lastRank = rank(MODEL, shown.c.features, candidates(), 5).map((r) => r.id);
   draw();
 }
-void voicesReady.then(drawKindChips);
+void voicesReady.then(() => {
+  ready = true;
+  drawKindChips();
+});
 
 /* ---- じっくり測ったあなたの声（じっくり測るページで入れた時だけ。この端末のブラウザーにある数字。探す範囲に関わらず比べる） ---- */
 const MINE_ID = 'mine';
@@ -320,20 +337,25 @@ function drawMineNote() {
   $('mine-in-text').textContent = t('じっくり測ったあなたの声も、比べる相手に入っています（この端末のブラウザーだけ）。', 'Your voice measured in depth is also among the voices compared (this browser only).');
   $('mine-clear').textContent = t('外す', 'Remove');
 }
+/** 比べる相手が変わった時: 出している結果を、今の相手で並べ直す */
+function rerank() {
+  if (!shown) return;
+  lastRank = rank(MODEL, shown.c.features, candidates(), 5).map((r) => r.id);
+  draw();
+}
 $('mine-clear').addEventListener('click', () => {
   clearMine();
   mine = null;
   drawMineNote();
-  if (shown) {
-    lastRank = rank(MODEL, shown.c.features, candidates(), 5).map((r) => r.id);
-    draw();
-  }
+  rerank();
 });
 drawMineNote();
-// ほかのタブのじっくり測るページで、入れた・外した時
+// ほかのタブのじっくり測るページで、入れた・外した時（あなたの声が変わった時だけ、並べ直す）
 window.addEventListener('storage', () => {
+  const was = JSON.stringify(mine);
   mine = loadMine(MEASURE_VERSION);
   drawMineNote();
+  if (JSON.stringify(mine) !== was) rerank();
 });
 
 /* ---- 結果 ---- */
@@ -355,17 +377,12 @@ function draw() {
   const vs = c.voicedSeconds.toFixed(1);
   $('certainty-note').textContent =
     level === 1
-      ? t(`一言なので、ざっくりの結果です。言う言葉を変えると変わります。もう一言話すと絞り込めます（これまで声 ${vs} 秒）。`, `From a single phrase, so this is rough; a different phrase may give a different result. Say one more thing to narrow it down (voice so far: ${vs} s).`)
+      ? t(`短い声だけなので、ざっくりの結果です。言う言葉を変えると変わります。もう少し続けて話すと絞り込めます（これまで声 ${vs} 秒）。`, `Only short bits of voice so far, so this is rough; different words may give a different result. Speak a little longer to narrow it down (voice so far: ${vs} s).`)
       : level === 2
         ? t(`だいたいの結果です（これまで ${c.takes} 回・声 ${vs} 秒）。1 回で声を ${LONG_SECONDS} 秒以上（話して 15 秒ほど）話すと、速さと間も加わって、しっかりの結果になります。`, `A fair result (${c.takes} take${c.takes > 1 ? 's' : ''}, ${vs} s of voice so far). Talk for ${LONG_SECONDS} s of voice or more in one go (about 15 s of talking) to add tempo and pauses for a solid result.`)
         : t(`しっかりの結果です（これまで ${c.takes} 回・声 ${vs} 秒）。`, `A solid result (${c.takes} take${c.takes > 1 ? 's' : ''}, ${vs} s of voice so far).`);
   const top = renderMatches(f, before);
   renderMine(f);
-  share.update({ kind: 'voice', features: f, ...(top ? { top: { name: top.name, word: top.word } } : {}), certainty: CERTAINTY_WORDS[level] });
-  mountShapes($('shapes'), $('shape-guide'), [
-    { who: t('あなた', 'You'), sub: t(`確かさ: ${CERTAINTY_WORDS[level]}（${c.takes} 回分）`, `Certainty: ${CERTAINTY_WORDS[level]} (${c.takes} take${c.takes > 1 ? 's' : ''})`), f },
-    ...(top ? [{ who: t('1 位の声', 'No. 1 voice'), sub: top.name, f: top.features }] : []),
-  ]);
   const missing: string[] = [];
   if (c.longest < FEW_SECONDS) missing.push(t(`抑揚・口の開きの幅などは、1 回で声を ${FEW_SECONDS} 秒以上話すと出ます`, `intonation, mouth-opening range and others appear after ${FEW_SECONDS} s of voice in one go`));
   if (c.longest < LONG_SECONDS) missing.push(t(`速さと間は、1 回で声を ${LONG_SECONDS} 秒以上話すと出ます`, `tempo and pauses appear after ${LONG_SECONDS} s of voice in one go`));
@@ -376,6 +393,22 @@ function draw() {
     `${c.takes} take${c.takes > 1 ? 's' : ''} so far, ${vs} s of voice in all. This take: ${i.seconds.toFixed(1)} s recorded, ${i.voicedSeconds.toFixed(1)} s of voice, ${i.speechSeconds.toFixed(1)} s of talk, ${(i.loudDb - i.floorDb).toFixed(0)} dB between the voice and the quiet.`,
   );
   result.hidden = false;
+  // 飾り（共有カード・声紋）は最後に。古いブラウザーで描けなくても、結果は出す
+  decor(() => share.update({ kind: 'voice', features: f, ...(top ? { top: { name: top.name, word: top.word } } : {}), certainty: CERTAINTY_WORDS[level] }));
+  decor(() =>
+    mountShapes($('shapes'), $('shape-guide'), [
+      { who: t('あなた', 'You'), sub: t(`確かさ: ${CERTAINTY_WORDS[level]}（${c.takes} 回分）`, `Certainty: ${CERTAINTY_WORDS[level]} (${c.takes} take${c.takes > 1 ? 's' : ''})`), f },
+      ...(top ? [{ who: t('1 位の声', 'No. 1 voice'), sub: top.name, f: top.features }] : []),
+    ]),
+  );
+}
+/** 飾りを描く。描けない時は飛ばす（結果と案内は止めない） */
+function decor(f: () => void) {
+  try {
+    f();
+  } catch {
+    /* 描けない時は、その飾りだけ出さない */
+  }
 }
 
 /** 近い声を並べる。1 位の名前と数字を返す（声紋で並べるため） */
@@ -446,7 +479,7 @@ onLang(() => {
   texts();
   statusEl.classList.toggle('bad', statusBad);
   ticker();
-  drawKindChips();
+  if (ready) drawKindChips();
   drawMineNote();
   if (!result.hidden) draw();
 });

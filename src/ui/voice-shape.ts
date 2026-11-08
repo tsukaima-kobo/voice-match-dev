@@ -76,13 +76,26 @@ export const SHAPE_LAYERS: readonly { key: ShapeLayer; name: string; items: read
   get name() {
     return t(...l.name);
   },
-  items: l.items.map((i) => ({
-    key: i.key,
-    ...(i.name ? { get name() { return t(...i.name!); } } : {}),
-    get fig() {
-      return t(...i.fig);
-    },
-  })),
+  // name も読むたびに今の言葉で（広げる書き方 ...{ get name() } だと、読み込んだ時の言葉で止まる）
+  items: l.items.map((i): ShapeItem => {
+    const name = i.name;
+    return name
+      ? {
+          key: i.key,
+          get name() {
+            return t(...name);
+          },
+          get fig() {
+            return t(...i.fig);
+          },
+        }
+      : {
+          key: i.key,
+          get fig() {
+            return t(...i.fig);
+          },
+        };
+  }),
 }));
 
 /** 図に使う値（0〜1。測っていない項目は null） */
@@ -369,6 +382,8 @@ function readPalette(el: Element): ShapePalette {
 export interface ShapeView {
   set(f: Features): void;
   focus(l: ShapeLayer | null, item?: FeatureKey | null): void;
+  /** 使い終えた時: 描くのをやめ、見張りと聞き耳を外す */
+  dispose(): void;
 }
 
 /** canvas に声のかたちを描き続ける（画面に見えない時・ページが隠れた時は止める。動きを減らす設定では止まった絵） */
@@ -382,10 +397,12 @@ export function createShapeView(canvas: HTMLCanvasElement): ShapeView {
     visible = true,
     raf = 0,
     t0 = 0;
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  const dark = matchMedia('(prefers-color-scheme: dark)');
+  const onScheme = () => {
     pal = null;
     wake();
-  });
+  };
+  dark.addEventListener('change', onScheme);
   function draw(now: number) {
     raf = 0;
     if (!params || !canvas.isConnected) return;
@@ -400,12 +417,14 @@ export function createShapeView(canvas: HTMLCanvasElement): ShapeView {
   const wake = () => {
     if (!raf && params) raf = requestAnimationFrame(draw);
   };
-  new IntersectionObserver((es) => {
+  const io = new IntersectionObserver((es) => {
     visible = es.some((e) => e.isIntersecting);
     wake();
-  }).observe(canvas);
+  });
+  io.observe(canvas);
   document.addEventListener('visibilitychange', wake);
-  new ResizeObserver(wake).observe(canvas);
+  const ro = new ResizeObserver(wake);
+  ro.observe(canvas);
   return {
     set(f) {
       params = shapeParams(f);
@@ -416,14 +435,29 @@ export function createShapeView(canvas: HTMLCanvasElement): ShapeView {
       focus = l;
       wake();
     },
+    dispose() {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      params = null;
+      io.disconnect();
+      ro.disconnect();
+      document.removeEventListener('visibilitychange', wake);
+      dark.removeEventListener('change', onScheme);
+    },
   };
 }
+
+/** 箱ごとの、動いている案内を止める関数 */
+const tours = new WeakMap<HTMLElement, () => void>();
 
 /**
  * 図の読み方: 層ごとに項目の名前を並べ、押すと（マウスなら重ねると）その層だけを光らせて、
  * 数字と、図のどこに出ているかを出す。`values` に、名前ごとの数字を出す声（あなた・お手本など）を渡す。
  */
 export function renderGuide(box: HTMLElement, views: readonly ShapeView[], values: readonly { who: string; f: Features }[]): void {
+  // 同じ箱に出し直す時は、前の案内を止め、光らせていた層も戻す
+  tours.get(box)?.();
+  for (const v of views) v.focus(null, null);
   box.replaceChildren();
   const note = document.createElement('p');
   note.className = 'shape-note';
@@ -486,10 +520,25 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
   const all = SHAPE_LAYERS.flatMap((l) => l.items.map((item) => ({ item, layer: l.key })));
   let step = -1,
     timer = 0,
-    seen = false;
+    delay = 0;
+  const off = new AbortController();
+  const io = new IntersectionObserver((es) => {
+    if (!es.some((e) => e.isIntersecting)) return;
+    io.disconnect();
+    // 図を描き出す動きが終わってから
+    delay = window.setTimeout(() => {
+      delay = 0;
+      if (!current) timer = window.setInterval(tour, 2600);
+    }, 2600);
+  });
+  // 止める: 始まる前の待ち時間の間でも、もう始めない
   const stop = () => {
+    clearTimeout(delay);
     clearInterval(timer);
-    timer = 0;
+    delay = timer = 0;
+    io.disconnect();
+    off.abort();
+    if (tours.get(box) === stop) tours.delete(box);
   };
   const tour = () => {
     if (current || !box.isConnected) return stop();
@@ -501,16 +550,7 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
     }
     pick(all[step]!.item, all[step]!.layer, false);
   };
-  box.addEventListener('pointerdown', stop, { once: true });
-  box.addEventListener('pointerenter', stop, { once: true });
-  box.addEventListener('focusin', stop, { once: true });
-  new IntersectionObserver((es, obs) => {
-    if (seen || !es.some((e) => e.isIntersecting)) return;
-    seen = true;
-    obs.disconnect();
-    // 図を描き出す動きが終わってから
-    setTimeout(() => {
-      if (!current) timer = window.setInterval(tour, 2600);
-    }, 2600);
-  }).observe(box);
+  for (const type of ['pointerdown', 'pointerenter', 'focusin']) box.addEventListener(type, stop, { signal: off.signal });
+  tours.set(box, stop);
+  io.observe(box);
 }

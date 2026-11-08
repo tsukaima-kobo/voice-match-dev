@@ -1,6 +1,6 @@
 // 収集の拡張機能の、DOM を使わない部分（collector/src/windowing.ts）の試験
 import { describe, expect, it } from 'vitest';
-import { addWindow, videoIdOf, Windower, WINDOW_SECONDS, type PlayState } from '../collector/src/windowing.ts';
+import { addWindow, chunkTime, videoIdOf, Windower, WINDOW_SECONDS, type Finished, type PlayState } from '../collector/src/windowing.ts';
 import type { VoiceFile, VoiceWindow } from '../src/data/types.ts';
 
 const RATE = 1000;
@@ -44,6 +44,51 @@ describe('窓にまとめる', () => {
     feed(w, 0, 20);
     expect(feed(w, 300, 29).length).toBe(0);
     expect(w.lastBreak).toBe('jump');
+  });
+});
+
+describe('ページが測っている間に、たまって届いたかたまり', () => {
+  it('かたまりの時刻は、今の再生位置から、届くのが遅れた分を引いた物', () => {
+    expect(chunkTime(130, 1, 50.6, 50)).toBeCloseTo(129.4, 9);
+    // 遅れていなければ（終わりが今より後でも）、今の再生位置のまま
+    expect(chunkTime(130, 1, 50, 50)).toBe(130);
+    expect(chunkTime(130, 1, 50, 50.05)).toBe(130);
+  });
+  it('窓が出るたびにページが止まっても、窓の時刻は音の通りで、再生位置が飛んだと取り違えない', () => {
+    // 48 kHz・2048 サンプルのかたまりが、音の時計どおりに出る。窓が出るたびに、ページは B 秒止まり（measureVoice）、
+    // その間のかたまりは後でまとめて読まれる（読んだ時の再生位置は、どれも同じ）
+    const sr = 48000,
+      n = 2048,
+      dur = n / sr;
+    for (const B of [0.5, 0.9, 1.5, 2.5]) {
+      const w = new Windower(sr);
+      const queue: number[] = [];
+      const got: Finished[] = [];
+      let audio = 0,
+        blockedUntil = -1,
+        jumps = 0;
+      for (let k = 0; k < Math.round(95 / dur); k++) {
+        audio += dur;
+        queue.push(audio);
+        if (audio < blockedUntil) continue;
+        while (queue.length) {
+          const end = queue.shift()!;
+          // 動画は 100 秒の所から。読んだ時の再生位置は 100 + 今の音の時計
+          const d = w.push(new Float32Array(n), playing(chunkTime(100 + audio, 1, audio, end)));
+          if (w.lastBreak === 'jump') jumps++;
+          if (d) {
+            got.push(d);
+            blockedUntil = audio + B;
+          }
+        }
+      }
+      expect(jumps, `${B} 秒止まる時`).toBe(0);
+      expect(got.length, `${B} 秒止まる時`).toBe(3);
+      got.forEach((d, i) => {
+        expect(d.t1 - d.t0).toBeCloseTo(d.pcm.length / sr, 0);
+        expect(d.t0).toBeCloseTo(i ? got[i - 1]!.t1 : 100, 5);
+      });
+    }
   });
 });
 
