@@ -20,11 +20,6 @@ export interface MatchModel {
   /** 白色化の行列（keys.length × keys.length、行ごと）。無ければ単位行列 */
   whiten?: number[][];
   /**
-   * 来た人の声だけにかかる、決まった向きのずれ（変換後、keys の順）。照合の前に来た人の数字から引く。
-   * ほかのタブの音（BGM 入り）を聞かせた時のモデルが持つ（声を抜き出した音との差の平均、tools/bgm-shift.ts）。
-   */
-  queryShift?: number[];
-  /**
    * 近さの言葉の目安（tools/eval.ts が、データに居ない人の 1 位の近さの分布から作る）。
    * typical: 来た人の声 1 回分から全員への近さの中央値の、ふつうの値。cuts: 「とても似ている」「よく似ている」「似ている」の上限（直した近さで）
    */
@@ -60,12 +55,12 @@ export function defaultModel(measureVersion: string): MatchModel {
   };
 }
 
-/** 1 つの声を、モデルの目盛りの整数の並びに（無い項目は null）。query は来た人の声（queryShift を引く） */
-export function standardize(model: MatchModel, f: Features, query = false): (number | null)[] {
+/** 1 つの声を、モデルの目盛りの整数の並びに（無い項目は null） */
+export function standardize(model: MatchModel, f: Features): (number | null)[] {
   const z = model.keys.map((k, i) => {
     const v = f[k];
     if (v === null || v === undefined || !Number.isFinite(v)) return null;
-    const x = (FEATURE_BY_KEY[k].log ? Math.log(Math.max(v, 1e-9)) : v) - (query ? (model.queryShift?.[i] ?? 0) : 0);
+    const x = FEATURE_BY_KEY[k].log ? Math.log(Math.max(v, 1e-9)) : v;
     const s = model.spread[i]!;
     return s > 0 ? (x - model.center[i]!) / s : null;
   });
@@ -77,7 +72,7 @@ export function standardize(model: MatchModel, f: Features, query = false): (num
 
 /** 全員との二乗距離（整数のまま。d2/wsum が 1 項目あたりの二乗のずれ × SCALE²） */
 function scoreAll(model: MatchModel, user: Features, profiles: readonly Profile[]) {
-  const u = standardize(model, user, true);
+  const u = standardize(model, user);
   const w = model.weight.map((x) => BigInt(Math.round(Math.max(0, x) * 1000)));
   return profiles.map((p) => {
     const v = standardize(model, p.features);
@@ -123,7 +118,7 @@ export function closeness(model: MatchModel, a: Features, b: Features): [Feature
       y = b[k];
     if (x === null || y === null || !(model.weight[i]! > 0) || !(model.spread[i]! > 0)) return;
     const t = (v: number) => (FEATURE_BY_KEY[k].log ? Math.log(Math.max(v, 1e-9)) : v);
-    out.push([k, Math.abs(t(x) - (model.queryShift?.[i] ?? 0) - t(y)) / model.spread[i]!]);
+    out.push([k, Math.abs(t(x) - t(y)) / model.spread[i]!]);
   });
   return out.sort((p, q) => p[1] - q[1] || (p[0] < q[0] ? -1 : 1));
 }

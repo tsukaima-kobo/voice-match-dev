@@ -212,8 +212,7 @@ export const LIKENESS_SHARE = [0.4, 0.8, 0.99] as const;
  */
 export function likenessScale(speakers: readonly Speaker[], model: MatchModel): { typical: number; cuts: [number, number, number] } {
   const w = model.weight.map((x) => Math.round(Math.max(0, x) * 1000));
-  const z = (f: Features, query: boolean) => standardize(model, f, query);
-  const profiles = speakers.map((s) => z(medianFeatures(s.windows), false));
+  const profiles = speakers.map((s) => standardize(model, medianFeatures(s.windows)));
   const d2 = (u: (number | null)[], v: (number | null)[]) => {
     let a = 0,
       ws = 0;
@@ -230,7 +229,7 @@ export function likenessScale(speakers: readonly Speaker[], model: MatchModel): 
     ones: number[] = [];
   speakers.forEach((s, si) => {
     for (const q of s.windows) {
-      const u = z(q.features, true);
+      const u = standardize(model, q.features);
       const d = profiles.flatMap((p, i) => (i === si ? [] : [d2(u, p)])).filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
       if (!d.length) continue;
       mids.push(Math.sqrt(d.length % 2 ? d[d.length >> 1]! : (d[d.length / 2 - 1]! + d[d.length / 2]!) / 2));
