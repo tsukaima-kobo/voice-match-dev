@@ -65,7 +65,7 @@ void main(){
   float aa=fwidth(v)*1.2+.2*uSoft;
   float hw=.07+.1*uPower;
   float line=1.-smoothstep(hw,hw+aa,dv);
-  // (切れ目と粒の模様は、角度を cos・sin で持って、左の継ぎ目（−π と π）でずれないように)
+  // 切れ目と粒の模様は、角度を cos・sin で持って、左の継ぎ目（−π と π）でずれないように
   vec2 dirc=vec2(cos(thc),sin(thc));
   float brk=smoothstep(uJit*.6-.06,uJit*.6+.06,vn(dirc*3.5+vec2(u*nR*1.1,u*nR*.7)));
   float bead=1.-uShim*.8*smoothstep(.35,.85,vn(dirc*14.+vec2(u*nR*2.3,3.1)));
@@ -235,7 +235,7 @@ function geometry(p: ShapeParams, t: number): Geo {
   const speed = 0.12 + 0.8 * or(p.pitchMotion);
   const ph = w.map((_, i) => TAU * (h1(i * 7.7 + 1.3) + 0.6 * tim[i % 6]! + 0.25 * tim[(i + 2) % 6]!) + t * speed * (i % 2 ? 1 : -1) * (0.3 + h1(i * 3.3) * 0.5));
   const core: [number, number] = [(or(p.f2) - 0.5) * 0.6 * S, -(or(p.f1) - 0.5) * 0.6 * S];
-  // (stars: more and brighter for a brighter voice, at set places near the rim)
+  // 星: 明るい声ほど多く、明るく。縁の近くの決まった場所に
   const n = Math.round(2 + 10 * or(p.centroid));
   const stars: [number, number, number][] = [];
   for (let i = 0; i < 12; i++) {
@@ -468,7 +468,7 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
         at = XP(g.stars[0]![0], g.stars[0]![1]);
         break;
       case 'mfcc2': {
-        // (the top of the ribbon: the lowest sounds)
+        // リボンの上の端: いちばん低い音
         let e = 0;
         for (let k = 1; k <= 13; k++) e += (or(p[`mfcc${k}`] ?? null) - 0.5) * 2 * (1 / (1 + 0.3 * k)) * Math.cos((Math.PI * k * 0.5) / 26);
         const off = 0.5 + 0.5 * Math.tanh(e * 1.6);
@@ -508,14 +508,14 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
     ctx.globalAlpha = 0.85;
     ctx.lineWidth = 1.2 * d;
     for (const f of extra) f();
-    // (the mark)
+    // 印
     ctx.globalAlpha = 1;
     ctx.strokeStyle = accent;
     ctx.lineWidth = 2 * d;
     ctx.beginPath();
     ctx.arc(at[0], at[1], 7 * d, 0, TAU);
     ctx.stroke();
-    // (the label, on the side the mark is on)
+    // ラベル: 印のある側に置く
     const name = k === 'mfcc2' ? t('音色', 'Timbre') : FEATURE_BY_KEY[k].name;
     const val = k === 'mfcc2' ? 'MFCC 1–13' : formatFeature(k, feats[k]);
     const word = k === 'mfcc2' ? '' : levelWord(k, feats[k]);

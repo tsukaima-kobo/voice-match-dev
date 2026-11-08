@@ -42,7 +42,7 @@ if (new URLSearchParams(location.search).has('test')) {
 /** マイクを開いて、音を `onChunk` に渡し続ける。マイクが外れた時などは `onEnded`。`deviceId` で選んだマイク（空なら端末の設定のマイク） */
 export async function openMic(onChunk: (x: Float32Array) => void, onEnded?: () => void, deviceId = ''): Promise<Mic> {
   if (fed) {
-    // (the test's sound, in chunks of 2048, at 8 times the real speed)
+    // 確認用の音を、2048 ずつ、本当の 8 倍の速さで流す
     const { samples, rate } = fed;
     let at = 0;
     const timer = setInterval(() => {
@@ -59,7 +59,7 @@ export async function openMic(onChunk: (x: Float32Array) => void, onEnded?: () =
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio, video: false });
   } catch (e) {
-    // (the chosen one is gone: told apart, so the page can go back to the device's own)
+    // 選んだマイクが無くなった: ほかの誤りと分けて、ページが端末の設定のマイクに戻れるようにする
     const name = typeof e === 'object' && e !== null && 'name' in e ? String((e as { name: unknown }).name) : '';
     if (deviceId && (name === 'OverconstrainedError' || name === 'NotFoundError')) {
       const gone = new Error('the chosen microphone is gone');

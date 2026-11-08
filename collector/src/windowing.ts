@@ -60,7 +60,7 @@ export class Windower {
     if (this.video !== null && s.video !== this.video) this.reset('other-video');
     this.video = s.video;
     if (this.got === 0) this.t0 = s.time - dur;
-    // (the video's clock should have moved as far as the sound: more than a second off is a seek)
+    // 動画の時計は、音と同じだけ進んでいるはず: 1 秒より多くずれたらシーク
     else if (Math.abs(s.time - (this.t0 + this.got / this.sampleRate + dur)) > 1) {
       this.reset('jump');
       this.t0 = s.time - dur;

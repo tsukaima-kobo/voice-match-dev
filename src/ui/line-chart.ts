@@ -53,10 +53,10 @@ export function drawLineChart(box: HTMLElement, ref: Contour, mine: Float32Array
   defs.append(g);
   root.append(defs);
 
-  // (the grid: a line every 2 semitones, faint)
+  // 方眼: 半音 2 つごとに薄い線
   for (let s = Math.ceil(lo / 2) * 2; s <= hi; s += 2) root.append(svg('line', { x1: 0, x2: W, y1: y(s), y2: y(s), class: 'grid' }));
 
-  // (the model's loudness, at the foot)
+  // お手本の大きさを、図の下の方に
   let area = `M0 ${H}`;
   for (let i = 0; i < n; i++) area += `L${x(i).toFixed(1)} ${(H - ((ref.level[i]! + 40) / 40) * 56).toFixed(1)}`;
   area += `L${W} ${H}Z`;

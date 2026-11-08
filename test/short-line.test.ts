@@ -19,17 +19,17 @@ const ok = (x: Float32Array, contour = false) => {
 };
 
 describe('一言から測る', () => {
-  it('measures a word of about a second: the pitch, the formants and the voice quality', () => {
+  it('1 秒ほどの一言で、声の高さ・フォルマント・声の質を測る', () => {
     const m = ok(line(1, 180));
     expect(m.features.pitch).toBeGreaterThan(175);
     expect(m.features.pitch).toBeLessThan(185);
     for (const k of ['f1', 'f2', 'f3', 'hnr', 'cpp', 'h1h2', 'tilt'] as const) expect(m.features[k], k).not.toBeNull();
   });
-  it('turns away less than the least', () => {
+  it('決まった最短より短い物は断る', () => {
     const m = measureVoice(line(0.25, 180), R, { minVoicedSeconds: ONE_LINE_SECONDS });
     expect(m.ok).toBe(false);
   });
-  it('leaves out, for a short take, the items that need a longer one', () => {
+  it('短い回では、もっと長い回が要る項目を除く', () => {
     const f = forLength(ok(line(1, 180)).features, 1);
     expect(f.pitch).not.toBeNull();
     expect(f.pitchRange).toBeNull();
@@ -41,7 +41,7 @@ describe('一言から測る', () => {
 
 describe('話すほど絞り込む', () => {
   const base = Object.fromEntries(FEATURE_KEYS.map((k) => [k, null])) as Features;
-  it('puts takes together by their length, the Hz ones as a geometric mean, each item only from takes long enough for it', () => {
+  it('回を長さに応じてまとめる。Hz の項目は幾何平均で、どの項目も長さの足りる回だけから', () => {
     const a = { ...base, pitch: 100, hnr: 10, rate: 5 };
     const b = { ...base, pitch: 400, hnr: 20, rate: 3 };
     const c = combineTakes([
@@ -60,13 +60,13 @@ describe('話すほど絞り込む', () => {
     expect(d.voicedSeconds).toBe(10);
     expect(d.takes).toBe(2);
   });
-  it('tells how sure: a word, a few seconds, one long take', () => {
+  it('どれだけ確かかを言う: 一言・数秒・長い回 1 つ', () => {
     expect(certaintyOf({ voicedSeconds: 1, longest: 1 })).toBe(1);
     expect(certaintyOf({ voicedSeconds: 4, longest: 1 })).toBe(2);
     expect(certaintyOf({ voicedSeconds: 12, longest: 3 })).toBe(2);
     expect(certaintyOf({ voicedSeconds: 9, longest: 8.5 })).toBe(3);
   });
-  it('does not give a short take a higher voice score for leaving items out', () => {
+  it('短い回で項目が抜けても、声の点数は上がらない', () => {
     const t = ok(line(1, 180)).features;
     const off = { ...t, pitch: t.pitch! * 2 ** (3 / 12) };
     const full = mimicScore(t, off)!;
@@ -76,10 +76,10 @@ describe('話すほど絞り込む', () => {
 });
 
 describe('セリフ真似', () => {
-  // (a line that goes up, then falls at the end)
+  // 上がって、最後に下がるセリフ
   const rise = (t: number) => 160 * 2 ** ((4 * Math.sin(Math.PI * Math.min(1, t / 1.2))) / 12);
   const fall = (t: number) => 160 * 2 ** ((-4 * Math.sin(Math.PI * Math.min(1, t / 1.2))) / 12);
-  it('gives the pitch and the loudness over time, step by step', () => {
+  it('声の高さと大きさの移り変わりを、一定の刻みで出す', () => {
     const m = ok(line(1.2, rise), true);
     const c = m.info.contour!;
     expect(c.step).toBe(CONTOUR_STEP);
@@ -88,7 +88,7 @@ describe('セリフ真似', () => {
     expect(Math.max(...voiced) - Math.min(...voiced)).toBeGreaterThan(3);
     expect(Math.max(...Array.from(c.level))).toBe(0);
   });
-  it('scores the same line the same as full marks', () => {
+  it('同じセリフは満点', () => {
     const c = ok(line(1.2, rise), true).info.contour!;
     const r = compareLines(c, c)!;
     expect(r.intonation).toBe(100);
@@ -96,19 +96,19 @@ describe('セリフ真似', () => {
     expect(r.tips).toEqual([]);
     expect(lineScore(r, 100)).toBe(100);
   });
-  it('keeps the shape apart from the height: the same tune higher still has the intonation', () => {
+  it('形と高さを分けて見る: 同じ節を高くしても抑揚は合う', () => {
     const a = ok(line(1.2, rise, 1), true).info.contour!;
     const b = ok(line(1.2, (t) => rise(t) * 2 ** (5 / 12), 2), true).info.contour!;
     expect(compareLines(a, b)!.intonation).toBeGreaterThanOrEqual(85);
   });
-  it('sees a tune that goes the other way, and tells where', () => {
+  it('逆向きの節に気づき、どこかを言う', () => {
     const a = ok(line(1.2, rise, 1), true).info.contour!;
     const b = ok(line(1.2, fall, 2), true).info.contour!;
     const r = compareLines(a, b)!;
     expect(r.intonation).toBeLessThan(30);
     expect(r.tips.map((t) => t.text).join('')).toContain('上げる');
   });
-  it('sees a slower line in the timing, not in the intonation', () => {
+  it('ゆっくりのセリフは、抑揚でなくタイミングに出る', () => {
     const a = ok(line(1.2, rise, 1), true).info.contour!;
     const b = ok(line(1.9, (t) => rise((t * 1.2) / 1.9), 2), true).info.contour!;
     const r = compareLines(a, b)!;
@@ -116,7 +116,7 @@ describe('セリフ真似', () => {
     expect(r.timing).toBeLessThan(85);
     expect(r.tips.map((t) => t.text).join('')).toContain('速く');
   });
-  it('weighs the parts 4 : 2.5 : 3.5, and goes on without the voice part', () => {
+  it('抑揚・タイミング・声の質の重みは 4 : 2.5 : 3.5。声の質が無くても残りで出す', () => {
     expect(lineScore({ intonation: 100, timing: 0 }, 0)).toBe(40);
     expect(lineScore({ intonation: 100, timing: 0 }, null)).toBe(62);
   });

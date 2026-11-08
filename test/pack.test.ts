@@ -22,7 +22,7 @@ function voicesOf(n: number, seed = 1): { voices: CatalogEntry[]; features: Feat
       Object.fromEntries(
         FEATURE_KEYS.map((k) => {
           const [a, b] = PLAUSIBLE[k] ?? [-10, 10];
-          // (some items missing, as in short takes)
+          // 短い回のように、無い項目もある
           return [k, (i + k.length) % 11 === 0 ? null : roundFeature(k, a + (b - a) * r())];
         }),
       ) as Features,
@@ -67,7 +67,7 @@ describe('声のデータを詰める', () => {
     const { voices, features } = voicesOf(10, 3);
     const a = packVoices(MEASURE_VERSION, voices, features);
     expect(JSON.stringify(packVoices(MEASURE_VERSION, voices, features))).toBe(JSON.stringify(a));
-    // (base64: 4 letters per 3 bytes)
+    // base64 は 3 バイトで 4 文字
     expect(a.f.length).toBe(Math.ceil((a.keys.length * 10) / 3) * 4);
   });
 
@@ -89,13 +89,13 @@ describe('声のデータを詰める', () => {
   it('照合の 1 位は、詰める前と同じ', () => {
     const { voices, features } = voicesOf(300, 5);
     const model = defaultModel(MEASURE_VERSION);
-    // (after unpacking, the id is the position in the list)
+    // ほどいた後の ID は、一覧の中の位置
     const before = voices.map((_, i) => ({ id: String(i), features: features[i]! }));
     const after = unpackVoices(packVoices(MEASURE_VERSION, voices, features)).profiles.map(({ id, features }) => ({ id, features: features as Features }));
     const r = series(9);
     for (let t = 0; t < 40; t++) {
       const base = features[(t * 7) % 300]!;
-      // (a visitor near one of the voices)
+      // どれか 1 つの声に近い来た人
       const user = Object.fromEntries(FEATURE_KEYS.map((k) => [k, base[k] === null ? null : base[k]! * (1 + (r() - 0.5) * 0.04)])) as Features;
       expect(rank(model, user, after, 1)[0]!.id).toBe(rank(model, user, before, 1)[0]!.id);
     }

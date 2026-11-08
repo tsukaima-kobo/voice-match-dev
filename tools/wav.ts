@@ -11,7 +11,7 @@ export function readWav(buf: Uint8Array): { rate: number; samples: Float32Array 
     const body = o + 8;
     if (id === 'fmt ') {
       let format = dv.getUint16(body, true);
-      // (WAVE_FORMAT_EXTENSIBLE: the real format is in the sub-format GUID's first two bytes)
+      // WAVE_FORMAT_EXTENSIBLE: 本当の形は、サブフォーマットの GUID の最初の 2 バイトにある
       if (format === 0xfffe) format = dv.getUint16(body + 24, true);
       fmt = { format, channels: dv.getUint16(body + 2, true), rate: dv.getUint32(body + 4, true), bits: dv.getUint16(body + 14, true) };
     } else if (id === 'data') {

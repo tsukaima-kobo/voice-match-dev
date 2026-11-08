@@ -13,7 +13,7 @@ export const CONSENSUS = {
 
 /** そろった数字の中央値と、使った件数。そろわなければ null */
 export function consensus(model: MatchModel, items: readonly { features: Features }[]): { features: Features; used: number } | null {
-  // (the very same numbers twice are one, not two)
+  // まったく同じ数字が 2 回届いたら、2 件ではなく 1 件と数える
   const seen = new Set<string>();
   const uniq = items.filter((x) => {
     const k = JSON.stringify(FEATURE_KEYS.map((key) => x.features[key]));

@@ -1,10 +1,10 @@
-// Test signals for src/voice/measure.ts (test/voice-measure.test.ts): made here from numbers only, no
-// recording. A seeded generator (mulberry32) for the noise and the jitter, so that every run makes the same samples.
-// tone(): a sum of harmonics at a known F0 (the pitch's accuracy); vowel(): a pulse train with jitter and shimmer
-// through three formant resonances, aspiration noise mixed into the source (breath), syllable bursts and pauses by an
-// envelope (speed, pause); silence(), the quiet room as a little noise.
+// src/voice/measure.ts の試験（test/voice-measure.test.ts）に使う音。ここで数字だけから作る（録音は
+// 使わない）。雑音と jitter は種つきの乱数（mulberry32）で作るので、何度動かしても同じサンプルになる。
+// tone(): F0 の分かっている倍音の和（高さの正確さを見る）。vowel(): jitter と shimmer のあるパルス列を
+// 3 つのフォルマントの響きに通した物に、音源に混ぜた息の雑音（breath）と、包絡で作る音節のかたまりと間
+// （速さ・間を見る）。silence(): 静かな部屋を、少しの雑音として。
 
-/** a seeded generator of numbers in [0, 1) (mulberry32) */
+/** [0, 1) の数を出す、種つきの乱数（mulberry32） */
 export function rng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -15,22 +15,22 @@ export function rng(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-/** a normal number from the generator (Box–Muller) */
+/** 乱数から作る正規分布の数（Box–Muller） */
 export const gauss = (r: () => number): number => Math.sqrt(-2 * Math.log(Math.max(1e-12, r()))) * Math.cos(2 * Math.PI * r());
 
-/** the RMS of samples */
+/** サンプルの RMS */
 export const rmsOf = (x: ArrayLike<number>): number => {
   let s = 0;
   for (let i = 0; i < x.length; i++) s += x[i]! * x[i]!;
   return Math.sqrt(s / Math.max(1, x.length));
 };
-/** samples scaled to an RMS */
+/** RMS に合わせて大きさを変えたサンプル */
 export function toRms(x: Float32Array, rms: number): Float32Array {
   const k = rms / Math.max(1e-12, rmsOf(x));
   for (let i = 0; i < x.length; i++) x[i] = x[i]! * k;
   return x;
 }
-/** clips one after another */
+/** 音を順につなぐ */
 export function concat(...parts: Float32Array[]): Float32Array {
   const out = new Float32Array(parts.reduce((n, p) => n + p.length, 0));
   let at = 0;
@@ -40,14 +40,14 @@ export function concat(...parts: Float32Array[]): Float32Array {
   }
   return out;
 }
-/** a quiet room: white noise at `rms` (0: digital silence) */
+/** 静かな部屋: `rms` の白色雑音（0 ならデジタルの無音） */
 export function silence(rate: number, seconds: number, rms = 0.0003, seed = 7): Float32Array {
   const r = rng(seed);
   const x = new Float32Array(Math.round(rate * seconds));
   if (rms > 0) for (let i = 0; i < x.length; i++) x[i] = gauss(r) * rms;
   return x;
 }
-/** another signal added (both as they are) */
+/** 別の音を足す（どちらも元の大きさのまま） */
 export function mixIn(x: Float32Array, y: ArrayLike<number>): Float32Array {
   for (let i = 0; i < x.length && i < y.length; i++) x[i] = x[i]! + y[i]!;
   return x;
@@ -56,16 +56,16 @@ export function mixIn(x: Float32Array, y: ArrayLike<number>): Float32Array {
 export interface ToneOptions {
   rate: number;
   seconds: number;
-  /** the F0 in Hz, or as a function of the time in seconds */
+  /** F0（Hz）。数か、時刻（秒）の関数で */
   f0: number | ((t: number) => number);
-  /** the RMS (default 0.1, about -20 dBFS) */
+  /** RMS（決まりは 0.1、約 -20 dBFS） */
   rms?: number;
-  /** the harmonics' fall: amplitude 1/k^tilt (default 1) */
+  /** 倍音の下がり方: 振幅 1/k^tilt（決まりは 1） */
   tilt?: number;
-  /** harmonics up to this frequency (default 5 kHz) */
+  /** この周波数までの倍音（決まりは 5 kHz） */
   maxHz?: number;
 }
-/** a sum of harmonics at a known F0 (phase summed, so a changing F0 glides) */
+/** F0 の分かっている倍音の和（位相を足していくので、F0 が変わると滑らかに移る） */
 export function tone(o: ToneOptions): Float32Array {
   const n = Math.round(o.rate * o.seconds);
   const x = new Float32Array(n);
@@ -87,28 +87,28 @@ export interface VowelOptions {
   rate: number;
   seconds: number;
   f0: number | ((t: number) => number);
-  /** each period changed by up to ± this share (uniform) */
+  /** 周期を、1 つずつ最大 ± この割合で変える（一様） */
   jitter?: number;
-  /** each pulse's amplitude changed by up to ± this share (uniform) */
+  /** パルスの振幅を、1 つずつ最大 ± この割合で変える（一様） */
   shimmer?: number;
-  /** aspiration noise in the source, as its RMS over the pulses' RMS */
+  /** 音源の中の息の雑音。パルスの RMS に対する、その RMS の比 */
   breath?: number;
-  /** the formants (Hz) and their bandwidths (Hz) */
+  /** フォルマント（Hz）と、その帯域幅（Hz） */
   formants?: readonly (readonly [number, number])[];
-  /** the loudness over time (0..1), e.g. syllables and pauses */
+  /** 時間ごとの大きさ（0..1）。音節や間など */
   envelope?: (t: number) => number;
-  /** where the glottis's fall of the highs starts (Hz, default 150: a soft voice; higher, a pressed and brighter one) */
+  /** 声門で高い音が下がり始める所（Hz。決まりは 150 で柔らかい声。高いほど張った明るい声） */
   glottis?: number;
   rms?: number;
   seed?: number;
 }
-/** a voiced sound: a band-limited pulse train through formant resonances, the lips' rise of the highs (a difference) */
+/** 声のある音: 帯域を限ったパルス列をフォルマントの響きに通し、唇で高い音を上げる（差分） */
 export function vowel(o: VowelOptions): Float32Array {
   const n = Math.round(o.rate * o.seconds);
   const r = rng(o.seed ?? 1);
   const f0At = typeof o.f0 === 'number' ? () => o.f0 as number : o.f0;
   const src = new Float64Array(n);
-  // (each pulse a short windowed sinc at its exact time: its timing is not rounded to a sample)
+  // どのパルスも、ちょうどの時刻に置いた短い窓付きの sinc。時刻はサンプルに丸めない
   const HALF = 6;
   let t = 0.004 * o.rate;
   while (t < n - HALF) {
@@ -124,13 +124,13 @@ export function vowel(o: VowelOptions): Float32Array {
     const T = o.rate / f0At(t / o.rate);
     t += T * (1 + (o.jitter ?? 0) * (2 * r() - 1));
   }
-  // (the glottis's fall of the highs: two one-pole low-passes at 150 Hz, -12 dB an octave above; the lips give +6 back)
+  // 声門で高い音が下がる: 150 Hz の 1 次のローパスを 2 回。1 オクターブ上で -12 dB。唇で +6 戻す
   for (let pass = 0; pass < 2; pass++) {
     const k = Math.exp((-2 * Math.PI * (o.glottis ?? 150)) / o.rate);
     let prev = 0;
     for (let i = 0; i < n; i++) src[i] = prev = (1 - k) * src[i]! + k * prev;
   }
-  // (aspiration: white noise at the glottis, not shaped by it, so that it shows above the harmonics in the highs)
+  // 息の音: 声門での白色雑音。声門の形は付けないので、高い所では倍音より上に出る
   if (o.breath) {
     const pulseRms = Math.sqrt(src.reduce((a, v) => a + v * v, 0) / n);
     for (let i = 0; i < n; i++) src[i] = src[i]! + gauss(r) * pulseRms * o.breath;
@@ -155,8 +155,8 @@ export function vowel(o: VowelOptions): Float32Array {
 }
 
 /**
- * syllable bursts: `perSecond` bursts a second (a raised cosine over `share` of each), and after every `group` bursts a
- * pause of `pause` seconds; 0 outside `[0, seconds)`
+ * 音節のかたまり: 1 秒に `perSecond` 個（1 つずつ、その `share` の部分に raised cosine）。`group` 個ごとに
+ * `pause` 秒の間。`[0, seconds)` の外は 0
  */
 export function bursts(perSecond: number, opts: { share?: number; group?: number; pause?: number; floor?: number } = {}): (t: number) => number {
   const share = opts.share ?? 0.7;

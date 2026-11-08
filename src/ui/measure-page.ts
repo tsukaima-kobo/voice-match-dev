@@ -76,7 +76,7 @@ function showText() {
 }
 topic.next.addEventListener('click', () => {
   at++;
-  // (all of them read: a new order, not starting with the one just read)
+  // 全部読んだら、新しい順番に（今読んだ文からは始めない）
   if (at >= deck.length) {
     const last = deck[deck.length - 1];
     deck = shuffled(READINGS.length);
@@ -154,7 +154,7 @@ function stopMic() {
   cancelAnimationFrame(raf);
   mic?.stop();
   mic = null;
-  // (a part shorter than one set is let go: the sets are always full 30 seconds, like the site's voices)
+  // 1 つの窓に満たない分は捨てる（窓はいつもちょうど 30 秒。サイトの声と同じ）
   cutter?.drop();
   void keepAwake(false);
 }
@@ -311,7 +311,7 @@ btn.again.addEventListener('click', () => {
 btn.pause.addEventListener('click', () => pause());
 btn.resume.addEventListener('click', () => void listen());
 btn.finish.addEventListener('click', () => void finish());
-// (hidden page: pause, and the microphone with it)
+// ページが隠れたら一時停止（マイクも止める）
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && (state === 'recording' || state === 'asking')) pause(M('ページが隠れたので一時停止しました。「続ける」で再開します。', 'The page was hidden, so this paused. Press “Continue” to go on.'));
 });

@@ -33,7 +33,7 @@ const num = (x: unknown): number | null => (typeof x === 'number' && Number.isFi
 export function sheetWindows(snap: Snapshot): Map<string, { all: SheetWindow[]; kept: SheetWindow[] }> {
   const rows = new Map<string, SheetWindow[]>();
   for (const m of snap.measurements) {
-    if (num(m.pitch) === null) continue; // (not measured, or failed)
+    if (num(m.pitch) === null) continue; // 測っていない、または測れなかった
     const features = Object.fromEntries(FEATURE_KEYS.map((k) => [k, num(m[k])])) as Features;
     (rows.get(m.personId) ?? rows.set(m.personId, []).get(m.personId)!).push({ video: m.videoId, features });
   }
@@ -74,7 +74,7 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
     const videos = new Set(kept.map((w) => w.video)).size;
     const note = `${id}: 窓 ${all.length} → 使う ${kept.length}（高さが外れる ${all.length - kept.length}）、動画 ${videos} 本`;
     if (kept.length < SELECT.minWindows) {
-      // (only worth a line when the person was asked for by name)
+      // 記録に 1 行書くのは、名指しで頼まれた時か、窓が 1 つでもある人だけ（窓が 0 の人まで並べると長くなる）
       if (o.only || all.length) notes.push(`${note} → 窓が ${SELECT.minWindows} に足りないので入れません`);
       continue;
     }

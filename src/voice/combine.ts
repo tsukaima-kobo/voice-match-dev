@@ -49,7 +49,7 @@ export async function measureLong(pcm: Float32Array, rate: number, opts: LongOpt
   }
   const step = Math.floor(LONG_WINDOW_SECONDS * rate);
   const starts: number[] = [];
-  // (a last piece shorter than 10 s is left out)
+  // 最後の切れ端が 10 秒より短ければ使わない
   for (let s = 0; s < n; s += step) if (n - s >= 10 * rate) starts.push(s);
   const good: { features: Features }[] = [];
   const tonal: number[] = [],
@@ -68,7 +68,7 @@ export async function measureLong(pcm: Float32Array, rate: number, opts: LongOpt
       voiced += m.info.voicedSeconds;
     } else {
       const v = m.info.voicedSeconds ?? 0;
-      // (the reason told is the one from the window with the most voice: the closest to working)
+      // 伝える理由は、声がいちばん多かった窓の物（いちばん測れそうだった窓）
       if (!worst || v > worst.voiced) worst = { reason: m.reason, voiced: v };
     }
   }

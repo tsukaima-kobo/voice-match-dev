@@ -43,7 +43,7 @@ export function drawCard(d: CardData): HTMLCanvasElement {
   const W = CARD_W,
     H = CARD_H;
 
-  // (夜の地と、オーロラ)
+  // 夜の地と、オーロラ
   const bg = ctx.createLinearGradient(0, 0, 0, H);
   bg.addColorStop(0, '#0d0b1d');
   bg.addColorStop(1, '#07060f');
@@ -64,7 +64,7 @@ export function drawCard(d: CardData): HTMLCanvasElement {
   roundRect(ctx, 28, 28, W - 56, H - 56, 44);
   ctx.stroke();
 
-  // (上: ロゴと名前)
+  // 上: ロゴと名前
   const grad = ctx.createLinearGradient(80, 0, 520, 0);
   grad.addColorStop(0, '#ff6fa8');
   grad.addColorStop(0.55, '#a98bff');
@@ -85,7 +85,7 @@ export function drawCard(d: CardData): HTMLCanvasElement {
 
   ctx.textBaseline = 'alphabetic';
   if (d.kind === 'voice') {
-    // (見出し)
+    // 見出し
     ctx.fillStyle = 'rgba(243,240,251,0.72)';
     fitText(ctx, d.top ? t('あなたの声に近いのは', 'Your voice is closest to') : t('あなたの声紋', 'Your voiceprint'), 80, 218, W - 160, 38, 700);
     if (d.top) {
@@ -97,10 +97,10 @@ export function drawCard(d: CardData): HTMLCanvasElement {
       ctx.fillStyle = 'rgba(243,240,251,0.85)';
       fitText(ctx, t(`確かさ: ${d.certainty}`, `Certainty: ${d.certainty}`), 80, 290, W - 160, 34, 700);
     }
-    // (声紋)
+    // 声紋
     const size = 690;
     ctx.drawImage(renderSnapshot(d.features, size), (W - size) / 2, 405, size, size);
-    // (目立つ数字 4 つ)
+    // 目立つ数字 4 つ
     const keys: FeatureKey[] = ['pitch', 'centroid', 'hnr', 'pitchRange'];
     const items = keys.filter((k) => d.features[k] !== null).slice(0, 4);
     const cw = (W - 160 - 3 * 16) / 4;
@@ -128,7 +128,7 @@ export function drawCard(d: CardData): HTMLCanvasElement {
     ctx.fillText(t('点', 'pts'), 76 + sw + 14, 380);
     ctx.fillStyle = '#f3f0fb';
     fitText(ctx, d.word, 80, 450, W - 160, 52, 900);
-    // (お手本とあなたの声紋)
+    // お手本とあなたの声紋
     const size = 470;
     const y = 520;
     ([
@@ -143,7 +143,7 @@ export function drawCard(d: CardData): HTMLCanvasElement {
     fitText(ctx, t('同じ数字なら、いつも同じ模様。模様が似るほど、声も似ています。', 'Same numbers, same pattern. The more alike the patterns, the more alike the voices.'), W / 2, 1140, W - 160, 28, 600, 'center');
   }
 
-  // (下: サイトの住所とハッシュタグ)
+  // 下: サイトの住所とハッシュタグ
   ctx.fillStyle = 'rgba(243,240,251,0.55)';
   fitText(ctx, SITE.url.replace(/^https:\/\//, '').replace(/\/$/, ''), 80, H - 98, W - 160, 28, 700, 'left', MONO);
   ctx.fillStyle = 'rgba(243,240,251,0.4)';

@@ -147,7 +147,7 @@ export function mountShare(box: HTMLElement): ShareUi {
   row.append(preview, side);
   box.replaceChildren(head, row);
 
-  // (files can be shared: a phone's share sheet, where X takes the picture too)
+  // ファイルを共有できる時: スマホの共有画面（X なら画像も一緒に受け取る）
   const probe = typeof File !== 'undefined' ? new File([new Uint8Array(1)], 'voice-match.png', { type: 'image/png' }) : null;
   const canShareFiles = !!(probe && navigator.canShare?.({ files: [probe] }));
 

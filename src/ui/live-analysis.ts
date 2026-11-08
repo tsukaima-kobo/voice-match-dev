@@ -105,7 +105,7 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
   box.dataset.mode = 'off';
   box.setAttribute('aria-hidden', 'true');
 
-  // (the panel)
+  // パネル
   const head = el('div', 'live-head');
   const title = el('span', 'live-title');
   const count = el('span', 'live-count');
@@ -194,8 +194,8 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
     status.textContent = t(ja, en);
   };
 
-  // (the state)
-  // (the last few tens of ms at 16 kHz, in a circle; copied straight into `ring` every 20 ms for the sums)
+  // 状態
+  // 16 kHz にした直近の数十 ms を、回して上書きする入れ物に持つ。計算のため、20 ms ごとにそのまま `ring` に写す
   const L = N + TAU_MAX + YIN_W;
   const circle = new Float32Array(L);
   const ring = new Float32Array(L);
@@ -289,7 +289,7 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
     lut ??= palette();
     const colW = Math.max(1, Math.round(3 * dpr));
     const yOf = (f: number) => (1 - Math.log(f / F_LO) / Math.log(F_HI / F_LO)) * (H - 1);
-    // (the new columns: the picture moves left, each 20 ms a column at the right)
+    // 新しい列: 絵は左へ動き、20 ms ごとに右端に 1 列を足す
     const fresh = columns.splice(0, columns.length);
     if (fresh.length) {
       const shift = Math.min(W, fresh.length * colW);
@@ -321,7 +321,7 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
         }
       });
     }
-    // (the numbers, ten times a second)
+    // 数字は 1 秒に 10 回
     const now = performance.now();
     if (now - lastText > 100) {
       lastText = now;
@@ -355,7 +355,7 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
 
   return {
     push(x, rate) {
-      // (to 16 kHz by straight lines between samples, enough for a picture: positions in [last of the chunk before, ...x])
+      // サンプルの間を直線でつないで 16 kHz にする（絵には十分）。位置は [前のかたまりの最後, ...x] の中で数える
       const step = rate / SR;
       let p = frac;
       const at = (j: number) => (j === 0 ? lastIn : x[j - 1]!);
@@ -410,7 +410,7 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
       }
     },
     async analysing(ms) {
-      // (the items light one by one, as the numbers are worked out in the Worker)
+      // Worker で数字を計算している間、項目を 1 つずつ光らせる
       say(`${FEATURE_KEYS.length} 項目を計算しています…`, `Working out ${FEATURE_KEYS.length} items…`);
       if (reduce.matches) return;
       const per = Math.max(12, Math.floor(ms / chips.length));

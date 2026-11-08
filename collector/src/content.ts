@@ -151,7 +151,7 @@ function onChunk(samples: Float32Array) {
   warn.textContent = graph.win.lastBreak ? BREAK_TEXT[graph.win.lastBreak] : '';
   if (!done) return;
   if (busy) {
-    // (the last window still being measured: this one is let go rather than queued, to keep the page light)
+    // 前の窓をまだ測っている: この窓は待たせずに手放す（ページを重くしないため）
     tally.busy = (tally.busy ?? 0) + 1;
     return;
   }
@@ -161,7 +161,7 @@ function onChunk(samples: Float32Array) {
   setTimeout(async () => {
     try {
       const m = measureVoice(done.pcm, graph!.ctx.sampleRate, { minVoicedSeconds: MIN_VOICED });
-      // (the sound is let go here: only the numbers stay)
+      // 音はここで手放す: 残るのは数字だけ
       done.pcm.fill(0);
       const w = windowOf(m, done, MEASURE_VERSION, today());
       if (!w) {
@@ -188,7 +188,7 @@ function onChunk(samples: Float32Array) {
 
 async function hook(video: HTMLVideoElement) {
   if (graph && graph.video === video) return graph;
-  // (a video element can be taken into an AudioContext once only: from here its sound goes through this graph)
+  // 動画の要素を AudioContext に取り込めるのは 1 回だけ: ここから先、その音はこのグラフを通る
   const ctx = new AudioContext();
   const src = ctx.createMediaElementSource(video);
   const out = ctx.createGain();
@@ -204,7 +204,7 @@ async function hook(video: HTMLVideoElement) {
     node.connect(ctx.destination);
     stop = () => node.port.postMessage('stop');
   } catch {
-    // (no AudioWorklet here: the older ScriptProcessor)
+    // ここでは AudioWorklet が使えない: 古い ScriptProcessor で
     const sp = ctx.createScriptProcessor(4096, 2, 1);
     sp.onaudioprocess = (e) => {
       const b = e.inputBuffer;
@@ -265,7 +265,7 @@ exportBtn.addEventListener('click', async () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 });
 clearBtn.addEventListener('click', async () => {
-  // (two presses: the first asks, the second clears)
+  // 2 回押す: 1 回目は確かめ、2 回目で消す
   if (clearBtn.dataset.sure !== '1') {
     clearBtn.dataset.sure = '1';
     clearBtn.textContent = 'もう一度押すと消えます';

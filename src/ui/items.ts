@@ -19,7 +19,7 @@ export function itemRow(d: FeatureDef, dots: { value: number | null; cls?: strin
   scale.append(el('div', 'line'));
   const xs = dots.filter((p) => p.value !== null).map((p) => ({ ...p, x: displayValue(d.key, p.value!) * 100 }));
   if (xs.length >= 2) {
-    // (2 つ以上なら、その間を線でつなぐ: お手本とあなたのずれ)
+    // 2 つ以上なら、その間を線でつなぐ: お手本とあなたのずれ
     const span = el('div', 'span');
     span.style.setProperty('--from', `${Math.min(...xs.map((p) => p.x))}%`);
     span.style.setProperty('--to', `${Math.max(...xs.map((p) => p.x))}%`);

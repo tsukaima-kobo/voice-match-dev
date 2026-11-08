@@ -143,7 +143,7 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
     accepted.push({ at: row.at, key, name: s.n.trim(), ...(s.g?.trim() ? { group: s.g.trim() } : {}), kinds: s.k ?? 0, link: s.l.trim(), quality: s.q, features: featuresOf(s) });
   }
 
-  // (壁 ③, name by name, in the order each name first came)
+  // 壁 ③: 名前ごとに、その名前が初めて来た順で
   const keys = [...new Set(accepted.map((a) => a.key))];
   const used = new Set<string>();
   const voices: UserVoice[] = [];
@@ -151,7 +151,7 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
     const items = accepted.filter((a) => a.key === key);
     const c = consensus(o.model, items);
     if (!c) continue;
-    // (two names on one ID is next to impossible; if it ever happens, the later one gets a mark)
+    // 2 つの名前が同じ ID になることは、まず無い。もし起きたら、後の方に印を付ける
     let id = userIdOf(key);
     for (let n = 2; used.has(id); n++) id = `${userIdOf(key)}-${n}`;
     used.add(id);

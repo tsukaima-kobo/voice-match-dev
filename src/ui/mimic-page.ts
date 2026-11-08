@@ -105,7 +105,7 @@ class Take {
     this.ui.wave.push(x, this.rate);
     this.ui.live.push(x, this.rate);
     orb.push(x, this.rate);
-    // (checked here and not in the frame loop: the page may be hidden while a model plays in another tab)
+    // 描く繰り返しの中ではなく、ここで確かめる（お手本をほかのタブで流している間は、このページが隠れていることがある）
     if (this.got / this.rate >= LISTEN_MAX) this.onFull();
   };
   begin(mic: Mic): void {
@@ -315,7 +315,7 @@ function refCancel(): void {
 async function decodeFile(f: File): Promise<{ pcm: Float32Array; rate: number }> {
   const buf = await f.arrayBuffer();
   const OAC = window.OfflineAudioContext ?? (window as unknown as { webkitOfflineAudioContext: typeof OfflineAudioContext }).webkitOfflineAudioContext;
-  // (only for decoding: it gives the file's sound at FILE_RATE)
+  // デコードだけに使う: ファイルの音を FILE_RATE で出す
   const ctx = new OAC(1, FILE_RATE, FILE_RATE);
   const audio = await new Promise<AudioBuffer>((resolve, reject) => {
     const p = ctx.decodeAudioData(buf, resolve, reject) as Promise<AudioBuffer> | undefined;
@@ -347,12 +347,12 @@ async function refFromFile(f: File): Promise<void> {
   }
   const secs = sound.pcm.length / sound.rate;
   if (secs <= 40) {
-    // (a short file: measured at once, with its pitch and loudness over time for a line)
+    // 短いファイル: すぐ測る。セリフ用に、高さと大きさの時間の動きも出す
     await new Promise((r) => setTimeout(r, 0));
     let m = measureVoice(sound.pcm, sound.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true });
     let padded = false;
     if (!m.ok && m.reason === 'noisy' && secs <= PAD_FILE_MAX_SECONDS) {
-      // (a clip cut to the voice has no quiet part to tell the noise by: try again with quiet on both sides)
+      // 声だけに切った音には、雑音を見分けるための静かな所が無い: 前後に無音を足して、もう一度測る
       const pad = Math.round(sound.rate * 0.3);
       const x = new Float32Array(sound.pcm.length + 2 * pad);
       x.set(sound.pcm, pad);
@@ -442,7 +442,7 @@ const reg = {
   form: $<HTMLAnchorElement>('reg-form'),
   howto: $('reg-howto'),
 };
-// (the category boxes: both languages in the label, like the rest of the page)
+// 大枠のチェックボックス: ラベルには両方の言葉を書く（ページのほかの所と同じ）
 reg.kinds.replaceChildren(
   ...KINDS.map((k) => {
     const box = el('input');
@@ -503,7 +503,7 @@ const labelOf = (id: string) => {
   const v = ENTRY_BY_ID.get(id)!;
   return v.group ? `${v.name}（${v.group}）` : v.name;
 };
-// (the voices load in the background; the list appears when they are in)
+// 声は裏で読む。読み終えたら一覧が出る
 let byLabel = new Map<string, (typeof PROFILES)[number]>();
 ref.catalog.addEventListener('change', () => {
   const p = byLabel.get(ref.catalog.value.trim());
@@ -523,7 +523,7 @@ void voicesReady.then(() => {
     o.value = label;
     list.append(o);
   }
-  // (a link from the voice page: ?target=<name>)
+  // 声のページからのリンク: ?target=<名前>
   const wanted = new URLSearchParams(location.search).get('target');
   const p = wanted ? PROFILES.find((x) => ENTRY_BY_ID.get(x.id)!.name === wanted) : undefined;
   if (p && !target) setTarget(p.features, ENTRY_BY_ID.get(p.id)!.name, M('このサイトで測った代表値', 'a voice measured by this site'));
@@ -689,7 +689,7 @@ function showScore(score: number): void {
   const gauge = $('gauge');
   const num = $('score');
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // (the ring goes back to 0 at once, then fills to the score, each time)
+  // 輪は毎回、まずすぐ 0 に戻し、それから点数まで満ちる
   gauge.style.transition = 'none';
   gauge.style.setProperty('--score', '0');
   void getComputedStyle(gauge).getPropertyValue('--score');
@@ -733,7 +733,7 @@ function paint(): void {
   $('score-word').textContent = scoreWord(score);
   $('best').textContent = tries === 1 ? '' : score > before ? t(`最高点を更新しました（${tries} 回目）`, `New best! (try ${tries})`) : t(`このお手本での最高は ${best} 点です（${tries} 回目）`, `Your best with this model is ${best} (try ${tries})`);
 
-  // (line: the three parts of the score, and the two pitch lines one over the other)
+  // セリフ真似: 点数の 3 つの内訳と、重ねた 2 本の高さの線
   const subs = $('subscores');
   subs.hidden = !line;
   $('line-box').hidden = !line;

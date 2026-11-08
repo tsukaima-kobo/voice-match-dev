@@ -96,7 +96,7 @@ export interface MimicScore {
 export function mimicScore(target: Features, mine: Features): MimicScore | null {
   const d = differences(target, mine);
   if (d.length < MIN_ITEMS) return null;
-  // (with fewer items, as if the missing ones were off by the same: a short take must not score higher for leaving items out)
+  // 項目が少ない時は、無い項目も同じだけずれていたとみなす（短い回が、項目が抜けたせいで高い点にならないように）
   const s = (d.reduce((acc, x) => acc + Math.min(Math.abs(x.z), CLIP) ** 2, 0) * SCORED_KEYS.length) / d.length;
   return { score: Math.round(100 * Math.exp(-s / SCORE_SCALE)), used: d.length };
 }
@@ -107,7 +107,7 @@ export function adviceFor(diffs: readonly Difference[], n = 3): { key: ScoredKey
   for (const d of diffs) {
     const a = ADVICE[d.key];
     if (Math.abs(d.z) <= 1) continue;
-    // (yours is lower than the model's: go up)
+    // 負ならあなたの方がお手本より低いので、上げる
     out.push({ key: d.key, text: d.z < 0 ? a.up : a.down, z: d.z });
     if (out.length >= n) break;
   }

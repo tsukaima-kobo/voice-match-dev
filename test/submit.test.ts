@@ -23,18 +23,18 @@ const quality = { voicedSeconds: 11.2, gapTonal: 0.02, snrDb: 40 };
 const sub = (o: Partial<Parameters<typeof makeSubmission>[0]> = {}) => makeSubmission({ name: '試験のキャラ', group: '試験の作品', kinds: 0b1001, link: 'https://example.com/chara', quality, features: A, consent: true, ...o });
 
 describe('送る内容と壁 ①', () => {
-  it('goes there and back, and a good one has no problems', () => {
+  it('書き出して読み戻すと同じ。よい物には問題が無い', () => {
     const s = sub();
     const back = decodeSubmission(`  ${encodeSubmission(s)}\n`);
     expect(back).toEqual(s);
     expect(checkSubmission(back!)).toEqual([]);
   });
-  it('reads nothing that is not one', () => {
+  it('送る内容でない物は読まない', () => {
     expect(decodeSubmission('hello')).toBeNull();
     expect(decodeSubmission('voice-twin:{oops')).toBeNull();
     expect(decodeSubmission('voice-twin:{"v":2}')).toBeNull();
   });
-  it('turns away a missing consent, a bad name, a bad link, a poor recording', () => {
+  it('同意なし・よくない名前・よくないリンク・質の悪い録音は断る', () => {
     const kinds = (s: ReturnType<typeof sub>) => checkSubmission(s).map((p) => p.kind);
     expect(kinds(sub({ consent: false }))).toContain('consent');
     expect(kinds(sub({ kinds: 0 }))).toContain('kinds');
@@ -45,7 +45,7 @@ describe('送る内容と壁 ①', () => {
     expect(kinds(sub({ quality: { ...quality, voicedSeconds: 5 } }))).toContain('quality');
     expect(kinds(sub({ quality: { ...quality, gapTonal: 0.6 } }))).toContain('quality');
   });
-  it('turns away numbers no voice has, numbers our measuring cannot give, and formants out of order', () => {
+  it('どの声にも無い数字・こちらの測り方では出ない数字・順番の狂ったフォルマントは断る', () => {
     expect(checkSubmission(sub({ features: { ...A, pitch: 5000 } })).map((p) => p.kind)).toContain('range');
     expect(checkSubmission(sub({ features: { ...A, pitch: 220.123456 } })).map((p) => p.kind)).toContain('range');
     expect(checkSubmission(sub({ features: { ...A, f2: 300, f1: 900 } })).map((p) => p.kind)).toContain('order');
@@ -53,11 +53,11 @@ describe('送る内容と壁 ①', () => {
     const old = { ...sub(), m: '2.0.0' };
     expect(checkSubmission(old).map((p) => p.kind)).toContain('version');
   });
-  it('takes official-looking https links only', () => {
+  it('公式らしい https のリンクだけ受ける', () => {
     expect(checkLink('https://www.example.co.jp/talent/a')).toBeNull();
     for (const bad of ['ftp://example.com', 'https://user:pw@example.com', 'https://127.0.0.1/', 'https://bit.ly/abc', 'https://localhost/', 'not a url', '']) expect(checkLink(bad), bad).not.toBeNull();
   });
-  it('puts names written a little differently together', () => {
+  it('少し違う書き方の名前を、同じ物にまとめる', () => {
     expect(nameKey('試験 の・キャラ！')).toBe(nameKey('試験のキャラ'));
     expect(nameKey('ＡＢＣ')).toBe(nameKey('abc'));
   });
@@ -65,13 +65,13 @@ describe('送る内容と壁 ①', () => {
 
 describe('壁 ③', () => {
   const near = [voice(220, 2), voice(222, 3), voice(218, 4)];
-  it('needs 3 that agree, and gives their median', () => {
+  it('合う物が 3 つ要る。その中央値を出す', () => {
     expect(consensus(model, near.slice(0, 2).map((features) => ({ features })))).toBeNull();
     const c = consensus(model, near.map((features) => ({ features })));
     expect(c?.used).toBe(3);
     expect(c!.features.pitch).toBe(near.map((f) => f.pitch!).sort((x, y) => x - y)[1]);
   });
-  it('counts the same numbers once, and leaves out one far from the rest', () => {
+  it('同じ数字は 1 回と数え、ほかから遠い物は除く', () => {
     expect(consensus(model, [near[0]!, near[0]!, near[0]!].map((features) => ({ features })))).toBeNull();
     const far = { ...near[0]!, pitch: 600, f1: 1200, f2: 3000, hnr: 0, rate: 12, levelRange: 70, tilt: 30, mfcc1: 90, mfcc2: -90 };
     const c = consensus(model, [...near, far].map((features) => ({ features })));
@@ -83,7 +83,7 @@ describe('取り込み', () => {
   const code = (f: Features, name = '試験のキャラ') => encodeSubmission(sub({ features: f, name }));
   const rows = (list: [string, string, string][]): Row[] => list.map(([at, c, verdict]) => ({ at, code: c, verdict, reason: '' }));
   const three = [voice(220, 2), voice(222, 3), voice(218, 4)];
-  it('uses only rows dots marked OK, and makes a voice from 3 that agree, with an ID that comes from the name', () => {
+  it('dots が OK を付けた行だけ使い、合う 3 つから声を作る。ID は名前から', () => {
     const r = intake(
       rows([
         ['2026/11/01 10:00:00', code(three[0]!), 'OK'],
@@ -97,12 +97,12 @@ describe('取り込み', () => {
     expect(r.counts).toMatchObject({ rows: 5, judgedNg: 1, pending: 1, accepted: 3 });
     expect(r.voices).toHaveLength(1);
     expect(r.voices[0]).toMatchObject({ id: userIdOf(nameKey('試験のキャラ')), name: '試験のキャラ', kinds: 0b1001, link: 'https://example.com/chara', used: 3 });
-    // (the same name, written a little differently, is the same ID every day; another name, another ID)
+    // 少し違う書き方でも同じ名前なら、どの日も同じ ID。別の名前なら別の ID
     expect(userIdOf(nameKey('試験の キャラ'))).toBe(r.voices[0]!.id);
     expect(userIdOf(nameKey('べつのこえ'))).not.toBe(r.voices[0]!.id);
     expect(r.voices[0]!.id).toMatch(/^u-[0-9a-z]{11}$/);
   });
-  it('drops blocked names, banned words, the same numbers again, and more than the daily limit for a name', () => {
+  it('止めた名前・使えない言葉・前と同じ数字・1 つの名前で 1 日の上限を超えた分は除く', () => {
     const many = Array.from({ length: INTAKE.perNamePerDay + 2 }, (_, i): [string, string, string] => ['2026/11/03 10:00:00', code(voice(200 + i, 10 + i), 'たくさん'), 'OK']);
     const r = intake(
       rows([
@@ -116,7 +116,7 @@ describe('取り込み', () => {
     );
     expect(r.counts).toMatchObject({ blocked: 1, ngWord: 1, duplicate: 1, overName: 2 });
   });
-  it('reads the sheet: skips the header, keeps the columns', () => {
+  it('シートを読む: 見出しは飛ばし、列はそのまま', () => {
     const t = parseCsv('タイムスタンプ,送る内容,判定,理由\r\n"2026/11/01 1:00:00","voice-twin:{""v"":1}",OK,"よい, とても"\n');
     expect(t[1]).toEqual(['2026/11/01 1:00:00', 'voice-twin:{"v":1}', 'OK', 'よい, とても']);
     expect(rowsFromTable(t)).toEqual([{ at: '2026/11/01 1:00:00', code: 'voice-twin:{"v":1}', verdict: 'OK', reason: 'よい, とても' }]);
@@ -138,7 +138,7 @@ describe('送る内容に入る物', () => {
 describe('登録の大枠', () => {
   it('そろった登録の半分以上が選んだ大枠だけを付ける', async () => {
     const { majorityKinds } = await import('../tools/intake-lib.ts');
-    // (VTuber in all three, singer in two, voice actor in one)
+    // VTuber は 3 つとも、歌手は 2 つ、声優は 1 つ
     expect(majorityKinds([0b101, 0b101, 0b1001])).toBe(0b101);
     expect(majorityKinds([0b1, 0b10])).toBe(0b11);
     expect(majorityKinds([])).toBe(0);

@@ -14,11 +14,11 @@ const list = [
 ];
 
 describe('声の一覧', () => {
-  it('does not mind full/half width, case, kana, spaces or dots', () => {
+  it('全角と半角・大文字と小文字・ひらがなとカタカナ・空白・点の違いは気にしない', () => {
     expect(searchKey('Ｓａｍｐｌｅ　Ｓｉｎｇｅｒ')).toBe('samplesinger');
     expect(searchKey('アイラニ・イオフィフティーン')).toBe(searchKey('あいらに いおふぃふてぃーん'));
   });
-  it('finds by name or affiliation, every word', () => {
+  it('名前か所属で探す（言葉が複数なら、全部に合う物）', () => {
     expect(filterCatalog(list, 'えある').map((x) => x.id)).toEqual(['v-2']);
     expect(filterCatalog(list, 'にじさんじ').map((x) => x.id)).toEqual(['v-2', 'v-3']);
     expect(filterCatalog(list, 'にじさんじ 静').map((x) => x.id)).toEqual(['v-3']);
@@ -26,11 +26,11 @@ describe('声の一覧', () => {
     expect(filterCatalog(list, '  ').length).toBe(list.length);
     expect(filterCatalog(list, 'いない人')).toEqual([]);
   });
-  it('narrows by category', () => {
+  it('大枠で絞る', () => {
     expect(filterCatalog(list, '', maskOf(['singer'])).map((x) => x.id)).toEqual(['v-4', 'v-5']);
     expect(filterCatalog(list, 'ホロ', maskOf(['singer'])).map((x) => x.id)).toEqual(['v-5']);
   });
-  it('groups by affiliation, the larger first, those without one last, names in order', () => {
+  it('所属ごとにまとめる。人の多い所属が先、所属の無い人は最後、名前は順に', () => {
     const g = groupByAffiliation(list);
     expect(g.map((x) => x.group)).toEqual(['にじさんじ', 'hololive Indonesia 1期生', 'ホロライブ', null]);
     expect(g[0]!.entries.map((x) => x.id)).toEqual(['v-2', 'v-3']);

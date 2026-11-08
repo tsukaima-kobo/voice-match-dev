@@ -72,7 +72,7 @@ function align(a: Contour, b: Contour, ra: number, rb: number): number[][] {
         D[0] = c;
         continue;
       }
-      // (a straight step costs the frame; a step that holds one side costs a little more, so the path keeps near straight)
+      // 両方が 1 こま進む時は、そのこまの分だけかかる。片方を止める時は少し多くかかるので、道はまっすぐに近いままになる
       let best = INF;
       if (i > 0 && j > 0) best = Math.min(best, D[(i - 1) * m + j - 1]! + c);
       if (i > 0) best = Math.min(best, D[(i - 1) * m + j]! + c * 1.1 + 0.02);
@@ -128,7 +128,7 @@ export function compareLines(ref: Contour, mine: Contour): LineResult | null {
     if (c) warped[i] = Math.round((s / c) * 100) / 100;
     const p = ref.pitch[i]!;
     if (finite(p) && c) {
-      // (+: yours goes higher than the model's here, each from its own middle)
+      // +: ここで、あなたの方がお手本より高い（どちらも自分の真ん中から見て）
       const d = warped[i]! - rb - (p - ra);
       sq += d * d;
       pairs++;

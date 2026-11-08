@@ -4,7 +4,6 @@ import { FEATURE_BY_KEY, FEATURE_KEYS, type FeatureKey, type Features } from '..
 import { quantileOf } from '../src/voice/measure.ts';
 import { medianFeatures } from '../src/voice/combine.ts';
 
-/** 項目ごとの中央値（サイトのお手本と同じ計算。src/voice/combine.ts） */
 /** 項目ごとの中央値（サイトの音声ファイルのお手本と同じ計算。src/voice/combine.ts） */
 export { medianFeatures };
 import { rank, standardize, type MatchModel, type Profile } from '../src/match/match.ts';
@@ -129,7 +128,7 @@ export function fitModel(speakers: readonly Speaker[], measureVersion: string, o
     const v = profiles.map((p) => p[k]).filter((x): x is number => x !== null).map((x) => transform(k, x));
     return v.length ? quantileOf(v, 0.5) : 0;
   });
-  // (each window minus its speaker's mean, items missing taken at the speaker's mean: the pooled within-speaker covariance)
+  // 窓ごとに、その人の平均を引く（無い項目はその人の平均とみなす）。全員分をまとめて、同じ人の中の共分散にする
   const resid: number[][] = [];
   for (const s of speakers) {
     const cols = keys.map((k) => s.windows.map((w) => w.features[k]).map((x) => (x === null ? null : transform(k, x))));
@@ -155,7 +154,7 @@ export function fitModel(speakers: readonly Speaker[], measureVersion: string, o
   const spread = keys.map((_, i) => Math.sqrt(Math.max(cov[i]![i]!, 1e-12)));
   const base: MatchModel = { version: opts.whiten ? 'whiten' : 'diagonal', measureVersion, keys: [...keys], center, spread, weight: keys.map(() => 1) };
   if (!opts.whiten) return base;
-  // (the correlation of the standardized items, pulled toward the identity, then its inverse square root by Cholesky)
+  // 目盛りをそろえた項目の相関を、単位行列の方へ寄せ、コレスキー分解でその逆平方根を作る
   const shrink = opts.shrink ?? 0.2;
   const corr = cov.map((row, i) => row.map((v, j) => (i === j ? 1 : (1 - shrink) * (v / (spread[i]! * spread[j]!)))));
   const l = cholesky(corr);
@@ -171,11 +170,8 @@ export interface EvalResult {
 }
 
 /**
- * 見分ける力: 動画が 2 本以上ある人ごとに、1 本の動画を外して残りで代表値を作り、外した動画の窓 1 つずつを問いにして、
- * 全員の中で本人が 1 位・5 位以内に入る割合（利用者の 30 秒の声 1 つと同じ条件）
- */
-/**
- * 1 本の動画を外して、その動画の窓（30 秒ずつ）で本人が 1 位・5 位以内に入る割合。来た人の声 1 回分を、窓 1 つとみなす。
+ * 見分ける力: 動画が 2 本以上ある人ごとに、1 本の動画を外して残りで代表値を作り、外した動画の窓（30 秒ずつ）1 つずつで、
+ * 全員の中で本人が 1 位・5 位以内に入る割合。来た人の声 1 回分を、窓 1 つとみなす。
  * `model` に関数を渡すと、外した動画ごとに、その動画を除いた窓でモデルを作り直す（モデルが答えを見ないように）。
  */
 export function evaluate(speakers: readonly Speaker[], model: MatchModel | ((train: readonly Speaker[]) => MatchModel)): EvalResult {

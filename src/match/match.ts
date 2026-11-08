@@ -64,8 +64,8 @@ export function standardize(model: MatchModel, f: Features): (number | null)[] {
     const s = model.spread[i]!;
     return s > 0 ? (x - model.center[i]!) / s : null;
   });
-  // (whitening mixes the items, so it needs all of them: one missing is taken at the centre, 0. The weights then go
-  // with the whitened rows, and tools/eval.ts sets them to 1)
+  // 白色化は項目を混ぜるので、全部の項目が要る。無い項目は中心の 0 とする。重みはその後、白色化した行に
+  // かかる（tools/eval.ts は重みを 1 にする）
   const out: (number | null)[] = model.whiten ? model.whiten.map((row) => row.reduce<number>((acc, w, j) => acc + w * (z[j] ?? 0), 0)) : z;
   return out.map((v) => (v === null ? null : Math.round(v * SCALE)));
 }
@@ -95,7 +95,7 @@ function scoreAll(model: MatchModel, user: Features, profiles: readonly Profile[
 /** 近い順（同点は ID の小さい順）。`n` 人まで */
 export function rank(model: MatchModel, user: Features, profiles: readonly Profile[], n = 5): Ranked[] {
   const usable = scoreAll(model, user, profiles).filter((s) => s.wsum > 0n);
-  // (compare d2/wsum without dividing: a.d2 · b.wsum vs b.d2 · a.wsum)
+  // d2/wsum を割らずに比べる: a.d2 · b.wsum と b.d2 · a.wsum
   usable.sort((a, b) => {
     const l = a.d2 * b.wsum,
       r = b.d2 * a.wsum;

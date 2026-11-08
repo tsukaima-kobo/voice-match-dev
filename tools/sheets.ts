@@ -30,7 +30,7 @@ export async function openSheet(keyJson: string, sheetId: string): Promise<{ rea
       if (!res.ok) throw new Error(`スプレッドシートを読めませんでした（HTTP ${res.status}）`);
       return ((await res.json()) as { values?: string[][] }).values ?? [];
     },
-    // (a tab that may not be there yet: the Sheets API answers 400 for a range on a missing tab)
+    // まだ無いかもしれないタブ用: 無いタブの範囲には、Sheets API は 400 を返す
     async readOptional(range) {
       const res = await get(range);
       if (res.status === 400) return [];

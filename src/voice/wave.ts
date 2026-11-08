@@ -12,7 +12,7 @@ export interface Wave {
   clear(): void;
 }
 
-/** a bar's height from the mean square: -56 dBFS and under nothing, -10 dBFS full */
+/** 2 乗の平均から棒の高さ: -56 dBFS 以下は 0、-10 dBFS でいっぱい */
 const heightOf = (ms: number) => {
   const db = 10 * Math.log10(ms + 1e-12);
   return Math.min(1, Math.max(0, (db + 56) / 46)) ** 1.3;

@@ -35,9 +35,9 @@ export function setLang(l: Lang): void {
   try {
     localStorage.setItem(KEY, l);
   } catch {
-    /* (not kept: chosen again next time) */
+    /* 覚えられない時は、次にまた選ぶ */
   }
-  // (the address, if it named a language, follows the choice)
+  // 住所（URL）が言葉を指定していたら、選んだ言葉に合わせる
   const u = new URL(location.href);
   if (u.searchParams.has('lang')) {
     u.searchParams.set('lang', l);

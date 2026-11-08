@@ -16,7 +16,7 @@ const num = (v: number | null): number => {
   if (v === null) throw new Error('missing');
   return v;
 };
-/** a speech-like F0: a triangle round `mid` Hz, `span` semitones from top to bottom, once every two seconds */
+/** 話し声のような F0: `mid` Hz を中心にした三角形。上から下まで `span` 半音、2 秒に 1 回 */
 const glide = (span: number, mid = 150) => (t: number) => mid * 2 ** ((span * 2 * (Math.abs(((t * 0.5) % 1) - 0.5) - 0.25)) / 12);
 const syllables = bursts(5, { share: 0.8, floor: 0.4 });
 const talk = bursts(5, { share: 0.8, floor: 0.3, group: 7, pause: 0.4 });
@@ -24,12 +24,12 @@ const increasing = (v: number[]) => v.every((x, i) => i === 0 || x > v[i - 1]!);
 
 describe('同じ音なら同じ数字', () => {
   const clip = inRoom(vowel({ rate: 48000, seconds: 6, f0: glide(8), jitter: 0.01, shimmer: 0.04, breath: 0.02, envelope: talk }), 48000);
-  it('gives identical results for the same samples, however they are held', () => {
+  it('同じサンプルなら、どの形で持っていても全く同じ結果', () => {
     const a = measureVoice(clip, 48000);
     expect(a.ok).toBe(true);
     for (const b of [measureVoice(clip, 48000), measureVoice(Array.from(clip), 48000), measureVoice(Float32Array.from(clip), 48000)]) expect(JSON.stringify(b)).toBe(JSON.stringify(a));
   });
-  it('gives every item, rounded to its digits, and does not touch the samples', () => {
+  it('全項目を、それぞれの桁に丸めて出す。サンプルには触らない', () => {
     const before = Float32Array.from(clip);
     const m = ok(measureVoice(clip, 48000));
     expect(Object.keys(m.features)).toEqual([...FEATURE_KEYS]);
@@ -39,18 +39,18 @@ describe('同じ音なら同じ数字', () => {
       const p = 10 ** FEATURE_BY_KEY[k].digits;
       expect(Math.round(v * p) / p, k).toBe(v);
     }
-    // (a talk with pauses and syllables: nothing is missing but F4 (the synthetic vowel has three resonances) and
-    // 速さのムラ (6 s hold fewer than 4 stretches of 1 s))
+    // 間と音節のある話し声: 無いのは F4（合成の母音は響きが 3 つ）と
+    // 速さのムラ（6 s では 1 s の区間が 4 つに満たない）だけ
     expect(FEATURE_KEYS.filter((k) => m.features[k] === null)).toEqual(['f4', 'rateVar']);
     expect(clip).toEqual(before);
   });
-  it('measures the same sound alike at 16, 22.05, 44.1 and 48 kHz', () => {
+  it('同じ音を、16・22.05・44.1・48 kHz で同じように測る', () => {
     const at = (rate: number) => ok(measureVoice(inRoom(vowel({ rate, seconds: 5, f0: glide(4, 211), envelope: syllables }), rate), rate));
     const all = [16000, 22050, 44100, 48000].map(at);
     for (const m of all) expect(Math.abs(num(m.features.pitch) / 211 - 1)).toBeLessThan(0.02);
     for (const m of all) expect(Math.abs(num(m.features.f2) / num(all[0]!.features.f2) - 1)).toBeLessThan(0.03);
   });
-  it('does not change with the gain (the timbre and the strength are the same 12 dB quieter)', () => {
+  it('音量では変わらない（12 dB 小さくしても、音色と強さは同じ）', () => {
     const loud = ok(measureVoice(inRoom(vowel({ rate: R, seconds: 5, f0: glide(4), envelope: syllables, rms: 0.2 })), R));
     const quiet = ok(measureVoice(inRoom(vowel({ rate: R, seconds: 5, f0: glide(4), envelope: syllables, rms: 0.05 })), R));
     for (const k of ['pitch', 'f1', 'f2', 'f3', 'mfcc1', 'mfcc2', 'mfcc3', 'mfcc4', 'tilt', 'levelRange', 'centroid', 'hammarberg'] as const) {
@@ -60,7 +60,7 @@ describe('同じ音なら同じ数字', () => {
 });
 
 describe('小さな BGM', () => {
-  it('keeps the numbers near when a quiet tune and hiss play under the talk (−20 dB): the background is learnt in the pauses and taken out', () => {
+  it('話し声の下で小さな曲と雑音が鳴っても（−20 dB）数字は近いまま: 背景は間で覚えて取り除く', () => {
     const voice = inRoom(vowel({ rate: R, seconds: 12, f0: glide(4), jitter: 0.006, shimmer: 0.03, breath: 0.02, envelope: talk, rms: 0.1 }));
     const tune = new Float32Array(voice.length);
     const r = rng(3);
@@ -86,23 +86,23 @@ describe('小さな BGM', () => {
 });
 
 describe('高さ', () => {
-  it('finds the F0 of harmonic tones from 80 to 400 Hz within 0.5 %', () => {
+  it('80〜400 Hz の倍音のある音の F0 を、0.5 % 以内で見つける', () => {
     for (const f of [80, 95, 123.4, 160, 211, 250, 300, 400]) {
       const m = ok(measureVoice(inRoom(tone({ rate: R, seconds: 4, f0: f })), R));
       expect(Math.abs(num(m.features.pitch) / f - 1), `${f} Hz`).toBeLessThan(0.005);
     }
   });
-  it('抑揚 follows the spread of a speech-like glide; 高さの動き follows its speed', () => {
+  it('抑揚は話し声のような高さの移りの幅に、高さの動きはその速さに沿う', () => {
     const spans = [2, 5, 10];
     const got = spans.map((s) => ok(measureVoice(inRoom(vowel({ rate: R, seconds: 6, f0: glide(s), envelope: syllables })), R)));
     got.forEach((m, i) => expect(Math.abs(num(m.features.pitchRange) - 0.8 * spans[i]!)).toBeLessThan(0.6));
-    // (the glide goes `span` semitones a second)
+    // 高さは 1 秒に `span` 半音動く
     got.forEach((m, i) => expect(Math.abs(num(m.features.pitchMotion) - spans[i]!)).toBeLessThan(0.25 * spans[i]! + 0.3));
     expect(increasing(got.map((m) => num(m.features.pitchMotion)))).toBe(true);
   });
-  it('高さの偏り: a voice that jumps up now and then leans up; a symmetric glide is near 0', () => {
+  it('高さの偏り: ときどき跳ね上がる声は上に偏る。上下対称の移りは 0 に近い', () => {
     const sym = ok(measureVoice(inRoom(vowel({ rate: R, seconds: 6, f0: glide(6), envelope: syllables })), R));
-    // (mostly at 150 Hz, up to 8 semitones higher for 0.3 s of every 1.5 s)
+    // ほとんど 150 Hz。1.5 s ごとに 0.3 s だけ、最大 8 半音高くなる
     const up = (t: number) => 150 * 2 ** ((t % 1.5 < 0.3 ? 8 * Math.sin((Math.PI * (t % 1.5)) / 0.3) : 0) / 12);
     const lean = ok(measureVoice(inRoom(vowel({ rate: R, seconds: 6, f0: up, envelope: syllables })), R));
     expect(Math.abs(num(sym.features.pitchSkew))).toBeLessThan(1);
@@ -112,7 +112,7 @@ describe('高さ', () => {
 
 describe('響き（フォルマント）', () => {
   const at = (formants: [number, number][], f0 = 120) => ok(measureVoice(inRoom(vowel({ rate: R, seconds: 4, f0, formants })), R));
-  it('finds F1 within 10 %, F2 and F3 within 8 %, of synthetic vowels (a low voice)', () => {
+  it('合成の母音（低い声）の F1 を 10 % 以内、F2 と F3 を 8 % 以内で見つける', () => {
     const vowels: [number, number, number][] = [
       [300, 2300, 3000],
       [750, 1200, 2600],
@@ -125,13 +125,13 @@ describe('響き（フォルマント）', () => {
         [b, 100],
         [c, 150],
       ]);
-      // (F1 near the low harmonics is pulled a little toward them: 10 %)
+      // 低い倍音に近い F1 は、少しそちらに引っ張られる: 10 %
       expect(Math.abs(num(m.features.f1) / a - 1), `F1 of ${a}`).toBeLessThan(0.1);
       expect(Math.abs(num(m.features.f2) / b - 1), `F2 of ${b}`).toBeLessThan(0.08);
       expect(Math.abs(num(m.features.f3) / c - 1), `F3 of ${c}`).toBeLessThan(0.08);
     }
   });
-  it('響きの間隔: a shorter tract (all formants up by 20 %) measures wider', () => {
+  it('響きの間隔: 短い声道（フォルマントが全部 20 % 上がる）は広く出る', () => {
     const long = at([
       [500, 80],
       [1500, 100],
@@ -145,7 +145,7 @@ describe('響き（フォルマント）', () => {
     expect(Math.abs(num(long.features.formantSpacing) - 1000)).toBeLessThan(60);
     expect(num(short.features.formantSpacing) / num(long.features.formantSpacing)).toBeGreaterThan(1.12);
   });
-  it('F4 follows a fourth resonance', () => {
+  it('F4 は 4 つめの響きに沿う', () => {
     for (const f4 of [3400, 4200]) {
       const m = at([
         [500, 80],
@@ -156,7 +156,7 @@ describe('響き（フォルマント）', () => {
       expect(Math.abs(num(m.features.f4) / f4 - 1), `F4 of ${f4}`).toBeLessThan(0.08);
     }
   });
-  it('F1 の幅: a wider first resonance measures wider', () => {
+  it('F1 の幅: 1 つめの響きが広ければ、広く出る', () => {
     const narrow = at([
       [600, 60],
       [1500, 100],
@@ -169,7 +169,7 @@ describe('響き（フォルマント）', () => {
     ]);
     expect(num(wide.features.b1)).toBeGreaterThan(1.5 * num(narrow.features.b1));
   });
-  it('口の開きの幅・舌の動きの幅・音色の動き: changing vowels measure wider and livelier than one held vowel', () => {
+  it('口の開きの幅・舌の動きの幅・音色の動き: 変わっていく母音は、1 つの母音を伸ばすより広く、よく動いて出る', () => {
     const vs: [number, number][][] = [
       [
         [700, 90],
@@ -193,7 +193,7 @@ describe('響き（フォルマント）', () => {
     expect(num(changing.features.f2Range)).toBeGreaterThan(num(held.features.f2Range) + 5);
     expect(num(changing.features.mfccDelta)).toBeGreaterThan(2 * num(held.features.mfccDelta));
   });
-  it('明るさ: higher resonances measure brighter', () => {
+  it('明るさ: 響きが高いほど明るく出る', () => {
     const dark = at([
       [450, 80],
       [800, 90],
@@ -210,45 +210,45 @@ describe('響き（フォルマント）', () => {
 
 describe('声の質', () => {
   const voice = (o: { breath?: number; jitter?: number; shimmer?: number; glottis?: number }) => ok(measureVoice(inRoom(vowel({ rate: R, seconds: 5, f0: glide(6), envelope: syllables, seed: 5, ...o })), R));
-  it('more breath: 澄み (HNR) and はっきりさ (CPP) fall', () => {
+  it('息が多いと、澄み（HNR）とはっきりさ（CPP）が下がる', () => {
     const got = [0, 0.03, 0.06, 0.1].map((b) => voice({ breath: b }));
     expect(increasing(got.map((m) => -num(m.features.hnr)))).toBe(true);
     expect(increasing(got.map((m) => -num(m.features.cpp)))).toBe(true);
   });
-  it('more jitter and shimmer: ゆらぎ grow', () => {
+  it('jitter と shimmer が多いと、ゆらぎが大きくなる', () => {
     const got = [0, 0.01, 0.02, 0.04].map((j) => voice({ jitter: j, shimmer: 4 * j }));
     expect(increasing(got.map((m) => num(m.features.jitter)))).toBe(true);
     expect(increasing(got.map((m) => num(m.features.shimmer)))).toBe(true);
   });
-  it('柔らかさ (H1−H2): a softer source (its highs falling sooner) measures higher', () => {
+  it('柔らかさ（H1−H2）: 柔らかい音源（高い音が早く下がる）ほど高く出る', () => {
     const got = [600, 250, 120, 70].map((g) => voice({ glottis: g }));
     expect(increasing(got.map((m) => num(m.features.h1h2)))).toBe(true);
-    // (and the strength the other way)
+    // 声の力は逆向き
     expect(increasing(got.map((m) => -num(m.features.tilt)))).toBe(true);
   });
 });
 
 describe('話す速さと間', () => {
-  it('counts syllable-like bursts a second', () => {
+  it('音節のような音のかたまりを、1 秒あたりで数える', () => {
     const per = [3, 4, 5, 6, 7];
     const got = per.map((n) => ok(measureVoice(inRoom(vowel({ rate: R, seconds: 6, f0: glide(4, 180), envelope: bursts(n, { share: 0.75 }) })), R)));
     got.forEach((m, i) => expect(Math.abs(num(m.features.rate) - per[i]!)).toBeLessThan(0.25));
   });
-  it('measures the pauses: their share, their length, and the stretches between them', () => {
+  it('間を測る: 間の割合・間の長さ・間と間の区間', () => {
     const pauses = [0.3, 0.6, 1.0];
     const got = pauses.map((p) => ok(measureVoice(inRoom(vowel({ rate: R, seconds: 10, f0: glide(4, 180), envelope: bursts(5, { share: 0.75, group: 6, pause: p }) })), R)));
     expect(increasing(got.map((m) => num(m.features.pauseShare)))).toBe(true);
     got.forEach((m, i) => expect(Math.abs(num(m.features.pauseLen) - pauses[i]!), `pause ${pauses[i]}`).toBeLessThan(0.12));
-    // (a group of 6 at 5 a second: 1.2 s, a little less for the last burst's tail)
+    // 1 秒に 5 つで 6 つひとまとまり: 1.2 s。最後のかたまりの終わりの分だけ少し短い
     for (const m of got) expect(Math.abs(num(m.features.runLen) - 1.15)).toBeLessThan(0.15);
   });
-  it('no pause at all: 間の長さ is missing, not made up', () => {
+  it('間が全く無い時: 間の長さは作らずに、無しにする', () => {
     const m = ok(measureVoice(inRoom(vowel({ rate: R, seconds: 6, f0: glide(4), envelope: bursts(5, { share: 0.75 }) })), R));
     expect(m.features.pauseShare).toBe(0);
     expect(m.features.pauseLen).toBe(null);
   });
-  it('速さのムラ: stretches at one speed are low; fast and slow stretches by turns are higher', () => {
-    // (stretches of 1.6 s, pauses of 0.5 s; the syllables come `per(i)` a second in the i-th stretch)
+  it('速さのムラ: 同じ速さの区間が続けば低く、速い区間と遅い区間が交互なら高い', () => {
+    // 1.6 s の区間と 0.5 s の間。i 番目の区間では、音節は 1 秒に `per(i)` 個
     const env = (per: (i: number) => number) => (t: number) => {
       const i = Math.floor(t / 2.1),
         u = t - i * 2.1;
@@ -261,9 +261,9 @@ describe('話す速さと間', () => {
     expect(num(even.features.rateVar)).toBeLessThan(0.1);
     expect(num(uneven.features.rateVar)).toBeGreaterThan(0.25);
   });
-  it('リズムのムラ: even syllables are low, uneven ones higher', () => {
+  it('リズムのムラ: 音節がそろっていれば低く、そろっていなければ高い', () => {
     const even = ok(measureVoice(inRoom(vowel({ rate: R, seconds: 8, f0: glide(4), envelope: bursts(5, { share: 0.75 }) })), R));
-    // (bursts of 0.12 s, the gaps between their peaks long then short: 0.35 s, 0.15 s, …)
+    // 0.12 s のかたまり。山と山の間は長い・短いの繰り返し: 0.35 s、0.15 s、…
     const lilt = (t: number) => {
       const ph = t % 0.5;
       const u = ph < 0.35 ? ph / 0.12 : (ph - 0.35) / 0.12;
@@ -276,38 +276,38 @@ describe('話す速さと間', () => {
 });
 
 describe('測れない時は、その理由', () => {
-  it('no sound, or the room alone: silent', () => {
+  it('音が無い・部屋の音だけ: silent', () => {
     expect(measureVoice(silence(R, 5, 0), R)).toMatchObject({ ok: false, reason: 'silent' });
     expect(measureVoice(silence(R, 5), R)).toMatchObject({ ok: false, reason: 'silent' });
   });
-  it('a voice far too quiet: quiet', () => {
+  it('声が小さすぎる: quiet', () => {
     const m = measureVoice(concat(silence(R, 0.6, 0.00001), tone({ rate: R, seconds: 4, f0: 150, rms: 0.0007 }), silence(R, 0.6, 0.00001)), R);
     expect(m).toMatchObject({ ok: false, reason: 'quiet' });
   });
-  it('a voice under a steady noise: noisy', () => {
+  it('絶えず続く雑音の下の声: noisy', () => {
     const x = inRoom(tone({ rate: R, seconds: 4, f0: 150 }));
     const r = rng(3);
     expect(measureVoice(mixIn(x, Float32Array.from({ length: x.length }, () => gauss(r) * 0.04)), R)).toMatchObject({ ok: false, reason: 'noisy' });
   });
-  it('a voice cut off at full scale: clipped', () => {
+  it('最大の所で切れた声: clipped', () => {
     const x = inRoom(tone({ rate: R, seconds: 4, f0: 150, rms: 0.9 }));
     for (let i = 0; i < x.length; i++) x[i] = Math.max(-1, Math.min(1, x[i]!));
     expect(measureVoice(x, R)).toMatchObject({ ok: false, reason: 'clipped' });
   });
-  it(`less voice than asked: short (default ${MIN_VOICED_SECONDS} s; the page asks for more)`, () => {
+  it(`声が求めた長さより少ない: short（決まりは ${MIN_VOICED_SECONDS} s。ページはもっと求める）`, () => {
     expect(measureVoice(inRoom(tone({ rate: R, seconds: 2, f0: 150 })), R)).toMatchObject({ ok: false, reason: 'short' });
     const five = inRoom(vowel({ rate: R, seconds: 5, f0: 150 }));
     expect(measureVoice(five, R).ok).toBe(true);
     expect(measureVoice(five, R, { minVoicedSeconds: 8 })).toMatchObject({ ok: false, reason: 'short' });
   });
-  it('not a recording: invalid', () => {
+  it('録音でない: invalid', () => {
     expect(measureVoice(new Float32Array(0), R)).toMatchObject({ ok: false, reason: 'invalid' });
     expect(measureVoice(tone({ rate: R, seconds: 4, f0: 150 }), 4000)).toMatchObject({ ok: false, reason: 'invalid' });
   });
 });
 
 describe('音楽が混ざった時の目印', () => {
-  it('a tone kept going in the pauses raises gapTonal', () => {
+  it('間でも鳴り続ける音は、gapTonal を上げる', () => {
     const talkOnly = inRoom(vowel({ rate: R, seconds: 8, f0: glide(4), envelope: talk }));
     const clean = ok(measureVoice(talkOnly, R));
     expect(clean.info.gapTonal).toBeLessThan(0.05);
@@ -319,11 +319,11 @@ describe('音楽が混ざった時の目印', () => {
 
 describe('BGM やほかの人の声が混ざる音（bgm、ほかのタブの音の時だけ）', () => {
   const main = vowel({ rate: R, seconds: 20, f0: glide(8, 260), jitter: 0.01, shimmer: 0.04, breath: 0.02, envelope: talk });
-  it('changes nothing for one clean voice', () => {
+  it('きれいな声 1 人分なら、何も変えない', () => {
     const clip = inRoom(main);
     expect(JSON.stringify(measureVoice(clip, R, { bgm: true }))).toBe(JSON.stringify(measureVoice(clip, R)));
   });
-  it('leaves out a lower voice more than an octave away, so the pitch and its range come back to the main voice', () => {
+  it('1 オクターブより離れた低い声を除くので、高さとその幅が主な声に戻る', () => {
     const clean = ok(measureVoice(inRoom(main), R));
     const low = vowel({ rate: R, seconds: 20, f0: glide(6, 105), seed: 5, envelope: bursts(4, { share: 0.7, floor: 0.2, group: 5, pause: 1.5 }) });
     const mixed = inRoom(mixIn(Float32Array.from(main), Array.from(low, (v) => v * 0.6)));
@@ -337,11 +337,11 @@ describe('BGM やほかの人の声が混ざる音（bgm、ほかのタブの音
 });
 
 describe('小さな道具', () => {
-  it('quantileOf (linear between ranks)', () => {
+  it('quantileOf（順位の間は直線でつなぐ）', () => {
     expect(quantileOf([3, 1, 2, 4], 0.5)).toBe(2.5);
     expect(Number.isNaN(quantileOf([], 0.5))).toBe(true);
   });
-  it('resample keeps a tone’s level and frequency', () => {
+  it('resample は音の大きさと周波数を保つ', () => {
     const x = Float64Array.from({ length: 48000 }, (_, i) => Math.sin((2 * Math.PI * 440 * i) / 48000) * 0.5);
     const y = resample(x, 48000, 16000);
     expect(y.length).toBe(16000);

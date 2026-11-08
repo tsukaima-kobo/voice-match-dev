@@ -31,7 +31,7 @@ const save = (id: string): void => {
     if (id) sessionStorage.setItem(KEY, id);
     else sessionStorage.removeItem(KEY);
   } catch {
-    /* (not kept: chosen again next time) */
+    /* 覚えられない時は、次にまた選ぶ */
   }
 };
 

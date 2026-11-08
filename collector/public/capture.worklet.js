@@ -16,7 +16,7 @@ class VoiceTwinCapture extends AudioWorkletProcessor {
     const input = inputs[0];
     if (input && input.length) {
       const len = input[0].length;
-      // (several channels are averaged to one)
+      // いくつかのチャンネルは、平均して 1 つにする
       for (let i = 0; i < len; i++) {
         let v = 0;
         for (let c = 0; c < input.length; c++) v += input[c][i];

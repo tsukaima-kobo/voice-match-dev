@@ -23,22 +23,22 @@ import { FEATURE_KEYS, roundFeature, type Features } from './features.ts';
 /** 測り方の版（数字の意味が変わったら上げる。事前に測ったお手本の数字と利用者の数字は、同じ版どうしで比べる） */
 export const MEASURE_VERSION = '3.1.0';
 
-/** the rate the analysis runs at (every clip is brought to it first) */
+/** 測る時のサンプリング周波数（どの音も、まずこれに直す） */
 export const RATE = 16000;
-/** frames every 10 ms, each a window of 32 ms (512 samples) */
+/** 枠は 10 ms ごと。1 つの枠は 32 ms の窓（512 サンプル） */
 export const HOP = 160;
 export const WIN = 512;
-/** the pitch searched (Hz) */
+/** 探す声の高さの範囲（Hz） */
 export const F0_MIN = 60;
 export const F0_MAX = 500;
 const YIN_W = 480;
 const YIN_FIRST = 0.15;
 const VOICED_MAX = 0.35;
-/** the least voiced speech measured by default (seconds); the page and the collector ask for more */
+/** 測るのに要る、声のある所の長さの既定の下限（秒）。ページと拡張機能は、もっと長く求める */
 export const MIN_VOICED_SECONDS = 3;
-/** the most analysed (seconds) */
+/** 測る長さの上限（秒） */
 export const MAX_SECONDS = 40;
-/** a gap in the speech of at least this long (seconds) is a pause (間) */
+/** 話の中のすき間で、これ以上長い物（秒）を間とする */
 export const PAUSE_MIN_SECONDS = 0.25;
 export const QUIET_DB = -55;
 export const MIN_SNR_DB = 15;
@@ -64,12 +64,12 @@ const BG_LOCAL_MIN = 10;
 const CLEAR_DB = 12;
 /** 音色（MFCC）で見る強さの幅（その枠の一番強い帯から下へ、dB）。これより弱い帯は、この幅の下の端にそろえる */
 const MFCC_RANGE_DB = 50;
-/** LPC: the order at 16 kHz and the window (25 ms) */
+/** LPC: 16 kHz での次数と、窓（25 ms） */
 const LPC_ORDER = 18;
 const LPC_WIN = 400;
-/** CPP and H1−H2: a longer window (64 ms) */
+/** CPP と H1−H2: 長めの窓（64 ms） */
 const CEP_N = 1024;
-/** MFCC: mel filters between these (Hz; the resampler cuts at 7.2 kHz) */
+/** MFCC: メルの帯をこの間に並べる（Hz。16 kHz へ直す所で 7.2 kHz より上は切れる） */
 const MEL_FILTERS = 26;
 const MEL_LO = 60;
 const MEL_HI = 7000;
@@ -77,21 +77,21 @@ const MEL_HI = 7000;
 export type MeasureFail = 'invalid' | 'silent' | 'quiet' | 'noisy' | 'clipped' | 'short';
 
 export interface MeasureInfo {
-  /** the clip's length (seconds, at most MAX_SECONDS) */
+  /** 録音の長さ（秒。MAX_SECONDS まで） */
   seconds: number;
-  /** from the first sound of speech to the last (seconds) */
+  /** 話しはじめの音から、話し終わりの音まで（秒） */
   speechSeconds: number;
-  /** the voiced frames (seconds) */
+  /** 声のある枠（秒） */
   voicedSeconds: number;
-  /** the loud frames (95th percentile) and the quiet floor (5th), dBFS */
+  /** 大きい枠（95 パーセンタイル）と、静かな床（5 パーセンタイル）。dBFS */
   loudDb: number;
   floorDb: number;
-  /** the share of the speech's samples at full scale */
+  /** 話している所のサンプルのうち、振り切れた（フルスケールの）物の割合 */
   clipped: number;
-  /** cycles traced (breath and roughness come from them) and frames with all three formants */
+  /** たどった周期の数（息とかすれは、これから出す）と、フォルマントが 3 つとも取れた枠の数 */
   cycles: number;
   formantFrames: number;
-  /** of the frames well under the voice inside the speech, the share that still has a pitch (music under the talk raises it) */
+  /** 話している所の中で声よりずっと小さい枠のうち、それでも高さがある物の割合（話の下に音楽があると上がる） */
   gapTonal: number;
   /** 高さと大きさの動き（`contour: true` の時だけ。セリフ真似で使う） */
   contour?: Contour;
@@ -113,7 +113,7 @@ export interface Contour {
 export const CONTOUR_STEP = 0.02;
 
 export interface MeasureOptions {
-  /** the least voiced speech (seconds, default MIN_VOICED_SECONDS) */
+  /** 要る、声のある所の長さの下限（秒。既定は MIN_VOICED_SECONDS） */
   minVoicedSeconds?: number;
   /** 高さと大きさの動き（Contour）も返す */
   contour?: boolean;
@@ -130,7 +130,7 @@ export type Measured = { ok: true; features: Features; info: MeasureInfo } | { o
 const dB = (power: number) => 10 * Math.log10(power + 1e-20);
 const semitones = (hz: number) => 12 * Math.log2(hz / 100);
 
-/** a quantile (linear between the two nearest ranks) */
+/** 分位数（いちばん近い 2 つの順位の間は、直線でつなぐ） */
 export function quantileOf(values: ArrayLike<number>, q: number): number {
   const n = values.length;
   if (!n) return NaN;
@@ -144,7 +144,7 @@ const median = (v: ArrayLike<number>) => quantileOf(v, 0.5);
 const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
 
 /* ---- 16 kHz へ（窓つき sinc） ---- */
-/** Brought to `to` Hz by a Blackman-windowed sinc low-pass (cut at 0.45 of the lower rate, 8 zero crossings a side). */
+/** Blackman 窓つきの sinc の低域通過で `to` Hz に直す（低いほうのサンプリング周波数の 0.45 で切る。片側にゼロ交差 8 つ）。 */
 export function resample(x: Float64Array, from: number, to: number): Float64Array {
   if (from === to) return x.slice();
   const ratio = from / to;
@@ -261,7 +261,7 @@ function fftTab(n: number): FftTab {
   fftTabs.set(n, t);
   return t;
 }
-/** the complex FFT of (re, im) in place (length a power of 2) */
+/** (re, im) の複素 FFT。結果は同じ配列に書く（長さは 2 のべき乗） */
 function fft(re: Float64Array, im: Float64Array): void {
   const n = re.length;
   const { cos, sin, rev } = fftTab(n);
@@ -306,7 +306,7 @@ function windowOf(kind: 'hann' | 'hamming', n: number): Float64Array {
   windows.set(key, w);
   return w;
 }
-/** the power spectrum (bins 0..n/2) of x[start .. start+n), windowed (outside the signal: 0) */
+/** x[start .. start+n) に窓をかけたパワースペクトル（ビン 0..n/2。信号の外は 0） */
 function powerSpectrum(x: Float64Array, start: number, w: Float64Array, re: Float64Array, im: Float64Array, power: Float64Array): void {
   const n = w.length;
   for (let i = 0; i < n; i++) {
@@ -319,13 +319,13 @@ function powerSpectrum(x: Float64Array, start: number, w: Float64Array, re: Floa
 }
 const BIN_HZ = RATE / WIN;
 const bin = (hz: number) => Math.round(hz / BIN_HZ);
-/** the pre-emphasis (1 − 0.97 z⁻¹) on the power of each bin (響き) */
+/** ビンごとのパワーにかける高域強調（1 − 0.97 z⁻¹）（響き） */
 const LIFT = Float64Array.from({ length: WIN / 2 + 1 }, (_, k) => 1 + 0.97 * 0.97 - 2 * 0.97 * Math.cos((2 * Math.PI * k) / WIN));
 
 /* ---- メルの帯（MFCC） ---- */
 const melOf = (hz: number) => 2595 * Math.log10(1 + hz / 700);
 const hzOfMel = (m: number) => 700 * (10 ** (m / 2595) - 1);
-/** triangular filters on the bins of a WIN-point spectrum: [first bin, weights] for each */
+/** WIN 点のスペクトルのビンにかける三角のフィルター: それぞれ [最初のビン, 重み] */
 const MEL_BANK: [number, Float64Array][] = (() => {
   const lo = melOf(MEL_LO),
     hi = melOf(MEL_HI);
@@ -348,7 +348,7 @@ const MEL_BANK: [number, Float64Array][] = (() => {
 })();
 /** MFCC 1..13 */
 const MFCC_N = 13;
-/** the orthonormal DCT-II rows 1..13 (c0, the loudness, is left out: it moves with the gain) */
+/** 正規直交の DCT-II の 1..13 行目（c0 は大きさなので除く: 音量（ゲイン）で動くため） */
 const DCT_ROWS = Array.from({ length: MFCC_N }, (_, i) => i + 1).map((q) => Float64Array.from({ length: MEL_FILTERS }, (_, m) => Math.sqrt(2 / MEL_FILTERS) * Math.cos((Math.PI * q * (m + 0.5)) / MEL_FILTERS)));
 
 /* ---- YIN（1 枠の声の高さ） ---- */
@@ -421,7 +421,7 @@ function peakBetween(v: Float64Array, k: number, centre: number): number {
 }
 
 /* ---- LPC とフォルマント ---- */
-/** LPC coefficients a[0..p] (a[0] = 1) of a windowed frame by Levinson–Durbin; false when it cannot be found */
+/** 窓をかけた枠の LPC 係数 a[0..p]（a[0] = 1）を Levinson–Durbin で出す。出せない時は false */
 function lpcOf(frame: Float64Array, p: number, r: Float64Array, a: Float64Array, tmp: Float64Array): boolean {
   const n = frame.length;
   for (let k = 0; k <= p; k++) {
@@ -430,7 +430,7 @@ function lpcOf(frame: Float64Array, p: number, r: Float64Array, a: Float64Array,
     r[k] = s;
   }
   if (!(r[0]! > 0)) return false;
-  // (a slight lag window: the autocorrelation times a Gaussian, so that a single harmonic is not taken for a formant)
+  // 軽いラグ窓: 自己相関にガウスをかける（倍音 1 本をフォルマントと取り違えないように）
   for (let k = 1; k <= p; k++) r[k] = r[k]! * Math.exp(-0.5 * ((2 * Math.PI * 40 * k) / RATE) ** 2);
   r[0] = r[0]! * (1 + 1e-9);
   a.fill(0);
@@ -448,7 +448,7 @@ function lpcOf(frame: Float64Array, p: number, r: Float64Array, a: Float64Array,
   }
   return true;
 }
-/** the roots of z^p + a1 z^(p−1) + … + ap (Durand–Kerner, fixed start: the same input gives the same roots) */
+/** z^p + a1 z^(p−1) + … + ap の根（Durand–Kerner。始めの値は固定: 同じ入力なら同じ根） */
 function rootsOf(a: Float64Array, p: number, zr: Float64Array, zi: Float64Array): boolean {
   let br = 1,
     bi = 0;
@@ -498,12 +498,12 @@ function rootsOf(a: Float64Array, p: number, zr: Float64Array, zi: Float64Array)
 interface FrameFormants {
   /** F1..F3 (Hz) */
   f: [number, number, number];
-  /** F4 (Hz), or NaN when the frame has none */
+  /** F4（Hz）。その枠に無ければ NaN */
   f4: number;
-  /** the bandwidths of F1 and F2 (Hz) */
+  /** F1 と F2 の幅（Hz） */
   b: [number, number];
 }
-/** F1..F4 and the bandwidths of F1 and F2 of a frame from the LPC's roots, or null (F1..F3 are needed) */
+/** LPC の根から出す、その枠の F1..F4 と、F1・F2 の幅。出せなければ null（F1..F3 は要る） */
 function formantsOf(zr: Float64Array, zi: Float64Array, p: number): FrameFormants | null {
   const cand: [number, number][] = [];
   for (let k = 0; k < p; k++) {
@@ -523,7 +523,7 @@ function formantsOf(zr: Float64Array, zi: Float64Array, p: number): FrameFormant
   return { f: [c1[0], c2[0], c3[0]], f4: c4 ? c4[0] : NaN, b: [c1[1], c2[1]] };
 }
 
-/** the amplitude of x at `hz` over a Hann window of n samples centred on `centre` (a single DFT bin, between bins) */
+/** `centre` を中心にした n サンプルの Hann 窓での、x の `hz` の振幅（DFT のビン 1 つだけ。ビンとビンの間でもよい） */
 function amplitudeAt(x: Float64Array, centre: number, n: number, hz: number): number {
   const start = centre - (n >> 1);
   let re = 0,
@@ -539,7 +539,7 @@ function amplitudeAt(x: Float64Array, centre: number, n: number, hz: number): nu
   return Math.hypot(re, im);
 }
 
-/** a straight line through (x, y) by least squares: the slope */
+/** (x, y) に最小二乗で引いた直線の傾き */
 function slopeOf(xs: number[], ys: number[]): number {
   const n = xs.length;
   if (n < 2) return NaN;
@@ -564,8 +564,8 @@ function slopeOf(xs: number[], ys: number[]): number {
 const fail = (reason: MeasureFail, info: Partial<MeasureInfo>): Measured => ({ ok: false, reason, info });
 
 /**
- * The numbers of a voice from its recording: mono PCM (-1..1) at `sampleRate` Hz (8–192 kHz). The same samples give
- * the same result. Fails (ok: false) on what cannot be measured.
+ * 録音から声の数字を出す: モノラルの PCM（-1..1）、`sampleRate` Hz（8–192 kHz）。同じサンプルなら同じ結果。
+ * 測れない物は失敗（ok: false）にする。
  */
 export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: MeasureOptions = {}): Measured {
   const minVoiced = opts.minVoicedSeconds ?? MIN_VOICED_SECONDS;
@@ -686,8 +686,8 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   }
   for (const f of slips) f0[f] = 0;
   if (opts.bgm) {
-    // (the most common pitch: the centre of the 6-semitone stretch that holds the most voiced frames, weighted toward
-    // its middle; frames far from it are music or someone else)
+    // いちばん多い高さ: 声のある枠をいちばん多く含む 6 半音の幅の、真ん中（幅の真ん中に近い枠ほど重く数える）。
+    // そこから遠い枠は、音楽かほかの人
     const vals: number[] = [];
     for (let f = 0; f < nF; f++) if (f0[f]! > 0) vals.push(st[f]!);
     if (vals.length >= 50) {
@@ -762,9 +762,9 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   }
   const hasBg = bgFrames.length >= BG_MIN_FRAMES;
   const bgDb = hasBg ? median(bgLevels) : -Infinity;
-  // (how much of the background to take out: all of it when it is near the voice, none when it is far under)
+  // 背景をどれだけ引くか: 声に近い大きさなら全部、声よりずっと小さければ引かない
   const bgW = hasBg ? Math.min(1, Math.max(0, (BG_NONE_SNR - (loudDb - bgDb)) / (BG_NONE_SNR - BG_FULL_SNR))) : 0;
-  // (the background spectrum near each block of frames, and its MFCC bands)
+  // 枠のまとまりごとの、その近くの背景のスペクトルと、その MFCC の帯
   const nBlocks = Math.ceil(nF / BG_BLOCK);
   const blockSpec = new Float64Array(bgW > 0 ? nBlocks * NB : 0);
   const blockMel = new Float64Array(bgW > 0 ? nBlocks * MEL_FILTERS : 0);
@@ -797,7 +797,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
       }
     }
   }
-  /** the voiced frames' background, summed (taken out of the long-term sums after the voiced loop) */
+  /** 声のある枠の背景を足した物（声のある枠のループの後で、長い時間の和から引く） */
   const bgSum = new Float64Array(NB);
   const clearLine = hasBg ? bgDb + CLEAR_DB : -Infinity;
   const isClear = (f: number) => level[f]! >= clearLine;
@@ -815,7 +815,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     st50 = quantileOf(vst, 0.5),
     st90 = quantileOf(vst, 0.9);
   const f0RangeSt = st90 - st10;
-  // (positive: the voice reaches further up from its middle than down)
+  // 正なら、声が真ん中から下へより、上へ遠くまで届く
   const pitchSkew = st90 - st50 - (st50 - st10);
   const motions: number[] = [];
   for (let f = 2; f < nF - 2; f++) {
@@ -847,7 +847,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     else if (sm[f]! > sm[last]!) peaks[peaks.length - 1] = f;
   }
   const rate = peaks.length / (speakFrames * frameS);
-  // (速さのムラ: the syllable rate of each stretch of speech of 1 s or more; their spread over their mean, from 4 stretches)
+  // 速さのムラ: 1 秒以上のひと続きごとの、音節の速さ。その散らばりを平均で割る（ひと続きが 4 つ以上の時）
   const runRates: number[] = [];
   {
     let pi = 0;
@@ -878,7 +878,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   const pauseShare = speechSeconds > 0 ? (gaps * frameS) / speechSeconds : 0;
   const pauseLen = gapsLen.length ? median(gapsLen) : NaN;
   const runLen = median(speech.map(([a, b]) => (b - a + 1) * frameS));
-  // (nPVI of the intervals between syllable peaks inside the same stretch of speech)
+  // 同じひと続きの中の、音節の山と山の間隔の nPVI
   const segOf = new Int32Array(nF).fill(-1);
   speech.forEach(([a, b], i) => {
     for (let f = a; f <= b; f++) segOf[f] = i;
@@ -891,7 +891,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     if (segOf[p0] !== segOf[p2] || segOf[p0]! < 0) continue;
     const d1 = p1 - p0,
       d2 = p2 - p1;
-    // (an interval over 0.5 s is a hesitation, not the rhythm)
+    // 0.5 秒より長い間隔は、ためらいでリズムではない
     if (d1 > 50 || d2 > 50) continue;
     pvi.push(Math.abs(d1 - d2) / ((d1 + d2) / 2));
   }
@@ -903,14 +903,13 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   const vl: number[] = [];
   for (let f = 0; f < nF; f++) if (isVs(f)) vl.push(level[f]!);
   const levelRangeDb = quantileOf(vl, 0.95) - quantileOf(vl, 0.05);
-  // (the high and low bands and the centroid: summed in the voiced loop below, from the spectrum with the background taken out)
+  // 高い帯・低い帯と重心: 下の声のある枠のループで足し、背景はループの後で和から引く
   let lowSum = 0,
     highSum = 0,
     cn = 0,
     cd = 0;
-  // (music under the talk: of the frames well under the voice (15 dB below its median) between the first sound of speech
-  // and the last, the share that still has a pitch. In speech those are pauses, closures and voiceless sounds; a tune
-  // under the talk keeps them tonal)
+  // 話の下の音楽: 話しはじめの音から話し終わりの音までで、声よりずっと小さい枠（声の中央値より 15 dB 下）のうち、
+  // それでも高さがある物の割合。話だけなら、そこは間・閉鎖・無声の音。話の下に曲があると、そこにも高さが残る
   const lowLine = median(vl) - 15;
   let lowFrames = 0,
     lowTonal = 0;
@@ -928,7 +927,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   const ltas = new Float64Array(WIN / 2 + 1);
   const mfcc = new Float64Array(MFCC_N);
   let mfccN = 0;
-  // (音色の動き: the distance between the MFCC of a voiced frame and the one just before it)
+  // 音色の動き: 声のある枠の MFCC と、そのすぐ前の枠の MFCC との距離
   const cNow = new Float64Array(MFCC_N),
     cPrev = new Float64Array(MFCC_N);
   let prevF = -2;
@@ -964,8 +963,8 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   for (let f = 0; f < nF; f++) {
     if (!isVs(f)) continue;
     const centre = f * HOP + WIN / 2;
-    // (the spectrum once more, for the long-term average, the MFCC, the bands and the centroid. The background comes out
-    // of the long-term sums after the loop, and out of each MFCC band here)
+    // 長い時間の平均・MFCC・帯・重心のため、もう一度スペクトルを出す。背景は、長い時間の和からはループの後で、
+    // MFCC の帯からはここで 1 つずつ引く
     powerSpectrum(s, f * HOP, hann, re, im, pw);
     for (let k = 0; k <= WIN / 2; k++) ltas[k] = ltas[k]! + pw[k]!;
     const blk = Math.floor(f / BG_BLOCK);
@@ -989,8 +988,8 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
       melE[m] = e;
       if (e > melFloor) melFloor = e;
     }
-    // (a floor MFCC_RANGE_DB under the frame's strongest band: empty bands, and bands under a hiss or a BGM, do not swing
-    // the shape. 50 dB keeps most of what tells voices apart while a quiet hiss moves the timbre a third as much as at 80 dB)
+    // その枠のいちばん強い帯から MFCC_RANGE_DB 下に床を置く: 空の帯や、サーという雑音・BGM より弱い帯で形が揺れないように。
+    // 50 dB なら声を見分ける物はほとんど残り、小さなサーという雑音で音色が動く量は 80 dB の時の 3 分の 1
     melFloor *= 10 ** (-MFCC_RANGE_DB / 10);
     for (let m = 0; m < MEL_FILTERS; m++) melE[m] = Math.log(Math.max(melE[m]!, melFloor) + 1e-30);
     for (let q = 0; q < MFCC_N; q++) {
@@ -1008,7 +1007,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     }
     cPrev.set(cNow);
     prevF = f;
-    // (formants: LPC of the lifted signal, 25 ms Hamming)
+    // フォルマント: 高域強調した信号の LPC（25 ms の Hamming 窓）
     const l0 = centre - (LPC_WIN >> 1);
     if (l0 >= 0 && l0 + LPC_WIN <= len) {
       for (let i = 0; i < LPC_WIN; i++) lpcFrame[i] = lift[l0 + i]! * hamming[i]!;
@@ -1026,8 +1025,8 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
         }
       }
     }
-    // (CPP: the cepstrum of the dB spectrum over 64 ms; its peak where the pitch can be, over a straight line fitted
-    // from 1 ms to 30 ms; smoothed over 3 quefrency bins)
+    // CPP: 64 ms の dB スペクトルのケプストラム。声の高さがありうる所の山が、1 ms から 30 ms に合わせた直線より
+    // どれだけ上か。ケフレンシーのビン 3 つでならす
     const c0 = centre - CEP_N / 2;
     if (c0 >= 0 && c0 + CEP_N <= len) {
       powerSpectrum(s, c0, hannC, reC, imC, pwC);
@@ -1060,7 +1059,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
       cpps.push(cppV);
       if (isClear(f)) cppsClear.push(cppV);
     }
-    // (H1−H2: the first two harmonics over four periods, each the highest of five tries within ±3 %)
+    // H1−H2: 4 周期分で見る、最初の 2 本の倍音。それぞれ ±3 % の中で 5 回試して、いちばん大きい物
     const fz = f0[f]!;
     const nWin = Math.min(CEP_N, Math.max(128, Math.round((4 * RATE) / fz)));
     if (centre - (nWin >> 1) >= 0 && centre + (nWin >> 1) < len) {
@@ -1077,7 +1076,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
       }
     }
   }
-  // (the background out of the long-term sums: each voiced frame's own background, summed)
+  // 長い時間の和から背景を引く: 声のある枠それぞれの背景を足した物を
   if (bgW > 0) {
     let bl = 0,
       bh = 0,
@@ -1129,7 +1128,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   let sumT = 0,
     sumA = 0,
     nCycles = 0;
-  // (the same, from the cycles where the voice is well over the background only)
+  // 同じ物を、声が背景よりはっきり大きい周期だけから
   const dTC: number[] = [],
     dAC: number[] = [],
     matchesC: number[] = [];
@@ -1224,7 +1223,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     for (let i = 0; i < k; i++) sum += s2[i]!;
     return sum / k;
   };
-  // (with a background, from the cycles well over it, when there are enough of them)
+  // 背景がある時は、背景よりはっきり大きい周期から（数が足りる時）
   const useClear = hasBg && dTC.length >= 40 && matchesC.length >= 40;
   const jitter = useClear ? trimmedMean(dTC) / (sumTC / dTC.length) : trimmedMean(dT) / (sumT / dT.length);
   const shimmer = useClear ? trimmedMean(dAC) / (sumAC / dAC.length) : trimmedMean(dA) / (sumA / dA.length);
@@ -1233,7 +1232,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
   const h12List = hasBg && h12Clear.length >= 30 ? h12Clear : h12;
   const hnrDb = 10 * Math.log10(rMid / (1 - rMid));
 
-  // (formants from fewer than 0.3 s of frames are left out: too few to trust. Their spread needs 1 s)
+  // 枠が 0.3 秒分より少ないフォルマントは使わない（少なすぎて当てにならない）。動く幅には 1 秒分要る
   const enoughF = F1.length >= 30;
   const enoughSpread = F1.length >= 100;
   const spreadSt = (v: number[]) => 12 * Math.log2(quantileOf(v, 0.9) / quantileOf(v, 0.1));
@@ -1256,7 +1255,7 @@ export function measureVoice(pcm: ArrayLike<number>, sampleRate: number, opts: M
     slopeLow,
     slopeMid,
     ...Object.fromEntries(Array.from(mfcc, (v, q) => [`mfcc${q + 1}`, mfccN ? v / mfccN : NaN])),
-    // (the mean, not the median: the moves between sounds are what it is about, and they are a small part of the frames)
+    // 中央値でなく平均: 見たいのは音と音の間の動きで、それは枠のごく一部だから
     mfccDelta: mfccSteps.length >= 50 ? mfccSteps.reduce((x, y) => x + y, 0) / mfccSteps.length : NaN,
     hnr: hnrDb,
     cpp: cppList.length >= 30 ? median(cppList) : NaN,

@@ -6,7 +6,7 @@ import { mountFooter, mountGithubLink } from './share.ts';
 mountLang({ ja: 'しくみと約束｜voice-match', en: 'How it works | voice-match' });
 mountGithubLink();
 mountFooter();
-// (オープンソースの節: GitHub のリポジトリが設定されてから出す)
+// オープンソースの節: GitHub のリポジトリが設定されてから出す
 const gh = githubUrl();
 const oss = document.getElementById('oss');
 const link = document.getElementById('oss-link') as HTMLAnchorElement | null;
@@ -14,7 +14,7 @@ if (gh && oss && link) {
   oss.hidden = false;
   link.href = gh;
 }
-// (削除のお願いの窓口: 住所は site-config.ts の 1 か所だけ)
+// 削除のお願いの窓口: 住所は site-config.ts の 1 か所だけ
 const setHref = (id: string, href: string) => {
   const a = document.getElementById(id) as HTMLAnchorElement | null;
   if (a) a.href = href;

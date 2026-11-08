@@ -151,14 +151,14 @@ export function drawShape(ctx: CanvasRenderingContext2D, S: number, p: ShapePara
   const col = pitch < 0.5 ? mix(P.low, P.mid, pitch * 2) : mix(P.mid, P.high, (pitch - 0.5) * 2);
   const blend: GlobalCompositeOperation = P.light ? 'source-over' : 'lighter';
 
-  // (大きさ: 声の力で大きさ、強弱の幅で脈)
+  // 大きさ: 声の力で大きさ、強弱の幅で脈
   const strength = or(p.tilt);
   const pulse = 1 + (0.008 + 0.03 * or(p.levelRange)) * Math.sin(o.t * 1.4);
   const R = S * (0.2 + 0.07 * strength) * pulse;
   const sx = 1.1 - 0.2 * pitch,
     sy = 0.9 + 0.2 * pitch;
   const skew = 0.16 * (or(p.pitchSkew) - 0.5);
-  // (ふちの波: 明るさで細かさ、抑揚で大きさ、音色で形、高さの動きで速さ)
+  // ふちの波: 明るさで細かさ、抑揚で大きさ、音色で形、高さの動きで速さ
   const centre = 2.2 + 7.5 * or(p.centroid);
   const A = 0.025 + 0.16 * or(p.pitchRange);
   const speed = 0.15 + 0.9 * or(p.pitchMotion);
@@ -190,7 +190,7 @@ export function drawShape(ctx: CanvasRenderingContext2D, S: number, p: ShapePara
     ctx.beginPath();
     ctx.arc(cx, cy, hr, 0, TAU);
     ctx.fill();
-    // (霞の粒: 決まった場所に、息の量だけ)
+    // 霞の粒: 決まった場所に、息の量だけ
     const n = Math.round(breath * 160);
     ctx.globalCompositeOperation = blend;
     for (let i = 0; i < n; i++) {
@@ -319,7 +319,7 @@ export function drawShape(ctx: CanvasRenderingContext2D, S: number, p: ShapePara
       const beads = Math.round(10 + 46 * rate);
       const rot = o.t * (0.05 + 0.3 * rate);
       const gapShare = 0.05 + 0.55 * pause;
-      // (the gaps: three of them, so the ring reads as phrases and pauses)
+      // 切れ目: 3 つ入れて、輪が言葉のまとまりと間に見えるように
       const inGap = (a: number) => {
         const f = (((a / TAU) % (1 / 3)) + 1 / 3) % (1 / 3);
         return f > (1 / 3) * (1 - gapShare);
@@ -377,7 +377,7 @@ export function createShapeView(canvas: HTMLCanvasElement): ShapeView {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
   let params: ShapeParams | null = null,
     focus: ShapeLayer | null = null,
-    // (read at the first drawing: the canvas must be in the page for its colours)
+    // 最初に描く時に読む（色を読むには、canvas がページに入っている必要がある）
     pal: ShapePalette | null = null,
     visible = true,
     raf = 0,
@@ -481,7 +481,7 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
   }
   box.append(note);
 
-  // (案内: 見えている間、項目を順に 1 回だけ光らせる。押す・重ねると止まる。動きを減らす設定ではしない)
+  // 案内: 見えている間、項目を順に 1 回だけ光らせる。押す・重ねると止まる。動きを減らす設定ではしない
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const all = SHAPE_LAYERS.flatMap((l) => l.items.map((item) => ({ item, layer: l.key })));
   let step = -1,
@@ -508,7 +508,7 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
     if (seen || !es.some((e) => e.isIntersecting)) return;
     seen = true;
     obs.disconnect();
-    // (after the drawing-out of the figure)
+    // 図を描き出す動きが終わってから
     setTimeout(() => {
       if (!current) timer = window.setInterval(tour, 2600);
     }, 2600);

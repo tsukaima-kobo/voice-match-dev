@@ -71,7 +71,7 @@ function cssColor(probe: CanvasRenderingContext2D, value: string, fallback: [num
   }
 }
 
-/** a level from the mean square: -56 dBFS and under 0, -12 dBFS 1 */
+/** 二乗平均から大きさ（0〜1）: -56 dBFS 以下で 0、-12 dBFS で 1 */
 const levelOf = (ms: number) => Math.min(1, Math.max(0, (10 * Math.log10(ms + 1e-12) + 56) / 44));
 
 export function createOrb(box: HTMLElement): Orb {
@@ -95,7 +95,7 @@ export function createOrb(box: HTMLElement): Orb {
         if (i && x[i]! >= 0 !== x[i - 1]! >= 0) z++;
       }
       target = levelOf(s / Math.max(1, x.length));
-      // (crossings per second, 300 to 6000, as 0 to 1)
+      // 1 秒あたりのゼロ交差の数（300〜6000）を 0〜1 に
       const zr = (z * rate) / Math.max(1, x.length);
       brightT = Math.min(1, Math.max(0, Math.log(Math.max(zr, 1) / 300) / Math.log(20)));
     },
@@ -106,7 +106,7 @@ export function createOrb(box: HTMLElement): Orb {
   const gl = canvas.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false, powerPreference: 'low-power' });
   const program = gl && build(gl);
   if (!gl || !program) {
-    // (no WebGL: the CSS orb, its size from the level)
+    // WebGL が無い時: CSS の玉。大きさは音の大きさで決める
     box.classList.add('css');
     let raf = 0;
     const loop = () => {
@@ -185,7 +185,7 @@ export function createOrb(box: HTMLElement): Orb {
     gl!.uniform1f(U.busy, busy);
     gl!.uniform1f(U.pulse, pulse);
     gl!.drawArrays(gl!.TRIANGLES, 0, 3);
-    // (with less motion, draw only while something is still settling)
+    // 動きを減らす設定では、まだ落ち着いていない物がある間だけ描く
     const settling = level > 0.003 || Math.abs(listen - (mode === 'listening' ? 1 : 0)) > 0.01 || pulse > 0.01 || busy > 0.01;
     if (visible && !document.hidden && (!still || settling)) raf = requestAnimationFrame(frame);
   }
@@ -238,7 +238,7 @@ function build(gl: WebGLRenderingContext): WebGLProgram | null {
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return null;
   const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  // (one triangle that covers the screen)
+  // 画面を覆う三角形 1 つ
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   const a = gl.getAttribLocation(p, 'a');
   gl.enableVertexAttribArray(a);

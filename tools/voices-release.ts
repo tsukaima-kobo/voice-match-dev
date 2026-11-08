@@ -29,7 +29,7 @@ const opt = (flag: string) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const USAGE = '使い方: node tools/voices-release.ts make (--sheet <シート.xlsx> | --snapshot <snapshot.json>) (--only <出す人の一覧.txt> | --all) [--kind <大枠>] ／ upload --yes（くわしくは docs/voices-release.md）';
-// (anything unknown, such as --help, stops here before anything is made or sent)
+// 知らない物（--help など）があれば、何かを作ったり送ったりする前に、ここで止まる
 const ALLOWED: Record<string, { flags: string[]; values: string[] }> = { make: { flags: ['--all'], values: ['--sheet', '--snapshot', '--only', '--kind'] }, upload: { flags: ['--yes'], values: [] } };
 const allowed = ALLOWED[args[0] ?? ''];
 const unknown = !allowed || args.slice(1).some((a, i, rest) => !(allowed.flags.includes(a) || allowed.values.includes(a) || allowed.values.includes(rest[i - 1] ?? '')));
@@ -49,7 +49,7 @@ if (args[0] === 'make') {
   const snap = sheetPath ? snapshotFromSheet(readXlsx(readFileSync(sheetPath)), MEASURE_VERSION) : (JSON.parse(readFileSync(snapPath!, 'utf8')) as Snapshot);
   if (sheetPath) console.log(`シート: 人物 ${snap.peoples.length} 行・測定値 ${snap.measurements.length} 行（シートには測り方の版が無いので、45 項目の見出しが今と同じことで確かめ、版 ${MEASURE_VERSION} として扱います）`);
   const only = onlyPath ? parseIdList(readFileSync(onlyPath, 'utf8')) : null;
-  // (--kind: the 大枠 for people whose 大枠 cell is empty, e.g. --kind VTuber)
+  // --kind: 「大枠」のセルが空の人に付ける大枠（例: --kind VTuber）
   const kindText = opt('--kind');
   const kind = kindText ? parseKinds(kindText) : { mask: 0, unknown: [] };
   if (kindText && (kind.unknown.length || !kind.mask)) {

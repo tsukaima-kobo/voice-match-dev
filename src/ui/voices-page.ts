@@ -97,7 +97,7 @@ function draw(): void {
       a.rel = 'noopener noreferrer';
       li.append(a);
       const kinds = (v.kinds ?? []).map((id) => KIND_BY_ID.get(id)).filter((k) => k !== undefined);
-      // (the category is shown only when it tells something: when every voice is a VTuber, the tag says nothing)
+      // 大枠は、意味がある時だけ出す（どの声も VTuber なら、そのタグは何も伝えない）
       if (kinds.length && (kinds.length > 1 || hasManyKinds)) {
         const tags = el('span', 'vl-tags');
         for (const k of kinds) tags.append(el('span', 'vl-tag', kindLabel(k)));

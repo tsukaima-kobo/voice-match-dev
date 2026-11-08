@@ -44,6 +44,6 @@ export function clearMine(): void {
   try {
     localStorage.removeItem(KEY);
   } catch {
-    /* (nothing kept) */
+    /* 何も残っていない */
   }
 }

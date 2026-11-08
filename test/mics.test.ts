@@ -11,14 +11,14 @@ async function withDevices(list: ReturnType<typeof dev>[]) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('マイクの一覧', () => {
-  it('lists the microphones by name, without the device default ones and the cameras', async () => {
+  it('マイクを名前で並べる。端末の既定の物とカメラは除く', async () => {
     const { listMics } = await withDevices([dev('default', '既定 - 内蔵マイク'), dev('communications', '通信 - 内蔵マイク'), dev('a1', '内蔵マイク'), dev('b2', 'USB マイク'), dev('b2', 'USB マイク'), dev('v1', 'カメラ', 'videoinput')]);
     expect(await listMics()).toEqual([
       { id: 'a1', label: '内蔵マイク' },
       { id: 'b2', label: 'USB マイク' },
     ]);
   });
-  it('gives nothing before the microphone is allowed (no names)', async () => {
+  it('マイクを許可する前は何も出さない（名前が無い）', async () => {
     const { listMics } = await withDevices([dev('', ''), dev('', '')]);
     expect(await listMics()).toEqual([]);
   });

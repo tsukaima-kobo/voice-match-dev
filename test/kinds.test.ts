@@ -34,7 +34,7 @@ describe('大枠', () => {
     expect(parseKinds('アニメのキャラ\nゲームのキャラ').mask).toBe((1 << 8) | (1 << 9));
     expect(parseKinds('').mask).toBe(0);
     expect(parseKinds('VTuber、ぬいぐるみ')).toEqual({ mask: 1, unknown: ['ぬいぐるみ'] });
-    // (a spare number is not a category)
+    // 空いている番号は大枠ではない
     expect(parseKinds('12').unknown).toEqual(['12']);
   });
 });

@@ -31,7 +31,7 @@ let blocked: string[] = [];
 let ngWords: string[] = [];
 if (args[0] === '--csv' && args[1]) {
   table = parseCsv(readFileSync(args[1], 'utf8'));
-  // (by hand: the removal list and the banned words as CSV files beside it, if given)
+  // 手で試す時: 削除の一覧と禁止の言葉は、渡されていれば、それぞれ別の CSV から読む
   const opt = (flag: string) => {
     const i = args.indexOf(flag);
     return i > 0 && args[i + 1] ? parseCsv(readFileSync(args[i + 1]!, 'utf8')) : [];

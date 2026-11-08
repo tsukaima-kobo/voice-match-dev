@@ -175,7 +175,7 @@ async function start() {
     };
     const m = await openMic(onChunk, undefined, mics.get());
     if (state !== 'asking') {
-      // (cancelled while asking)
+      // 許可を待つ間に取り消された
       m.stop();
       return;
     }
@@ -207,7 +207,7 @@ async function finish() {
   }
   dropSound();
   show('analysing', M(`${FEATURES.length} 項目を計算しています…`, `Working out ${FEATURES.length} items…`));
-  // (the measuring runs in a Worker, the sound handed to it and let go there, while the panel plays its working-out)
+  // 測るのは Worker。音はそちらに渡して、そこで手放す。その間、パネルは計算中の演出を見せる
   const [m] = await Promise.all([measureAsync(pcm, rate, { minVoicedSeconds: ONE_LINE_SECONDS }), live.analysing(ANALYSE_MS)]);
   if ((state as State) !== 'analysing') return;
   if (!m.ok) {
@@ -216,7 +216,7 @@ async function finish() {
     return;
   }
   takes.push({ features: m.features, voicedSeconds: m.info.voicedSeconds });
-  await voicesReady; // (read in the background since the page opened; done long before this)
+  await voicesReady; // ページを開いた時から裏で読んでいる。ここに来るずっと前に終わっている
   if ((state as State) !== 'analysing') return;
   render(combineTakes(takes), m);
   const n = takes.length;
@@ -266,7 +266,7 @@ function failText(reason: MeasureFail, voiced: number | undefined): string {
 }
 
 /* ---- 探す範囲（大枠で絞る。0 はすべて） ---- */
-// (?kind=vtuber opens the page already narrowed to that category)
+// ?kind=vtuber なら、最初からその大枠に絞った状態でページを開く
 const kindParam = KIND_BY_ID.get(new URLSearchParams(location.search).get('kind') ?? '');
 let kindFilter = kindParam ? 1 << kindParam.bit : 0;
 let poolCache: { mask: number; from: typeof PROFILES; list: typeof PROFILES } | null = null;
@@ -297,7 +297,7 @@ function setKind(mask: number) {
   kindFilter = mask;
   drawKindChips();
   if (!shown) return;
-  // (the arrows of the next take compare within this range)
+  // 次の回の矢印は、この範囲の中で比べる
   lastRank = rank(MODEL, shown.c.features, candidates(), 5).map((r) => r.id);
   draw();
 }
@@ -329,7 +329,7 @@ $('mine-clear').addEventListener('click', () => {
   }
 });
 drawMineNote();
-// (added or removed on the in-depth page in another tab)
+// ほかのタブのじっくり測るページで、入れた・外した時
 window.addEventListener('storage', () => {
   mine = loadMine(MEASURE_VERSION);
   drawMineNote();
@@ -387,7 +387,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
   const byId = new Map(all.map((p) => [p.id, p]));
   const model = MODEL;
   const ranked = rank(model, f, all, 5);
-  // (how far this voice is from everyone at once, as a mic or a room puts it: taken against the whole site, not the chosen kind)
+  // マイクや部屋のせいで、この声が全員からまとめて遠くなった分（選んだ大枠ではなく、サイトの声すべてで測る）
   const scale = farScale(model, f, PROFILES);
   ranked.forEach((r, at) => {
     const v = entryOf(r.id);
@@ -399,7 +399,7 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     a.rel = 'noopener noreferrer';
     name.append(a, el('span', 'near', closenessWord(model, r.distance, scale)));
     if (before.length) {
-      // (where it was in the result before this take)
+      // この回の前の結果では何位だったか
       const was = before.indexOf(r.id);
       const move = was < 0 ? ['new', t('新しく入った', 'New')] : was > at ? ['up', `↑ ${was - at}`] : was < at ? ['down', `↓ ${at - was}`] : ['same', t('そのまま', 'Same')];
       const mv = el('span', `move ${move[0]}`, move[1]);
@@ -415,13 +415,13 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     li.append(el('div', 'why', t(`似ている所: ${near.join('・')}　違う所: ${far.join('・')}`, `Alike in: ${near.join(', ')} · Different in: ${far.join(', ')}`)));
     const practice = el('a', 'practice', t('この声で声真似の点数をみる', 'Try imitating this voice'));
     practice.href = `./mimic.html?target=${encodeURIComponent(v.name)}`;
-    // (a new tab, so this page's result stays: nothing of the voice is kept anywhere to bring it back)
+    // 新しいタブで開き、このページの結果を残す（声はどこにも残さないので、結果を出し直せない）
     practice.target = '_blank';
     practice.rel = 'noopener';
     if (r.id !== MINE_ID) li.append(practice);
     list.append(li);
   });
-  // (the share card and the voiceprint pair you with the first voice of the site, not with yourself)
+  // 共有カードと声紋では、あなたをサイトの声の 1 位と並べる（自分の声とは並べない）
   const first = ranked.find((r) => r.id !== MINE_ID);
   return first ? { name: ENTRY_BY_ID.get(first.id)!.name, word: closenessWord(model, first.distance, scale), features: byId.get(first.id)!.features } : null;
 }
