@@ -8,7 +8,7 @@
 - [x] ライセンス: MIT（2026-11-01 運営が決定。`LICENSE` と README の最後に書いた）。本番のリポジトリにも `LICENSE` をそのまま入れる。
 - [x] 本番のリポジトリの名前: `tsukaima-kobo/voice-match`（2026-11-07 運営が決定）。`src/site-config.ts` の `PRODUCTION`。
 - [x] 公開の住所: `https://voice-match.com/`（2026-11-04 運営が Cloudflare で取得。サイトは同じ Cloudflare アカウントの Pages に置く。手順は 3.5）。
-- [x] 削除のお願いの窓口（2026-11-07）: Google フォーム「voice-match 削除のお願い」（運営のアカウント。回答はメールで知らせる）・メール contact@voice-match.com（Cloudflare のメール転送で運営の Gmail へ）・GitHub の Issue（`.github/ISSUE_TEMPLATE/removal.yml`）。住所は `src/site-config.ts` の `removal`。
+- [x] 削除のお願いの窓口（2026-11-07）: Google フォーム「voice-match 削除のお願い」・メール contact@voice-match.com・GitHub の Issue（`.github/ISSUE_TEMPLATE/removal.yml`）。住所は `src/site-config.ts` の `removal`。お願いが来た時の手順は `docs/voices-release.md` の「消すお願いが来た時」。
 
 ## 2. ファイルを変える
 
@@ -30,31 +30,31 @@
 
 ## 3.5 Cloudflare Pages に置く（voice-match.com）
 
-`site.yml` は、Secrets に Cloudflare の鍵がある時は Cloudflare Pages へ、無い時は GitHub Pages へ出す。鍵は運営が入れる（わたしは触らない）。
+`site.yml` は、本番のサイトを作る時（本番のリポジトリ）で、Secrets に Cloudflare の鍵がある時だけ Cloudflare Pages へ出す。ほかは GitHub Pages へ出す（検証用のリポジトリに鍵があっても、Cloudflare には送らない）。鍵は運営が入れる。
 
 1. Cloudflare の画面: 右上の人の印 → プロフィール → API トークン → 「トークンを作成」→ カスタムトークン。権限は「アカウント・Cloudflare Pages・編集」だけ。作成して出た値を控える（一度しか出ない）。
 2. Cloudflare の画面で「アカウント ID」を控える（Workers & Pages の画面の右側など）。
 3. 本番のリポジトリ → Settings → Secrets and variables → Actions:
    - Secrets に `CLOUDFLARE_API_TOKEN`（1 の値）と `CLOUDFLARE_ACCOUNT_ID`（2 の値）
 4. push するか、Actions の site →「Run workflow」。最初の 1 回で Cloudflare に `voice-match` のプロジェクトができ、`https://voice-match.pages.dev/` に出る（名前が取られていたら少し違う住所になる）。
-5. Cloudflare → Workers & Pages → voice-match → カスタムドメイン → `voice-match.com` を追加。同じアカウントのドメインなので、DNS は自動で入る。`www.voice-match.com` も使うなら、同じように足す。
-6. 本番のリポジトリの Settings → Pages は使わないので、Source を「なし」のままにする（`docs/registration.md` の 4 の 6 は検証用だけ）。
-7. 本番のリポジトリで検証用のサイト（検索に出さない）ができた時は、`site.yml` が公開せずに止める。
+5. 運営が測った声を本番に置く（`voice-match.com` をつなぐ前に。声の入っていないページを本番の住所で出さないため）。
 
-## 3.7 運営が測った声を本番に置く
+   ```sh
+   node tools/voices-release.ts upload --repo tsukaima-kobo/voice-match --yes
+   ```
 
-```sh
-node tools/voices-release.ts upload --repo tsukaima-kobo/voice-match --yes
-```
+   置き先は `--repo` で必ず書く（決まった物は無い。`GH_REPO` や手元の gh の設定では決まらない）。書けるのは本番と検証用だけで、最初に「置き先」を出す（`docs/voices-release.md` の 4）。置くとサイトの作り直しが始まるので、終わったら `https://voice-match.pages.dev/` の声の一覧に声が出ているかを確かめる。
+6. Cloudflare → Workers & Pages → voice-match → カスタムドメイン → `voice-match.com` を追加。同じアカウントのドメインなので、DNS は自動で入る。`www.voice-match.com` も使うなら、同じように足す。
+7. 本番のリポジトリの Settings → Pages は使わないので、Source を「なし」のままにする（`docs/registration.md` の 4 の 6 は検証用だけ）。
+8. 本番のサイトなのに検証用の印（検索に出さない `noindex`）のあるページができた時と、検証用のサイトなのに印の無いページができた時は、`site.yml` が公開せずに止める。
 
-置き先は `--repo` で必ず書く（決まった物は無い。`GH_REPO` や手元の gh の設定では決まらない）。書けるのは本番と検証用だけで、最初に「置き先」を出す（`docs/voices-release.md` の 4）。
-
-## 3.8 出した後の検証用（tsukaima-kobo/voice-match-dev）
+## 3.6 出した後の検証用（tsukaima-kobo/voice-match-dev）
 
 声が本番だけにあれば、削除のお願いを 1 か所で済ませられる。本番のページが見られるようになったら:
 
 - [ ] 検証用の Release「voices-data」を消す（`gh release delete voices-data -R tsukaima-kobo/voice-match-dev --cleanup-tag --yes`）。
 - これからは、運営が測った声も、削除のお願いの後の置き直しも、`--repo tsukaima-kobo/voice-match` で本番に置く。検証用（`--repo tsukaima-kobo/voice-match-dev`）には置かない。
+- 削除のお願いが来た時は、先に本番の登録のシートの「削除」のタブに名前（日本語と、あれば英語名）を足してから置き直す（`docs/voices-release.md` の「消すお願いが来た時」）。Release から消すだけでは、同じ名前で登録された声が次の日に出てしまう。
 - [ ] 検証用のサイトを止める（`gh workflow disable site -R tsukaima-kobo/voice-match-dev` と、Settings → Pages → Unpublish site）。
 - 検証用のリポジトリは、コードを作る場所として残す。確かめる時は手元（`npm run dev`）で開く。
 

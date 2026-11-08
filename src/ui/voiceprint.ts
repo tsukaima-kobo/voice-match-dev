@@ -33,13 +33,15 @@ float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h2(i)
 vec3 pal(float x){x=clamp(x,0.,1.);return x<.5?mix(uLow,uMid,x*2.):mix(uMid,uHigh,(x-.5)*2.);}
 float rOf(float th){float s=0.;for(int i=0;i<10;i++)s+=uW[i]*cos(float(i+2)*th+uPh[i]);return uS*(1.+uA*s+uSkewK*sin(th));}
 float lay(int l){return (uFocus==0||uFocus==l)?1.:.16;}
+// atan(y,x) は両方 0 の時が決まっていない（GPU によっては NaN）。その時は 0
+float at2(float y,float x){return (x==0.&&y==0.)?0.:atan(y,x);}
 // 音色のリボンの形: MFCC 1〜13 を戻した、低い音（s=0、上）から高い音（s=1、下）までの響きの山と谷
 float envAt(float s){float mm=s*25.,e=0.;for(int k=1;k<=13;k++){float w=1./(1.+.3*float(k));e+=(uTim[k-1]-.5)*2.*w*cos(3.14159265*float(k)*(mm+.5)/26.);}return e;}
 void main(){
   vec2 p=(gl_FragCoord.xy*2.-uRes)/min(uRes.x,uRes.y);
   vec2 q=p/uSt;
-  float dq=length(q),thq=atan(q.y,q.x);
-  vec2 dc2=q-uCore;float dc=length(dc2),thc=atan(dc2.y,dc2.x);
+  float dq=length(q),thq=at2(q.y,q.x);
+  vec2 dc2=q-uCore;float dc=length(dc2),thc=at2(dc2.y,dc2.x);
   float R=rOf(thq);
   float bl=smoothstep(0.,1.,dq/R);
   float r=mix(dc,dq,bl*bl);
@@ -101,9 +103,9 @@ void main(){
     C+=(uLight>.5?pal(uPitch+.25):uGlint)*st;A+=st;
   }
   // 音色のリボン（左右対称。上が低い音、下が高い音。外へふくらむ所ほど、その高さの音が強い）
-  float dp=length(p),thp=atan(p.y,p.x);
+  float dp=length(p),thp=at2(p.y,p.x);
   float rc0=uS*(1.15+uA)+.015;
-  float sR=abs(atan(p.x,p.y))/3.14159265;
+  float sR=abs(at2(p.x,p.y))/3.14159265;
   float off=.5+.5*tanh(envAt(sR)*1.6);
   float grow=smoothstep(.72,1.,uReveal);
   float H=(.03+.2*off)*uS/.42*grow;
@@ -115,7 +117,8 @@ void main(){
   float strands=0.;
   for(int j=0;j<4;j++){float fj=float(j);float rj=rc0+H*(.3+.22*fj)+.004*sin(sR*18.+uT*(.6+.25*fj)+fj*1.7);strands+=exp(-abs(dp-rj)/.0018)*(.16+.08*fj);}
   float edge=exp(-abs(dp-rb)/.0028)*.95;
-  float shine=pow(.5+.5*sin(sR*26.-uT*1.4),10.)*exp(-abs(dp-rb)/.007)*.7;
+  // pow は底が負だと決まっていない: sin の誤差で 0 をわずかに下回っても NaN にならないように
+  float shine=pow(max(0.,.5+.5*sin(sR*26.-uT*1.4)),10.)*exp(-abs(dp-rb)/.007)*.7;
   float base0=exp(-abs(dp-rc0)/.0018)*.22;
   float rib=(curtain+(strands+edge+shine+base0)*grow)*lCore;
   C+=mix(rcol,uGlint,.2*edge)*rib;A+=rib;
@@ -127,7 +130,9 @@ void main(){
     float ha=h2(cell),hb=h2(cell+17.3),hc=h2(cell+41.7),hd=h2(cell+5.1);
     vec2 cen=(cell+.3+.4*vec2(ha,hb))*cs;
     float uc=length(cen/uSt)/R;
-    float band=exp(-pow((uc-1.04)/(.07+.16*rasp),2.));
+    // ふちの内側（負の数）も 2 乗する。pow(負, 2.) は GPU によっては NaN になり、粒が消える
+    float bx=(uc-1.04)/(.07+.16*rasp);
+    float band=exp(-bx*bx);
     if(hc<(.06+.75*rasp)*band){
       vec2 d=p-cen;float sz=cs*(.05+.1*hd);
       float tw=.5+.5*sin(uT*(1.2+5.*uJit)*(.6+hd)+hc*40.);
@@ -284,9 +289,9 @@ const NAMES = ['uRes', 'uT', 'uReveal', 'uS', 'uA', 'uSkewK', 'uPitch', 'uMotion
 
 /**
  * canvas に声紋を描く物（WebGL2 が使えなければ null）。
- * 文脈を失ったら描くのをやめ、戻ったらプログラム・三角形・uniform の場所を作り直して onRestore を呼ぶ。
+ * 文脈を失ったら描くのをやめて on.lost を呼び、戻ったらプログラム・三角形・uniform の場所を作り直して on.restored を呼ぶ。
  */
-function makeRenderer(canvas: HTMLCanvasElement, preserve = false, onRestore?: () => void): Renderer | null {
+function makeRenderer(canvas: HTMLCanvasElement, preserve = false, on: { lost?: () => void; restored?: () => void } = {}): Renderer | null {
   const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: preserve });
   if (!gl) return null;
   let L: Record<string, WebGLUniformLocation | null> = {},
@@ -304,11 +309,12 @@ function makeRenderer(canvas: HTMLCanvasElement, preserve = false, onRestore?: (
     // 止めておくと、戻ってくる（webglcontextrestored）
     e.preventDefault();
     lost = true;
+    if (!gone) on.lost?.();
   };
   const onRestored = () => {
     if (gone) return;
     lost = !setup();
-    if (!lost) onRestore?.();
+    if (!lost) on.restored?.();
   };
   canvas.addEventListener('webglcontextlost', onLost);
   canvas.addEventListener('webglcontextrestored', onRestored);
@@ -387,13 +393,16 @@ export function renderSnapshot(f: Features, size: number, pal: VpPalette = NIGHT
   return out;
 }
 
+/** WebGL の文脈を失ってから、2D の図に替えるまでの待ち（ミリ秒）。たいていは、すぐ戻る */
+const FLAT_AFTER_MS = 1200;
+
 /** WebGL2 が使えなければ null（呼んだ側が 2D の図にする） */
 export function createVoiceprint(box: HTMLElement): Voiceprint | null {
   const canvas = document.createElement('canvas');
   canvas.className = 'vp-gl';
   canvas.setAttribute('aria-hidden', 'true');
-  // 文脈を失っている間は描かない。戻ったら描き直す
-  const renderer = makeRenderer(canvas, false, () => wake());
+  // 文脈を失っている間は描かない（数字の札も消す）。しばらく戻らなければ 2D の図に替え、戻ったら声紋に戻して描き直す
+  const renderer = makeRenderer(canvas, false, { lost: () => onLost(), restored: () => onRestored() });
   if (!renderer) return null;
   const over = document.createElement('canvas');
   over.className = 'vp-over';
@@ -410,7 +419,10 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
     raf = 0,
     t0 = 0,
     revealStart = 0,
-    pal: VpPalette | null = null;
+    pal: VpPalette | null = null,
+    // 文脈を失った間の 2D の図
+    flat: { view: ShapeView; canvas: HTMLCanvasElement } | null = null,
+    flatTimer = 0;
 
   function colors(): VpPalette {
     const cs = getComputedStyle(box);
@@ -442,6 +454,38 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
   }
   function wake() {
     if (!raf && params && visible && !document.hidden && !renderer!.lost) raf = requestAnimationFrame(frame);
+  }
+  function onLost() {
+    cancelAnimationFrame(raf);
+    raf = 0;
+    // 前の印と数字を、空になった図の上に残さない
+    octx.clearRect(0, 0, over.width, over.height);
+    clearTimeout(flatTimer);
+    flatTimer = window.setTimeout(toFlat, FLAT_AFTER_MS);
+  }
+  function toFlat() {
+    flatTimer = 0;
+    if (flat || !renderer!.lost || !params) return;
+    const c = document.createElement('canvas');
+    c.className = 'shape-canvas';
+    canvas.style.display = over.style.display = 'none';
+    box.append(c);
+    flat = { view: createShapeView(c), canvas: c };
+    if (feats) flat.view.set(feats);
+    flat.view.focus(focusLayer, focusItem);
+  }
+  function fromFlat() {
+    clearTimeout(flatTimer);
+    flatTimer = 0;
+    if (!flat) return;
+    flat.view.dispose();
+    flat.canvas.remove();
+    flat = null;
+    canvas.style.display = over.style.display = '';
+  }
+  function onRestored() {
+    fromFlat();
+    wake();
   }
 
   /** 選んだ項目の場所に、印と引き出し線と数字 */
@@ -618,17 +662,23 @@ export function createVoiceprint(box: HTMLElement): Voiceprint | null {
         t0 = 0;
       }
       box.setAttribute('aria-label', `${t('声紋の図。', 'Voiceprint. ')}${SHAPE_LAYERS.flatMap((l) => l.items.filter((i) => !i.key.startsWith('mfcc')).map((i) => `${FEATURE_BY_KEY[i.key].name} ${formatFeature(i.key, f[i.key])}`)).join(t('、', ', '))}`);
+      flat?.view.set(f);
+      // 文脈を失ったまま、まだ待っている間に数字が来た時も、待ち終えたら 2D の図にする
+      if (renderer.lost && !flat && !flatTimer) flatTimer = window.setTimeout(toFlat, FLAT_AFTER_MS);
       wake();
     },
     focus(layer, item) {
       focusLayer = layer;
       focusItem = item;
+      flat?.view.focus(layer, item);
       wake();
     },
     dispose() {
       cancelAnimationFrame(raf);
       raf = 0;
       params = null;
+      clearTimeout(flatTimer);
+      flat?.view.dispose();
       io.disconnect();
       ro.disconnect();
       document.removeEventListener('visibilitychange', wake);

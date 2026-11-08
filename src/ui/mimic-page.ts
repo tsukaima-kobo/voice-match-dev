@@ -5,11 +5,13 @@
 // 声のページ（index.html）の結果から `?target=<名前>` で来た時は、その声をお手本にする。
 // 音（お手本も利用者の声も）はメモリーの中だけ。数字にしたらすぐ捨てる。どこにも送らない、端末にも残さない。
 // お手本の数字もメモリーの中だけで、ページを閉じれば消える（localStorage なども使わない）。
-// お手本を聞かせている間は、ほかのタブで動画を流せるよう、ページが隠れても止めない（音が来てから 35 秒で止まる）。
-// お手本は、マイク・ほかのタブの音・音声ファイル、またはこのサイトで事前に測ったお手本の代表値（data/profiles.json）。
-// 真似して話す時は、ページが隠れたらすぐ止める。声から性別や年齢を判断しない。お題のランダムはお題の選び方だけ。
+// お手本を聞かせている間は、ほかのタブやアプリで動画を流せるよう、ページが隠れても止めない（音が来てから 35 秒で止まる。
+// 音が来ないまま 60 秒たった時も止める）。真似して話す時は、ページが隠れたらすぐ止める。
+// マイクが外れた・タブの共有が止まった時は、聞かせ終えられる長さがあればそこまでで測り、無ければ止めて伝える。
+// お手本は、マイク・ほかのタブの音・音声ファイル、またはこのサイトで事前に測ったお手本の代表値（声のデータ。src/data/load.ts が裏で読む）。
+// 声から性別や年齢を判断しない。お題のランダムはお題の選び方だけ。
 import { micErrorText, openMic, openTabAudio, tabAudioSupported, tabErrorText, type Mic } from '../voice/listen.ts';
-import { measureVoice, type MeasureFail } from '../voice/measure.ts';
+import type { MeasureFail } from '../voice/measure.ts';
 import { LONG_MAX_SECONDS, measureLong } from '../voice/combine.ts';
 import { createWave, type Wave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
@@ -45,15 +47,25 @@ let refAnalysingMic = false;
 const REG_MIN_VOICED = LONG_SECONDS;
 /** 雑音の床が分からない短いファイル（声だけを切り出した物）は、前後に無音を足して測り直す（その時は登録しない） */
 const PAD_FILE_MAX_SECONDS = 15;
-/** お手本の音声ファイルの大きさの上限 */
-const FILE_MAX_BYTES = 20 * 1024 * 1024;
 /**
- * 音声ファイルは、この速さで読む。マイク（多くは 48 kHz）とサイトの声（48 kHz で測る）と同じ速さにして、measure.ts の 16 kHz への
- * 直し方（低域通過）も同じにする（ブラウザーに 16 kHz で読ませると、声の澄み具合などが少しずれる）
+ * お手本の音声ファイルの大きさの上限。ファイルは、読むと全部がメモリーに乗る。mp3・m4a などは読むと 10 倍以上の大きさになる
+ * （128 kbps の 10 MB で 10 分ほど・120 MB ほど）ので小さく、wav・flac などはあまり変わらないので大きく（CD の音で 3 分ほど）
  */
-const FILE_RATE = 48000;
+const FILE_MAX_BYTES = 10 * 1024 * 1024;
+const RAW_FILE_MAX_BYTES = 32 * 1024 * 1024;
+/** 読んでも大きさがあまり変わらない形（wav・aiff・flac） */
+const isRawAudio = (f: File) => /\.(wav|wave|aiff?|aifc|flac)$/i.test(f.name) || /wav|aiff|flac/i.test(f.type);
+/**
+ * 音声ファイルは、この速さで読む（48 kHz の半分のメモリー。スマホで落ちないように）。measure.ts の 16 kHz への直し方は、
+ * 24 kHz からでも 48 kHz からでも、同じ 7.2 kHz（16 kHz の 0.45）で切る低域通過を通すので、マイク（多くは 48 kHz）・サイトの声
+ * （48 kHz で測る）と同じ帯域で測れる（ブラウザーが 24 kHz に直す時に消えるのは 12 kHz より上だけ）。16 kHz で読ませないのは、
+ * ブラウザーの直し方が違って、声の澄み具合などが少しずれるため（古い Safari は 22.05 kHz より低い速さで読めない）
+ */
+const FILE_RATE = 24000;
 /** お手本を聞かせる時、これより小さい音は「まだ始まっていない」として数えない（RMS） */
 const START_RMS = 0.003;
+/** お手本を聞かせる時、音が来ないまま、これだけたったら止める（秒。マイク・タブの音を開いたままにしない） */
+const WAIT_MAX = 60;
 
 const $ = <E extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as E;
 mountLang({ ja: '声真似の点数｜voice-match', en: 'Voice-mimic score | voice-match' });
@@ -70,9 +82,17 @@ const ORB_MODE: Record<string, OrbMode> = { listening: 'listening', analysing: '
 /** マイクを選ぶ所（お手本と真似の 2 か所。どちらで選んでも同じ） */
 const mics = micPicker(
   ['ref', 'mim'].map((k) => ({ box: $(`${k}-mic-pick`), select: $<HTMLSelectElement>(`${k}-mic-select`), find: $<HTMLButtonElement>(`${k}-mic-find`) })),
-  (text) => {
+  // マイクの一覧が出せなかった時: 今出している方の知らせに出す（言葉を切り替えても出したままにする）
+  (msg) => {
+    if (mimState === 'locked') {
+      refMsg = msg;
+      refBad = true;
+    } else {
+      mimMsg = msg;
+      mimBad = true;
+    }
     const st = mimState === 'locked' ? ref.status : mim.status;
-    st.textContent = text;
+    st.textContent = msg();
     st.classList.add('bad');
   },
 );
@@ -91,19 +111,34 @@ interface TakeUi {
 class Take {
   private chunks: Float32Array[] = [];
   private got = 0;
+  /** 音が来るのを待っている間に届いた音（サンプル数。数えるだけで、音は持たない） */
+  private waited = 0;
   private raf = 0;
   private rate = 0;
   private live = false;
   private mic: Mic | null = null;
+  /** 音が来ないまま止める時計（音そのものが届かなくなった時のため。ふだんは onChunk で数えて止まる） */
+  private quietTimer = 0;
   constructor(
     private ui: TakeUi,
     private doneAfter: number,
     private waitForSound: boolean,
     private onFull: () => void,
+    /** waitForSound の時: 音が来ないまま WAIT_MAX 秒たった */
+    private onQuiet: () => void = () => {},
   ) {}
+  /** 録れた長さ（秒。音が来る前に待った分は数えない） */
+  get seconds(): number {
+    return this.rate ? this.got / this.rate : 0;
+  }
   readonly onChunk = (x: Float32Array): void => {
     if (!this.live) return;
-    if (this.waitForSound && this.got === 0 && rms(x) < START_RMS) return;
+    if (this.waitForSound && this.got === 0 && rms(x) < START_RMS) {
+      // 音が来ないまま WAIT_MAX 秒たったら止める（ページが隠れていても、届いた音の長さで数える）
+      this.waited += x.length;
+      if (this.waited / this.rate >= WAIT_MAX) this.onQuiet();
+      return;
+    }
     this.chunks.push(x);
     this.got += x.length;
     this.ui.wave.push(x, this.rate);
@@ -116,9 +151,15 @@ class Take {
     // 前のマイクが残っていたら止める（開いたまま隠れないように）
     if (this.mic && this.mic !== mic) this.mic.stop();
     cancelAnimationFrame(this.raf);
+    clearTimeout(this.quietTimer);
     this.mic = mic;
     this.rate = mic.rate;
+    this.waited = 0;
     this.live = true;
+    if (this.waitForSound)
+      this.quietTimer = window.setTimeout(() => {
+        if (this.live && this.got === 0) this.onQuiet();
+      }, (WAIT_MAX + 5) * 1000);
     this.tick();
   }
   private readonly tick = (): void => {
@@ -150,6 +191,7 @@ class Take {
   stop(): void {
     this.live = false;
     cancelAnimationFrame(this.raf);
+    clearTimeout(this.quietTimer);
     this.mic?.stop();
     this.mic = null;
     this.ui.wave.draw(false);
@@ -157,6 +199,7 @@ class Take {
   drop(): void {
     this.chunks = [];
     this.got = 0;
+    this.waited = 0;
     this.ui.wave.clear();
     this.ui.live.reset();
     this.ui.fill.style.width = '0';
@@ -190,7 +233,7 @@ const ref = {
   sec: $('ref-sec'),
 };
 const refLive = createLiveAnalysis($('ref-live'));
-const refTake = new Take({ wave: createWave($<HTMLCanvasElement>('ref-wave')), live: refLive, fill: ref.fill, sec: ref.sec, done: ref.done }, REF_DONE_AFTER, true, () => refFinish());
+const refTake = new Take({ wave: createWave($<HTMLCanvasElement>('ref-wave')), live: refLive, fill: ref.fill, sec: ref.sec, done: ref.done }, REF_DONE_AFTER, true, () => refFinish(), () => refQuiet());
 
 type RefState = 'idle' | 'asking' | 'listening' | 'analysing' | 'ready' | 'failed';
 let refState: RefState = 'idle';
@@ -248,10 +291,13 @@ function showRef(next: RefState, msg: Msg, bad = false, redraw = false): void {
 async function refListen(kind: 'mic' | 'tab'): Promise<void> {
   const my = ++refToken;
   refKind = kind;
+  // ほかの方法で聞かせはじめた: ?target= のお手本は使わない（ファイルを選ぶ画面は、もう閉じている）
+  wanted = null;
+  choosingFile = false;
   refTake.drop();
   showRef('asking', kind === 'mic' ? M('マイクの許可を待っています…', 'Waiting for microphone permission…') : M('共有するタブを選んでください…', 'Choose the tab to share…'));
   try {
-    const m = kind === 'mic' ? await openMic(refTake.onChunk, () => refFinish(), mics.get()) : await openTabAudio(refTake.onChunk, () => refFinish());
+    const m = kind === 'mic' ? await openMic(refTake.onChunk, () => refEnded('mic'), mics.get()) : await openTabAudio(refTake.onChunk, () => refEnded('tab'));
     if (my !== refToken || refState !== 'asking') {
       m.stop();
       return;
@@ -315,11 +361,37 @@ function targetFrom(m: Extract<Measured, { ok: true }>, padded: boolean): void {
   );
 }
 
-function refCancel(): void {
+/** 止めて、音を捨てる */
+function refStop(): void {
   refToken++;
   refTake.stop();
   refTake.drop();
+}
+function refCancel(): void {
+  refStop();
   showRef('idle', M('やめました。音は捨てました。', 'Stopped. The sound was thrown away.'));
+}
+/** マイクが外れた・タブの共有が止まった時: 聞かせ終えられる長さがあれば、そこまでで測る。無ければ止めて、そのことを伝える */
+function refEnded(kind: 'mic' | 'tab'): void {
+  if (refState !== 'listening') return;
+  if (refTake.seconds >= REF_DONE_AFTER) {
+    refFinish();
+    return;
+  }
+  refStop();
+  showRef(
+    'failed',
+    kind === 'mic'
+      ? M('マイクが外れたので止めました。つなぎ直して、もう一度押してください。', 'The microphone went away, so this stopped. Plug it back in and press again.')
+      : M('タブの共有が止まったので止めました。もう一度押して、お手本のタブを選んでください。', 'Sharing the tab stopped, so this stopped. Press again and choose the tab with the model.'),
+    true,
+  );
+}
+/** お手本の音が来ないまま WAIT_MAX 秒たった時: 止めて伝える（マイク・タブの音を開いたままにしない） */
+function refQuiet(): void {
+  if (refState !== 'listening') return;
+  refStop();
+  showRef('failed', M(`音が聞こえないまま ${WAIT_MAX} 秒たったので止めました。お手本を流せるようにしてから、もう一度押してください。`, `No sound was heard for ${WAIT_MAX} s, so this stopped. Get the model ready to play, then press again.`), true);
 }
 
 async function decodeFile(f: File): Promise<{ pcm: Float32Array; rate: number }> {
@@ -342,8 +414,8 @@ async function decodeFile(f: File): Promise<{ pcm: Float32Array; rate: number }>
 }
 
 async function refFromFile(f: File): Promise<void> {
-  if (f.size > FILE_MAX_BYTES) {
-    showRef('failed', M('ファイルが大きすぎます（20 MB まで）。使いたい所だけを切り出したファイルにしてください。', 'The file is too big (up to 20 MB). Cut out just the part you want to use.'), true);
+  if (f.size > (isRawAudio(f) ? RAW_FILE_MAX_BYTES : FILE_MAX_BYTES)) {
+    showRef('failed', M(`ファイルが大きすぎます（mp3・m4a などは ${FILE_MAX_BYTES >> 20} MB、wav・flac は ${RAW_FILE_MAX_BYTES >> 20} MB まで）。使いたい所だけを切り出したファイルにしてください。`, `The file is too big (up to ${FILE_MAX_BYTES >> 20} MB for mp3, m4a and the like; ${RAW_FILE_MAX_BYTES >> 20} MB for wav and flac). Cut out just the part you want to use.`), true);
     return;
   }
   const my = ++refToken;
@@ -355,50 +427,67 @@ async function refFromFile(f: File): Promise<void> {
     if (my === refToken) showRef('failed', M('このファイルは読めませんでした。mp3・m4a・wav などの音声ファイルを選んでください。', 'This file could not be read. Choose a sound file such as mp3, m4a or wav.'), true);
     return;
   }
-  const secs = sound.pcm.length / sound.rate;
-  if (secs <= 40) {
-    // 短いファイル: すぐ測る。セリフ用に、高さと大きさの時間の動きも出す
-    await new Promise((r) => setTimeout(r, 0));
-    let m = measureVoice(sound.pcm, sound.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true });
-    let padded = false;
-    if (!m.ok && m.reason === 'noisy' && secs <= PAD_FILE_MAX_SECONDS) {
-      // 声だけに切った音には、雑音を見分けるための静かな所が無い: 前後に無音を足して、もう一度測る
-      const pad = Math.round(sound.rate * 0.3);
-      const x = new Float32Array(sound.pcm.length + 2 * pad);
-      x.set(sound.pcm, pad);
-      m = measureVoice(x, sound.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true });
-      x.fill(0);
-      padded = true;
-    }
-    sound.pcm.fill(0);
-    if (my !== refToken) return;
-    if (!m.ok) {
-      showRef('failed', () => failText(m.reason, m.info.voicedSeconds, true), true);
+  /** 無音を足した写し（短いファイルの測り直し用） */
+  let padded: Float32Array | null = null;
+  try {
+    const secs = sound.pcm.length / sound.rate;
+    if (secs <= 40) {
+      // 短いファイル: 測る所（Worker）で測る（画面を止めない）。セリフ用に、高さと大きさの時間の動きも出す
+      const opts = { minVoicedSeconds: ONE_LINE_SECONDS, contour: true };
+      // 声だけに切った音には、雑音を見分けるための静かな所が無い: 雑音とされたら、前後に無音を足して、もう一度測る
+      // （measureAsync は渡した音を 0 で埋めるので、足した写しを先に作っておく）
+      if (secs <= PAD_FILE_MAX_SECONDS) {
+        const pad = Math.round(sound.rate * 0.3);
+        padded = new Float32Array(sound.pcm.length + 2 * pad);
+        padded.set(sound.pcm, pad);
+      }
+      let m = await measureAsync(sound.pcm, sound.rate, opts);
+      let usedPad = false;
+      if (padded && !m.ok && m.reason === 'noisy' && my === refToken) {
+        m = await measureAsync(padded, sound.rate, opts);
+        usedPad = true;
+      }
+      if (my !== refToken) return;
+      if (!m.ok) {
+        showRef('failed', () => failText(m.reason, m.info.voicedSeconds, true), true);
+        return;
+      }
+      targetFrom(m, usedPad);
       return;
     }
-    targetFrom(m, padded);
-    return;
+    // 長いファイル: 30 秒ずつ測る（窓と窓の間で、画面を描く）
+    const m = await measureLong(sound.pcm, sound.rate, {
+      minVoicedSeconds: ONE_LINE_SECONDS,
+      onProgress: (done, total) => {
+        if (total <= 1 || my !== refToken) return;
+        // 言葉を切り替えても、進み具合を出したままにする
+        refMsg = M(`数字にしています… ${done} / ${total}`, `Measuring… ${done} / ${total}`);
+        ref.status.textContent = refMsg();
+      },
+    });
+    if (my !== refToken) return;
+    if (!m.ok) {
+      showRef('failed', () => failText(m.reason, m.voicedSeconds, true), true);
+      return;
+    }
+    const part = m.seconds >= LONG_MAX_SECONDS ? M(`最初の ${LONG_MAX_SECONDS / 60} 分のうち、声 ${m.voicedSeconds.toFixed(1)} 秒分`, `${m.voicedSeconds.toFixed(1)} s of voice in the first ${LONG_MAX_SECONDS / 60} min`) : M(`声 ${m.voicedSeconds.toFixed(1)} 秒分`, `${m.voicedSeconds.toFixed(1)} s of voice`);
+    const canReg = m.voicedSeconds >= REG_MIN_VOICED;
+    setTarget(forLength(m.features, m.voicedSeconds), ref.name.value.trim(), part, canReg ? { quality: { voicedSeconds: m.voicedSeconds, gapTonal: m.gapTonal, snrDb: m.snrDb } } : undefined, undefined, m.voicedSeconds);
+  } catch {
+    // 測る途中の思わぬ誤り: 「ファイルを読んでいます…」のまま止まらないように、ボタンを戻して伝える
+    if (my === refToken) showRef('failed', M('このファイルを数字にできませんでした。もう一度試すか、ほかのファイルを選んでください。', 'This file could not be measured. Try again, or choose another file.'), true);
+  } finally {
+    // 音はすぐ捨てる（測れた時も、途中で誤りが出た時も）
+    sound.pcm.fill(0);
+    padded?.fill(0);
   }
-  const m = await measureLong(sound.pcm, sound.rate, {
-    minVoicedSeconds: ONE_LINE_SECONDS,
-    onProgress: (done, total) => {
-      if (total > 1 && my === refToken) ref.status.textContent = t(`数字にしています… ${done} / ${total}`, `Measuring… ${done} / ${total}`);
-    },
-  });
-  sound.pcm.fill(0);
-  if (my !== refToken) return;
-  if (!m.ok) {
-    showRef('failed', () => failText(m.reason, m.voicedSeconds, true), true);
-    return;
-  }
-  const part = m.seconds >= LONG_MAX_SECONDS ? M(`最初の ${LONG_MAX_SECONDS / 60} 分のうち、声 ${m.voicedSeconds.toFixed(1)} 秒分`, `${m.voicedSeconds.toFixed(1)} s of voice in the first ${LONG_MAX_SECONDS / 60} min`) : M(`声 ${m.voicedSeconds.toFixed(1)} 秒分`, `${m.voicedSeconds.toFixed(1)} s of voice`);
-  const canReg = m.voicedSeconds >= REG_MIN_VOICED;
-  setTarget(forLength(m.features, m.voicedSeconds), ref.name.value.trim(), part, canReg ? { quality: { voicedSeconds: m.voicedSeconds, gapTonal: m.gapTonal, snrDb: m.snrDb } } : undefined, undefined, m.voicedSeconds);
 }
 
 /** お手本のまとめの文（言葉を切り替えた時に出し直す） */
 let summaryMsg: Msg = () => '';
 function setTarget(features: Features, name: string, from: Msg, regInfo?: Target['reg'], contour?: Contour, voicedSeconds?: number, nameEn?: string): void {
+  // 真似を録っている・計算している途中なら、止めて音を捨てる（マイクを開いたまま隠れないように）
+  const stopped = mimStop();
   target = { features, name, ...(nameEn ? { nameEn } : {}), ...(regInfo ? { reg: regInfo } : {}), ...(contour ? { contour } : {}), ...(voicedSeconds !== undefined ? { voicedSeconds } : {}) };
   resetRegister(name);
   best = 0;
@@ -416,16 +505,31 @@ function setTarget(features: Features, name: string, from: Msg, regInfo?: Target
   topicBox.hidden = !!contour;
   lineHint.hidden = !contour;
   showRef('ready', contour ? M('お手本の準備ができました。次は、同じセリフを真似して言ってください。', 'The model is ready. Next, say the same line, imitating it.') : M('お手本の準備ができました。次は、真似して話してください。', 'The model is ready. Next, talk imitating it.'));
-  showMim('idle', contour ? M('「真似して話す」を押して、お手本と同じセリフを言ってください。', 'Press “Imitate” and say the same line as the model.') : M('「真似して話す」を押して、お手本のように話してください。', 'Press “Imitate” and talk like the model.'));
+  const next = contour ? M('「真似して話す」を押して、お手本と同じセリフを言ってください。', 'Press “Imitate” and say the same line as the model.') : M('「真似して話す」を押して、お手本のように話してください。', 'Press “Imitate” and talk like the model.');
+  showMim('idle', stopped ? () => t('お手本が変わったので、真似を止めました（音は捨てました）。', 'The model changed, so the imitation was stopped (the sound was thrown away). ') + next() : next);
 }
 
 ref.mic.addEventListener('click', () => void refListen('mic'));
 ref.tab.addEventListener('click', () => void refListen('tab'));
-ref.fileButton.addEventListener('click', () => ref.file.click());
+/** 音声ファイルを選ぶ画面を開いている間（その間に ?target= のお手本を勝手に選ばないように） */
+let choosingFile = false;
+ref.fileButton.addEventListener('click', () => {
+  choosingFile = true;
+  ref.file.click();
+});
 ref.file.addEventListener('change', () => {
+  choosingFile = false;
   const f = ref.file.files?.[0];
   ref.file.value = '';
-  if (f) void refFromFile(f);
+  if (f) {
+    wanted = null;
+    void refFromFile(f);
+  } else autoPick();
+});
+// 選ぶ画面を、選ばずに閉じた時（この知らせが無い古いブラウザーでは、?target= のお手本を使わないまま）
+ref.file.addEventListener('cancel', () => {
+  choosingFile = false;
+  autoPick();
 });
 ref.done.addEventListener('click', refFinish);
 ref.cancel.addEventListener('click', refCancel);
@@ -548,8 +652,17 @@ const pickCatalog = (p: (typeof PROFILES)[number]) => {
     refTake.stop();
     refTake.drop();
   }
+  wanted = null;
   setTarget(p.features, v.name, M('このサイトで測った代表値', 'a voice measured by this site'), undefined, undefined, undefined, v.nameEn);
 };
+/** 声のページから来た時のお手本（?target=）。ファイルを選ぶ画面を開いている間は、閉じるまで待つ */
+let wanted: (typeof PROFILES)[number] | null = null;
+function autoPick(): void {
+  if (!wanted || choosingFile) return;
+  const p = wanted;
+  wanted = null;
+  if (!target && !isBusy(refState)) pickCatalog(p);
+}
 // 声は裏で読む。読み終えたら一覧が出る
 let byLabel = new Map<string, (typeof PROFILES)[number]>();
 ref.catalog.addEventListener('change', () => {
@@ -561,7 +674,7 @@ ref.catalog.addEventListener('change', () => {
 /** お手本の一覧を、今の言葉で並べ直す */
 function fillCatalogList(): void {
   byLabel = new Map(PROFILES.flatMap((p) => [[labelOf(p.id, 'ja'), p] as const, [labelOf(p.id, 'en'), p] as const]));
-  const labels = PROFILES.map((p) => labelOf(p.id, lang)).sort((a, b) => a.localeCompare(b, 'ja'));
+  const labels = PROFILES.map((p) => labelOf(p.id, lang)).sort((a, b) => a.localeCompare(b, lang));
   $('ref-catalog-list').replaceChildren(
     ...labels.map((label) => {
       const o = document.createElement('option');
@@ -577,10 +690,13 @@ void voicesReady.then(() => {
   ref.catalogBox.hidden = false;
   $('ref-catalog-count').textContent = t(`${PROFILES.length} 件`, `${PROFILES.length}`);
   // 声のページからのリンク: ?target=<名前>（いつも日本語の名前）
-  const wanted = new URLSearchParams(location.search).get('target');
-  const p = wanted ? PROFILES.find((x) => ENTRY_BY_ID.get(x.id)!.name === wanted) : undefined;
-  // 読み終える前に、マイク・タブ・ファイルでお手本を聞かせはじめていたら、そちらを使う
-  if (p && !target && !isBusy(refState)) pickCatalog(p);
+  const name = new URLSearchParams(location.search).get('target');
+  const p = name ? PROFILES.find((x) => ENTRY_BY_ID.get(x.id)!.name === name) : undefined;
+  // 読み終える前に、マイク・タブ・ファイルでお手本を聞かせはじめていたら、そちらを使う（ファイルを選ぶ画面を開いている間は、閉じるまで待つ）
+  if (p && !target && !isBusy(refState)) {
+    wanted = p;
+    autoPick();
+  }
 });
 
 /* ---- 2. 真似 ---- */
@@ -652,7 +768,7 @@ async function mimStart(): Promise<void> {
   mimTake.drop();
   showMim('asking', M('マイクの許可を待っています…', 'Waiting for microphone permission…'));
   try {
-    const m = await openMic(mimTake.onChunk, () => mimFinish(), mics.get());
+    const m = await openMic(mimTake.onChunk, mimEnded, mics.get());
     if (my !== mimToken || mimState !== 'asking') {
       m.stop();
       return;
@@ -700,17 +816,38 @@ function mimFinish(): void {
   });
 }
 
+/** 真似を録っている・計算している途中なら、止めて音を捨てる。止めたら true */
+function mimStop(): boolean {
+  if (!isBusy(mimState)) return false;
+  mimToken++;
+  mimTake.stop();
+  mimTake.drop();
+  return true;
+}
 function mimCancel(): void {
   mimToken++;
   mimTake.stop();
   mimTake.drop();
   showMim(target ? 'idle' : 'locked', M('やめました。音は捨てました。', 'Stopped. The sound was thrown away.'));
 }
+/** マイクが外れた時: 話し終えられる長さがあれば、そこまでで測る。無ければ止めて、そのことを伝える */
+function mimEnded(): void {
+  if (mimState !== 'listening') return;
+  if (mimTake.seconds >= MIM_DONE_AFTER) {
+    mimFinish();
+    return;
+  }
+  mimToken++;
+  mimTake.stop();
+  mimTake.drop();
+  showMim('failed', M('マイクが外れたので止めました。つなぎ直して、もう一度押してください。', 'The microphone went away, so this stopped. Plug it back in and press again.'), true);
+}
 
 mim.start.addEventListener('click', () => void mimStart());
 mim.done.addEventListener('click', mimFinish);
 mim.cancel.addEventListener('click', mimCancel);
 document.addEventListener('visibilitychange', () => {
+  // お手本を聞かせている時は止めない（ほかのタブやアプリで流すため。音が来ないまま WAIT_MAX 秒で止まる）
   if (document.hidden && (mimState === 'listening' || mimState === 'asking')) mimCancel();
 });
 window.addEventListener('pagehide', () => {

@@ -1,10 +1,10 @@
 // 声の登録（アキネーター方式）の試験: 送る内容（壁 ①）、壁 ③、取り込み、CSV。数字は合成音から測る（録音なし）。
 import { describe, expect, it } from 'vitest';
 import { measureVoice, type Measured } from '../src/voice/measure.ts';
-import { type Features } from '../src/voice/features.ts';
+import { FEATURE_KEYS, roundFeature, type Features } from '../src/voice/features.ts';
 import { defaultModel } from '../src/match/match.ts';
-import { MEASURE_VERSION } from '../src/voice/measure.ts';
-import { checkLink, checkSubmission, CODE_PREFIX, decodeSubmission, encodeSubmission, makeSubmission, nameKey } from '../src/submit/code.ts';
+import { MEASURE_COMPATIBLE, MEASURE_VERSION } from '../src/voice/measure.ts';
+import { checkLink, checkSubmission, CODE_PREFIX, decodeSubmission, encodeSubmission, makeSubmission, nameKey, OPTIONAL, REQUIRED } from '../src/submit/code.ts';
 import { consensus } from '../src/submit/consensus.ts';
 import { consensusMembers, dayOf, intake, INTAKE, rowsFromTable, userIdOf, type Row } from '../tools/intake-lib.ts';
 import { parseCsv } from '../tools/csv.ts';
@@ -16,7 +16,8 @@ const talk = bursts(5, { share: 0.8, floor: 0.3, group: 7, pause: 0.4 });
 const voice = (f0: number, seed: number): Features => {
   const m: Measured = measureVoice(concat(silence(R, 0.5), vowel({ rate: R, seconds: 12, f0: (t) => f0 * 2 ** ((2 * Math.sin(t * 1.3)) / 12), jitter: 0.008, shimmer: 0.03, breath: 0.02, envelope: talk, seed }), silence(R, 0.5)), R, { minVoicedSeconds: 8 });
   if (!m.ok) throw new Error(m.reason);
-  return m.features;
+  // 合成音は 4 つ目のフォルマントを作らないので、f4 は人の声にありそうな値を入れる（登録では f4 も要る項目）
+  return { ...m.features, f4: m.features.f4 ?? roundFeature('f4', (m.features.f3 ?? 3000) + 900) };
 };
 const A = voice(220, 1);
 const quality = { voicedSeconds: 11.2, gapTonal: 0.02, snrDb: 40 };
@@ -53,6 +54,29 @@ describe('送る内容と壁 ①', () => {
     const old = { ...sub(), m: '2.0.0' };
     expect(checkSubmission(old).map((p) => p.kind)).toContain('version');
   });
+  it('測り方の版は、今の版か、比べてよい前の版（MEASURE_COMPATIBLE）なら受ける', () => {
+    expect(checkSubmission({ ...sub(), m: MEASURE_VERSION })).toEqual([]);
+    for (const m of MEASURE_COMPATIBLE) expect(checkSubmission({ ...sub(), m }), m).toEqual([]);
+    const bad = checkSubmission({ ...sub(), m: '9.9.9' });
+    expect(bad.map((p) => p.kind)).toEqual(['version']);
+    expect(bad[0]!.text).toContain('9.9.9');
+  });
+  it('要る項目は、話す速さの揺れ・間の長さ・リズムのほかの全部（数字の少ない送る内容は断る）', () => {
+    expect([...OPTIONAL].sort()).toEqual(['pauseLen', 'rateVar', 'rhythm']);
+    expect(REQUIRED).toHaveLength(FEATURE_KEYS.length - 3);
+    // 無くてよい 3 つが無くても受ける
+    expect(checkSubmission(sub({ features: { ...A, rateVar: null, pauseLen: null, rhythm: null } }))).toEqual([]);
+    // ほかの項目は、1 つでも無ければ断る
+    for (const k of REQUIRED) expect(checkSubmission(sub({ features: { ...A, [k]: null } })).map((p) => p.kind), k).toContain('missing');
+    // 数字を 7 つだけにした送る内容（前の決まりでは通った）も断る
+    const sparse = Object.fromEntries(FEATURE_KEYS.map((k) => [k, ['pitch', 'pitchRange', 'f1', 'f2', 'f3', 'hnr', 'rate'].includes(k) ? A[k] : null])) as Features;
+    expect(checkSubmission(sub({ features: sparse })).map((p) => p.kind)).toContain('missing');
+  });
+  it('声の高さは、測り方が探す 1100 Hz まで受ける', () => {
+    expect(checkSubmission(sub({ features: { ...A, pitch: 900 } }))).toEqual([]);
+    expect(checkSubmission(sub({ features: { ...A, pitch: 1100 } }))).toEqual([]);
+    expect(checkSubmission(sub({ features: { ...A, pitch: 1101 } })).map((p) => p.kind)).toContain('range');
+  });
   it('公式らしい https のリンクだけ受ける', () => {
     expect(checkLink('https://www.example.co.jp/talent/a')).toBeNull();
     for (const bad of ['ftp://example.com', 'https://user:pw@example.com', 'https://127.0.0.1/', 'https://bit.ly/abc', 'https://localhost/', 'not a url', '']) expect(checkLink(bad), bad).not.toBeNull();
@@ -60,6 +84,16 @@ describe('送る内容と壁 ①', () => {
   it('少し違う書き方の名前を、同じ物にまとめる', () => {
     expect(nameKey('試験 の・キャラ！')).toBe(nameKey('試験のキャラ'));
     expect(nameKey('ＡＢＣ')).toBe(nameKey('abc'));
+  });
+  it('ひらがなとカタカナ（半角のカタカナも）を、同じ名前として扱う', () => {
+    for (const n of ['サクラミコ', 'ｻｸﾗﾐｺ', 'さくら ミコ', 'サクラ・みこ']) expect(nameKey(n), n).toBe(nameKey('さくらみこ'));
+    // 濁点・半濁点・ヴ・小さい字も
+    expect(nameKey('ｶﾞｸﾎﾟﾝ')).toBe(nameKey('がくぽん'));
+    expect(nameKey('ｳﾞｨｪ')).toBe(nameKey('ヴィェ'));
+    expect(nameKey('ヴィェ')).toBe(nameKey('ゔぃぇ'));
+    // 長音や漢字はそのまま。別の名前は別
+    expect(nameKey('ルーナ')).toBe('るーな');
+    expect(nameKey('桜')).not.toBe(nameKey('さくら'));
   });
   // 幅の無い空白・つなぎの字・書く向きを変える字・異体字の印・ハングルの埋め字・ソフトハイフン・BOM・点字の空白・制御文字
   const INVISIBLES = ['\u200b', '\u200c', '\u200d', '\u200e', '\u200f', '\u202a', '\u202e', '\u2060', '\u2064', '\u2066', '\u00ad', '\ufe0f', '\ufe00', '\u3164', '\uffa0', '\u115f', '\u1160', '\u034f', '\u180e', '\u2800', '\u0085', '\u{e0041}'];
@@ -149,6 +183,40 @@ describe('取り込み', () => {
     // 一覧に書いた名前・言葉に見えない文字が入っていても、同じ名前・言葉として扱う
     const r2 = intake(rows([['2026/11/03 09:00:00', code(three[0]!, '消された声'), 'OK'], ['2026/11/03 09:00:00', code(three[1]!, 'だめなことば入り'), 'OK']]), { model, ngWords: ['だめな\u200bことば'], blocked: ['消された\ufeff声'] });
     expect(r2.counts).toMatchObject({ blocked: 1, ngWord: 1, accepted: 0 });
+  });
+  it('削除の一覧・禁止の言葉は、ひらがな・カタカナ・半角カナの違いを抜けられない', () => {
+    const r = intake(
+      rows([
+        ['2026/11/03 09:00:00', code(three[0]!, 'ケサレタコエ'), 'OK'],
+        ['2026/11/03 09:00:00', code(three[1]!, 'ｹｻﾚﾀｺｴ'), 'OK'],
+        ['2026/11/03 09:00:00', code(three[2]!, 'ダメナコトバ入り'), 'OK'],
+      ]),
+      { model, ngWords: ['だめなことば'], blocked: ['けされたこえ'] },
+    );
+    expect(r.counts).toMatchObject({ blocked: 2, ngWord: 1, accepted: 0 });
+    // 同じ名前の登録は、書き方が違っても 1 つの声にまとまる
+    const same = intake(rows([['2026/11/03 09:00:00', code(three[0]!, 'テストノコエ'), 'OK'], ['2026/11/03 09:01:00', code(three[1]!, 'ﾃｽﾄﾉｺｴ'), 'OK'], ['2026/11/03 09:02:00', code(three[2]!, 'てすとのこえ'), 'OK']]), { model, ngWords: [], blocked: [] });
+    expect(same.voices).toHaveLength(1);
+    expect(same.voices[0]!.used).toBe(3);
+  });
+  it('前の版（MEASURE_COMPATIBLE）の登録も使う。声の版は、そろった登録の中でいちばん古い版', () => {
+    const at = (s: ReturnType<typeof sub>, m: string) => encodeSubmission({ ...s, m });
+    const old = MEASURE_COMPATIBLE[0]!;
+    const mixed = intake(
+      rows([
+        ['2026/11/06 09:00:00', at(sub({ features: three[0]! }), old), 'OK'],
+        ['2026/11/06 09:01:00', at(sub({ features: three[1]! }), MEASURE_VERSION), 'OK'],
+        ['2026/11/06 09:02:00', at(sub({ features: three[2]! }), MEASURE_VERSION), 'OK'],
+      ]),
+      { model, ngWords: [], blocked: [] },
+    );
+    expect(mixed.counts).toMatchObject({ wall1: 0, accepted: 3 });
+    expect(mixed.voices.map((v) => [v.used, v.version])).toEqual([[3, old]]);
+    const now = intake(rows(three.map((f, i): [string, string, string] => [`2026/11/06 09:0${i}:00`, code(f), 'OK'])), { model, ngWords: [], blocked: [] });
+    expect(now.voices.map((v) => v.version)).toEqual([MEASURE_VERSION]);
+    // 比べられない版は、取り込みでも壁 ① で断る
+    const bad = intake(rows([['2026/11/06 09:00:00', at(sub({ features: three[0]! }), '2.0.0'), 'OK']]), { model, ngWords: [], blocked: [] });
+    expect(bad.counts).toMatchObject({ wall1: 1, accepted: 0 });
   });
   it('名前の書き方・所属・大枠・リンクは、壁 ③ でそろった登録だけで決める（外れた登録が同じ数あっても変わらない）', () => {
     // 外れた登録 3 件（上に 2 件・下に 1 件。中央値はそろった 3 件の所のまま）が先に来る。同じ数なら先の物が選ばれるので、全部で数えると負ける

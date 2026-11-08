@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { MEASURE_VERSION } from './src/voice/measure.ts';
 import { packVoices } from './src/data/pack.ts';
 import { checkOperatorVoices, fromOperatorVoices, mergeVoices } from './src/data/sources.ts';
+import { modelProblem } from './src/data/model-file.ts';
 import type { Catalog, OperatorVoices, ProfileList } from './src/data/types.ts';
 import { siteFor } from './src/site-config.ts';
 
@@ -56,9 +57,29 @@ const ogp = (): Plugin => ({
   },
 });
 
+// 照合のモデル（data/model.json）が使えない時（測り方の版が今のサイトと比べられない・形が違う）は、ビルドを止める。
+// 黙って仮のモデルで公開しないため（src/data/load.ts の仮のモデルは、念のためだけ）。手元の開発用のサーバーでは注意だけ出す。
+const modelCheck = (): Plugin => {
+  let building = false;
+  return {
+    name: 'voice-match-model-check',
+    configResolved: (c) => void (building = c.command === 'build'),
+    buildStart() {
+      const file = fileURLToPath(new URL('./data/model.json', import.meta.url));
+      const problem = existsSync(file) ? modelProblem(JSON.parse(readFileSync(file, 'utf8'))) : 'data/model.json がありません';
+      if (!problem) return;
+      const text = `${problem}。照合のモデルを作り直してください（README の「声のデータの作り方」）。`;
+      if (building) this.error(text);
+      else this.warn(text);
+    },
+  };
+};
+
 // 声のデータ（名前・リンク・数字）を詰めて、ページとは別のファイルにする（src/data/pack.ts）。ページはすぐ出て、データは裏で読む。
 // 元: 運営が測った声（data/generated/operator-voices.json。GitHub の Release から、サイトを作る時だけ取ってくる）、
 // 拡張機能で測った声（data/catalog.json・profiles.json）、登録から出した声（data/generated/user-*.json）。まとめ方は src/data/sources.ts。
+// 削除の一覧（data/generated/removed-names.json。tools/intake.ts が登録のシートの「削除」のタブから作る）の名前の声は、どの元からも入れない。
+// ビルドの記録（公開される）には、人数だけを出し、名前は出さない。
 const VOICE_PACK = 'virtual:voice-pack';
 const voicePack = (): Plugin => ({
   name: 'voice-match-voice-pack',
@@ -77,21 +98,25 @@ const voicePack = (): Plugin => ({
     // 運営が測った声のファイルがあって、測り方の版が違う時は止める（黙って 0 人で公開しない）
     const operator = read('./data/generated/operator-voices.json', noOperator);
     checkOperatorVoices(operator, MEASURE_VERSION);
-    const { voices, features } = mergeVoices(
+    const removed = read<{ names?: string[] }>('./data/generated/removed-names.json', {}).names ?? [];
+    const { voices, features, dropped } = mergeVoices(
       [
         fromOperatorVoices(operator),
         { voices: read('./data/catalog.json', noCatalog).voices, profiles: read('./data/profiles.json', noProfiles).profiles },
         { voices: read('./data/generated/user-catalog.json', noCatalog).voices, profiles: read('./data/generated/user-profiles.json', noProfiles).profiles },
       ],
       MEASURE_VERSION,
+      { removed },
     );
+    const n = (reason: string) => dropped.filter((d) => d.reason === reason).length;
+    console.log(`サイトの声: ${voices.length} 人（入れなかった声: 前の声と同じ名前 ${n('same')}・削除の一覧 ${n('removed')}・名前が無い ${n('noName')}）`);
     return `export default ${JSON.stringify(packVoices(MEASURE_VERSION, voices, features))};`;
   },
 });
 
 export default defineConfig({
   base: './',
-  plugins: [csp(), ogp(), voicePack()],
+  plugins: [csp(), ogp(), modelCheck(), voicePack()],
   build: {
     outDir: 'dist',
     rollupOptions: {

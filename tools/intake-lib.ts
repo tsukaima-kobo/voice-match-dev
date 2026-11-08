@@ -1,13 +1,18 @@
-// 声の登録の取り込みの計算（ファイルの読み書き・通信なし。test/intake.test.ts で試す）。
+// 声の登録の取り込みの計算（ファイルの読み書き・通信なし。test/submit.test.ts で試す）。
 // フォームの回答の 1 行 = [タイムスタンプ, 送る内容, 判定, 理由]。判定は dots が書く（壁 ②。OK の行だけ使う）。
 // 壁 ① をもう一度（ページの確認は回り込めるため）、禁止の言葉・削除済みの名前・1 日の上限・同じ数字の重なりを除き、
 // 名前ごとに壁 ③（3 件以上そろったら中央値）で声にする。ID は名前（nameKey）から決まる（記録を持たずに、毎日同じ ID）。
 // 出す名前の書き方・所属・大枠・リンクは、壁 ③ でそろった登録だけから決める（外れた登録のいたずらで変わらないように）。
+// 声の測り方の版は、そろった登録の中でいちばん古い版（今の版と、比べてよい前の版 MEASURE_COMPATIBLE が混ざることがある）。
 import { CODE_PREFIX, checkSubmission, decodeSubmission, featuresOf, nameKey, type Submission } from '../src/submit/code.ts';
-import { consensus, CONSENSUS } from '../src/submit/consensus.ts';
-import { medianFeatures } from '../src/voice/combine.ts';
-import { FEATURE_KEYS, type Features } from '../src/voice/features.ts';
-import { rank, type MatchModel } from '../src/match/match.ts';
+import { consensus, consensusMembers } from '../src/submit/consensus.ts';
+
+/** 壁 ③ で使われる登録（src/submit/consensus.ts と同じ物を使う。写しを持たない） */
+export { consensusMembers };
+import { type Features } from '../src/voice/features.ts';
+import { type MatchModel } from '../src/match/match.ts';
+import { MEASURE_VERSION } from '../src/voice/measure.ts';
+import { oldestVersion } from './versions.ts';
 
 export const INTAKE = {
   /** 1 日に受け付ける件数（壁 ② の後で数える。あふれた分は使わない） */
@@ -32,6 +37,8 @@ export interface Accepted {
   kinds: number;
   link: string;
   quality: Submission['q'];
+  /** 測り方の版 */
+  version: string;
   features: Features;
 }
 
@@ -44,6 +51,8 @@ export interface UserVoice {
   kinds: number;
   link: string;
   used: number;
+  /** 測り方の版（そろった登録の中でいちばん古い版） */
+  version: string;
   features: Features;
 }
 
@@ -97,26 +106,6 @@ export function userIdOf(key: string): string {
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   const n = 4294967296 * (2097151 & h2) + (h1 >>> 0);
   return `u-${n.toString(36).padStart(11, '0')}`;
-}
-
-/**
- * 壁 ③ で使われる登録（src/submit/consensus.ts の consensus と同じ選び方: まったく同じ数字は 1 件に数え、
- * 全部の中央値から照合の距離で CONSENSUS.maxDistance より遠い物を除く）。consensus が使った件数（used）と同じ数になる。
- */
-export function consensusMembers<T extends { features: Features }>(model: MatchModel, items: readonly T[]): T[] {
-  const seen = new Set<string>();
-  const uniq = items.filter((x) => {
-    const k = JSON.stringify(FEATURE_KEYS.map((key) => x.features[key]));
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-  if (!uniq.length) return [];
-  const mid = medianFeatures(uniq);
-  return uniq.filter((x) => {
-    const r = rank(model, x.features, [{ id: 'mid', features: mid }], 1)[0];
-    return r !== undefined && r.distance <= CONSENSUS.maxDistance;
-  });
 }
 
 export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: readonly string[]; blocked: readonly string[] }): { accepted: Accepted[]; voices: UserVoice[]; counts: Record<CountKey, number> } {
@@ -177,7 +166,7 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
     perDay.set(day, (perDay.get(day) ?? 0) + 1);
     perName.set(nk, (perName.get(nk) ?? 0) + 1);
     counts.accepted++;
-    accepted.push({ at: row.at, key, name: s.n.trim(), ...(s.g?.trim() ? { group: s.g.trim() } : {}), kinds: s.k ?? 0, link: s.l.trim(), quality: s.q, features: featuresOf(s) });
+    accepted.push({ at: row.at, key, name: s.n.trim(), ...(s.g?.trim() ? { group: s.g.trim() } : {}), kinds: s.k ?? 0, link: s.l.trim(), quality: s.q, version: s.m, features: featuresOf(s) });
   }
 
   // 壁 ③: 名前ごとに、その名前が初めて来た順で
@@ -196,7 +185,7 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
     for (let n = 2; used.has(id); n++) id = `${userIdOf(key)}-${n}`;
     used.add(id);
     const group = mostCommon(members.map((a) => a.group ?? '').filter(Boolean));
-    voices.push({ id, key, name: mostCommon(members.map((a) => a.name))!, ...(group ? { group } : {}), kinds: majorityKinds(members.map((a) => a.kinds)), link: mostCommon(members.map((a) => a.link))!, used: c.used, features: c.features });
+    voices.push({ id, key, name: mostCommon(members.map((a) => a.name))!, ...(group ? { group } : {}), kinds: majorityKinds(members.map((a) => a.kinds)), link: mostCommon(members.map((a) => a.link))!, used: c.used, version: oldestVersion(members.map((a) => a.version), MEASURE_VERSION), features: c.features });
   }
   voices.sort((a, b) => (a.id < b.id ? -1 : 1));
   return { accepted, voices, counts };
@@ -208,6 +197,3 @@ export function majorityKinds(masks: readonly number[]): number {
   for (let bit = 0; bit < 16; bit++) if (masks.filter((m) => (m & (1 << bit)) !== 0).length * 2 >= masks.length && masks.length > 0) out |= 1 << bit;
   return out;
 }
-
-/** 数字の並びを features の順の配列に（ファイルを小さく、読みやすく） */
-export const featureArray = (f: Features): (number | null)[] => FEATURE_KEYS.map((k) => f[k]);

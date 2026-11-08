@@ -38,7 +38,8 @@ const save = (id: string): void => {
   }
 };
 
-export function micPicker(parts: { box: HTMLElement; select: HTMLSelectElement; find: HTMLButtonElement }[], onError?: (text: string) => void): MicPicker {
+/** `onError` には、今の言葉で文を作る関数を渡す（言葉を切り替えた時に、ページが出し直せるように） */
+export function micPicker(parts: { box: HTMLElement; select: HTMLSelectElement; find: HTMLButtonElement }[], onError?: (msg: () => string) => void): MicPicker {
   let chosen = load();
   let mics: MicChoice[] = [];
   const supported = micChoiceSupported();
@@ -60,7 +61,7 @@ export function micPicker(parts: { box: HTMLElement; select: HTMLSelectElement; 
     try {
       mics = await listMics(ask);
     } catch (e) {
-      if (ask) onError?.(t('マイクの一覧を出せませんでした。ブラウザーの設定で、このページにマイクを許可してください。', 'The list of microphones could not be shown. Allow the microphone for this page in your browser settings.'));
+      if (ask) onError?.(() => t('マイクの一覧を出せませんでした。ブラウザーの設定で、このページにマイクを許可してください。', 'The list of microphones could not be shown. Allow the microphone for this page in your browser settings.'));
       void e;
       return;
     }

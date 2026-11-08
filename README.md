@@ -49,8 +49,8 @@ npm run typecheck        # 型の確認
 npm run build            # dist/ にサイトを作る
 npm run build:collector  # 収集の拡張機能を collector/dist に作る
 npm run build:voices     # data/voices/ から代表値（data/profiles.json）を作る
-npm run eval             # 拡張機能で測った声（data/voices/）から、照合のモデル（data/model.json）と近さの言葉の目安を作り、見分ける力を測る
-node tools/eval.ts --sheet <シート.xlsx>  # 同じことを、運営が測った声（スプレッドシート）から
+node tools/eval.ts --sheet <シート.xlsx>  # 運営が測った声（スプレッドシート）から、照合のモデル（data/model.json）と近さの言葉の目安を作り、見分ける力を測る
+npm run eval             # 同じことを、拡張機能で測った声（data/voices/）だけから（シートから作ったモデルは置き換えずに止まる）
 npm run intake -- --csv 回答.csv  # 声の登録を取り込む（毎日は GitHub Actions が Google スプレッドシートから）
 node tools/voices-release.ts make --sheet <シート.xlsx> --only <出す人の一覧>  # 運営が測った声の代表値を作る（docs/voices-release.md）
 ```
@@ -74,7 +74,7 @@ node tools/voices-release.ts make --sheet <シート.xlsx> --only <出す人の�
 | `src/match/match.ts` | 利用者の数字と、事前に測った声の代表値を比べて近い順に並べる（どの端末でも同じ順位）。近さの言葉 |
 | `src/mimic/mimic.ts` | 真似の点数と直し方（自分で変えやすい 12 項目） |
 | `src/mimic/line.ts` | セリフ真似: 抑揚とタイミングを、時間をそろえて（DTW）比べる |
-| `src/data/` | サイトの声の読み込み（`load.ts`）・詰め方（`pack.ts`、1 項目 1 バイト）・元のまとめ方（`sources.ts`）・大枠（`kinds.ts`）・声の一覧の探し方（`catalog-search.ts`）・じっくり測った自分の声（`mine.ts`） |
+| `src/data/` | サイトの声の読み込み（`load.ts`）・詰め方（`pack.ts`、1 項目 1 バイト）・元のまとめ方（`sources.ts`。同じ名前・削除の一覧）・照合のモデルのファイルの確かめ（`model-file.ts`）・大枠（`kinds.ts`）・声の一覧の探し方（`catalog-search.ts`）・じっくり測った自分の声（`mine.ts`） |
 | `src/ui/orb.ts`・`line-chart.ts` | 声に反応する玉（WebGL）、セリフ真似の図（SVG） |
 | `src/ui/voiceprint.ts`・`voice-shape.ts` | 声紋: 測った数字から描く図（WebGL2。18 項目に連動）と、図の読み方。WebGL2 が無い時の 2D の図 |
 | `src/ui/live-analysis.ts` | 録っている間の解析パネル（声の成分の図・高さの線・数字・測れる項目）と、計算中の演出 |
@@ -89,7 +89,7 @@ node tools/voices-release.ts make --sheet <シート.xlsx> --only <出す人の�
 | `tools/voices-release.ts` | 運営が測った声（スプレッドシート）から代表値のファイルを作り、GitHub の Release に置く。[手順](docs/voices-release.md) |
 | `tools/eval.ts`・`lib.ts` | 照合のモデル・近さの言葉の目安・見分ける力の評価 |
 | `tools/build-voices.ts`・`channel.ts` | 拡張機能の数字からの代表値づくり、配信の経路で数字がどれだけ動くか |
-| `tools/intake.ts` | 声の登録の取り込み（シートから。壁 ① をもう一度・dots の判定・壁 ③・削除と禁止の言葉のタブ）→ `data/generated/`（ビルドの時だけ） |
+| `tools/intake.ts` | 声の登録の取り込み（シートから。壁 ① をもう一度・dots の判定・壁 ③・削除と禁止の言葉のタブ）→ `data/generated/`（ビルドの時だけ。削除のタブの名前は、運営が測った声などにも当てる） |
 | `tools/github-stars.ts` | スターの数をビルドの時に取ってページに書く（設定がある時だけ） |
 | `.github/workflows/site.yml` | 毎日と push の時に、Release とシートを読んでサイトを作り、公開（本番は Cloudflare Pages、検証用は GitHub Pages。リポジトリには書き込まない） |
 | `data/` | 照合のモデル（`model.json`）と評価（`eval-report.json`）。拡張機能で測った声（`catalog.json`・`voices/`・`profiles.json`）。運営が測った声（Release から）と登録から出た声は、サイトを作る時だけ `data/generated/` に作る（リポジトリには入れない） |
@@ -98,7 +98,8 @@ node tools/voices-release.ts make --sheet <シート.xlsx> --only <出す人の�
 
 - **運営が測った声**: 配信の音から 30 秒ごとに測った数字をスプレッドシートに集め、`tools/voices-release.ts` で 1 人 1 件の代表値にして、GitHub の Release「voices-data」に置きます。サイトを作る時に取ってきます。数字はリポジトリにコミットしません（[手順](docs/voices-release.md)）。
 - **拡張機能で測った声**: `data/catalog.json` に声を足し、収集の拡張機能で配信や動画を再生しながら測って、書き出したファイルを `data/voices/` に入れます（[使い方](docs/collector.md)）。`npm run build:voices` で代表値を作ります。
-- 照合のモデルと近さの言葉の目安は、運営が測った声なら `node tools/eval.ts --sheet <シート.xlsx>`（代表値と同じ窓を使う）、拡張機能で測った声なら `npm run eval` で作り直します。サイトは `npm run build` で作り直します。
+- 照合のモデルと近さの言葉の目安は、運営が測った声から `node tools/eval.ts --sheet <シート.xlsx>`（代表値と同じ窓を使う）で作り直します。`--sheet` の無い `npm run eval` は、拡張機能で測った声（`data/voices/`）だけで作る時のための物です。今の `data/model.json` がシートから作った物なら、置き換えずに止まります。サイトは `npm run build` で作り直します。
+- 照合のモデルの測り方の版が、今の版でも、そのまま比べてよい前の版（`src/voice/measure.ts` の `MEASURE_COMPATIBLE`）でもない時は、`npm run build` が止まります（仮のモデルで黙って公開しないため）。測り方を変えた時は、測り直したデータからモデルを作り直します。
 
 ## 本番のリリース
 

@@ -4,11 +4,12 @@
 // ID は、ページの中だけの番号（サイトのデータには入れない）。ページをまたぐリンクには名前を使う。
 // 照合のモデル（data/model.json）は小さいので、ページと一緒に読む。
 import modelJson from '../../data/model.json';
-import { MEASURE_VERSION, readableVersion } from '../voice/measure.ts';
+import { MEASURE_VERSION } from '../voice/measure.ts';
 import { defaultModel, type MatchModel } from '../match/match.ts';
 import type { Features } from '../voice/features.ts';
 import type { CatalogEntry } from './types.ts';
 import { unpackVoices } from './pack.ts';
+import { modelProblem } from './model-file.ts';
 
 export let CATALOG: readonly CatalogEntry[] = [];
 export let ENTRY_BY_ID: ReadonlyMap<string, CatalogEntry> = new Map();
@@ -26,6 +27,8 @@ export const voicesReady: Promise<void> = import('virtual:voice-pack')
   })
   .catch(() => undefined);
 
-/** 照合のモデル（tools/eval.ts が作る）。無い時・版が違う時は、画面の目盛りから作った仮の物 */
-const m = modelJson as unknown as Partial<MatchModel> & { version: string };
-export const MODEL: MatchModel = m.version !== 'none' && readableVersion(m.measureVersion) && Array.isArray(m.keys) ? (m as MatchModel) : defaultModel(MEASURE_VERSION);
+/**
+ * 照合のモデル（tools/eval.ts が作る）。使えない物（版が違う・形が違う）は、ビルドで止める（vite.config.ts の modelCheck）。
+ * ここで画面の目盛りから作った仮の物にするのは、それでも入ってしまった時の念のためだけ。
+ */
+export const MODEL: MatchModel = modelProblem(modelJson) === null ? (modelJson as unknown as MatchModel) : defaultModel(MEASURE_VERSION);

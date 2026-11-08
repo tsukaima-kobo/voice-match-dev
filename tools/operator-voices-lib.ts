@@ -1,7 +1,10 @@
 // 運営が測った声の代表値を作る（tools/voices-release.ts が使う。DOM なし・ファイルの読み書きなし。test/operator-voices.test.ts で試す）。
 // 元: 収集の書き出し（スプレッドシートと同じ数字。snapshot.json の peoples・measurements・summary.measureVersions）。
 // 窓: 数字のある窓だけ → その人の高さの中央値から外れた窓を除く（tools/lib.ts の SELECT と同じ）→ SELECT.minWindows 以上の人だけ。
-// 代表値は項目ごとの中央値（サイトと同じ計算）。公式ページの URL が無い・おかしい人は入れない。
+// 代表値は項目ごとの中央値（サイトと同じ計算）。氏名が空の人・公式ページの URL が無い・おかしい人は入れない。
+// 測り方の版: 今の版か、比べてよい前の版（MEASURE_COMPATIBLE）の窓だけを使い、ファイルには使った窓の中でいちばん古い版を書く
+// （前の版を MEASURE_COMPATIBLE から外した時に、サイトのビルドが止まるように。src/data/sources.ts の checkOperatorVoices）。
+// サイトでは、名前か英語名が同じ（nameKey でそろえる）人は 1 人しか出ないので、そういう人がいれば warnings に出す（make が大きく知らせる）。
 // 大枠（VTuber・歌手など）は、シートの「大枠」の列（無ければ make の --kind）から。
 // 英語の名前は、シートの「英語名」「所属の英語名」の列（任意。公式の英語の書き方）から。
 // 同じ人の行がいくつかある時は、項目ごとに、空でない最初の値を使う（名前・所属・公式ページ・大枠・英語名のどれも）。
@@ -10,21 +13,26 @@
 import { FEATURE_BY_KEY, FEATURE_KEYS, formatFeature, type Features } from '../src/voice/features.ts';
 import type { Cell } from './xlsx.ts';
 import { quantileOf, readableVersion } from '../src/voice/measure.ts';
-import { checkLink } from '../src/submit/code.ts';
+import { checkLink, nameKey } from '../src/submit/code.ts';
 import type { OperatorVoices } from '../src/data/types.ts';
 import { medianFeatures, SELECT } from './lib.ts';
 import { idsOf, parseKinds } from '../src/data/kinds.ts';
+import { oldestVersion } from './versions.ts';
+import { voiceKeys } from '../src/data/sources.ts';
 
 export interface Snapshot {
   summary?: { measureVersions?: string[] };
   peoples: { personId: string; name: string; nameEn?: string | null; groupName?: string | null; currentAffiliation?: string | null; groupEn?: string | null; officialProfile?: string | null; kinds?: string | null }[];
-  measurements: ({ personId: string; videoId: string } & Record<string, unknown>)[];
+  /** measureVersion: その行の測り方の版（シートから読んだ時。無い時は summary.measureVersions） */
+  measurements: ({ personId: string; videoId: string; measureVersion?: string } & Record<string, unknown>)[];
 }
 
 export interface BuildResult {
   file: OperatorVoices;
   /** 人ごとの記録（使った窓・入れなかった理由） */
   notes: string[];
+  /** 大きく知らせること（サイトで同じ名前として 1 人しか出ない人たち） */
+  warnings: string[];
 }
 
 const num = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null);
@@ -38,7 +46,8 @@ export function sheetWindows(snap: Snapshot): Map<string, { all: SheetWindow[]; 
   for (const m of snap.measurements) {
     if (num(m.pitch) === null) continue; // 測っていない、または測れなかった
     const features = Object.fromEntries(FEATURE_KEYS.map((k) => [k, num(m[k])])) as Features;
-    (rows.get(m.personId) ?? rows.set(m.personId, []).get(m.personId)!).push({ video: m.videoId, features });
+    const version = typeof m.measureVersion === 'string' ? m.measureVersion : undefined;
+    (rows.get(m.personId) ?? rows.set(m.personId, []).get(m.personId)!).push({ video: m.videoId, features, ...(version ? { version } : {}) });
   }
   const out = new Map<string, { all: SheetWindow[]; kept: SheetWindow[] }>();
   for (const [id, all] of rows) {
@@ -56,6 +65,8 @@ export function sheetWindows(snap: Snapshot): Map<string, { all: SheetWindow[]; 
 export interface SheetWindow {
   video: string;
   features: Features;
+  /** 測り方の版（シートから読んだ時だけ） */
+  version?: string;
 }
 
 /**
@@ -75,7 +86,9 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
   const windows = sheetWindows(snap);
   const notes: string[] = [];
   if (o.only) for (const id of o.only) if (!people.has(id)) notes.push(`${id}: データに無い人物ID です`);
-  const picked: { name: string; nameEn: string; group: string; groupEn: string; exact: boolean; kinds: string[]; link: string; features: Features }[] = [];
+  const picked: { id: string; name: string; nameEn: string; group: string; groupEn: string; exact: boolean; kinds: string[]; link: string; features: Features }[] = [];
+  /** 使った窓の測り方の版（窓に版が無い時は、データ全体の版） */
+  const used = new Set<string>();
   for (const id of [...people.keys()].sort()) {
     if (o.only && !o.only.has(id)) continue;
     const p = people.get(id)!;
@@ -85,6 +98,10 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
     if (kept.length < SELECT.minWindows) {
       // 記録に 1 行書くのは、名指しで頼まれた時か、窓が 1 つでもある人だけ（窓が 0 の人まで並べると長くなる）
       if (o.only || all.length) notes.push(`${note} → 窓が ${SELECT.minWindows} に足りないので入れません`);
+      continue;
+    }
+    if (!nameKey(p.name ?? '')) {
+      notes.push(`${note} → 氏名が空（または記号だけ）なので入れません`);
       continue;
     }
     const link = (p.officialProfile ?? '').trim();
@@ -99,7 +116,8 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
     notes.push(extra.length ? `${note}、${extra.join('、')}` : note);
     // exact: 所属を「現在所属」のまま出す人（「ホロライブ4期生」→「ホロライブ」のように、そろえた人ではない）
     const cur = stripNote(p.currentAffiliation ?? '');
-    picked.push({ name: p.name.trim(), nameEn: (p.nameEn ?? '').trim(), group, groupEn: group ? (p.groupEn ?? '').trim() : '', exact: !cur || cur === group, kinds, link, features: medianFeatures(kept) });
+    for (const w of kept) used.add(w.version ?? oldestVersion(versions, o.measureVersion));
+    picked.push({ id, name: p.name.trim(), nameEn: (p.nameEn ?? '').trim(), group, groupEn: group ? (p.groupEn ?? '').trim() : '', exact: !cur || cur === group, kinds, link, features: medianFeatures(kept) });
   }
   // 所属の英語名は、所属ごとに 1 つにそろえる（書いていない人にも、同じ所属なら同じ物が付く。サイトでも所属ごとに 1 つ）
   const groupEn = groupEnByGroup(picked.filter((v) => v.groupEn));
@@ -108,7 +126,30 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
     const en = groupEn.get(v.group)?.chosen;
     return { name: v.name, ...(v.nameEn ? { nameEn: v.nameEn } : {}), ...(v.group ? { group: v.group } : {}), ...(en ? { groupEn: en } : {}), ...(v.kinds.length ? { kinds: v.kinds } : {}), link: v.link, features: v.features };
   });
-  return { file: { version: 1, measureVersion: o.measureVersion, voices }, notes };
+  const bad = [...used].filter((v) => !readableVersion(v, o.measureVersion));
+  if (bad.length) throw new Error(`測り方の版が合いません（窓: ${bad.join('・')}、今のサイト: ${o.measureVersion}）`);
+  const warnings = sameNameGroups(picked).map((g) => `同じ名前として扱われる人がいます。サイトには人物ID の順で先の「${g[0]!.name}」だけが出ます: ${g.map((v) => `${v.id}「${v.name}${v.nameEn ? ` / ${v.nameEn}` : ''}」`).join('・')}（シートの氏名・英語名を確かめてください）`);
+  return { file: { version: 1, measureVersion: oldestVersion(used, oldestVersion(versions, o.measureVersion)), voices }, notes, warnings };
+}
+
+/**
+ * サイトで同じ声として扱われる人のまとまり（名前か英語名が、ほかの人の名前か英語名と同じ。src/data/sources.ts の voiceKeys と同じ見方）。
+ * 2 人以上のまとまりだけを、元の並びの順で返す。
+ */
+export function sameNameGroups<T extends { name: string; nameEn?: string }>(people: readonly T[]): T[][] {
+  const parent = people.map((_, i) => i);
+  const root = (i: number): number => (parent[i] === i ? i : (parent[i] = root(parent[i]!)));
+  const at = new Map<string, number>();
+  people.forEach((p, i) => {
+    for (const k of voiceKeys(p)) {
+      const j = at.get(k);
+      if (j === undefined) at.set(k, i);
+      else parent[root(i)] = root(j);
+    }
+  });
+  const groups = new Map<number, T[]>();
+  people.forEach((p, i) => (groups.get(root(i)) ?? groups.set(root(i), []).get(root(i))!).push(p));
+  return [...groups.values()].filter((g) => g.length > 1);
 }
 
 /** 人物一覧の、同じ人の行をまとめる時に見る項目 */
@@ -223,9 +264,12 @@ export function snapshotFromSheet(tables: ReadonlyMap<string, Cell[][]>, measure
     const got = rows.filter((x) => FEATURE_KEYS.some((k) => x.m[k] !== null)).map((x) => ({ ...x, version: x.version ?? blankIs }));
     const bad = [...new Set(got.map((x) => x.version).filter((v) => !readableVersion(v, measureVersion)))];
     if (bad.length) throw new Error(`「${tab}」の数字のある行に、今のサイト（${measureVersion}）と比べられない測り方の版があります: ${bad.map((v) => v ?? '（空）').join('・')}`);
-    return got.map((x) => x.m);
+    return got.map((x) => ({ ...x.m, measureVersion: x.version! }));
   };
   const main = withVersion('声の測定値', table('声の測定値', ['人物ID', '出典動画ID', ...labels]).map((get) => ({ version: str(get('測定バージョン')), m: row(get, '出典動画ID') })), SHEET_DEFAULT_VERSION);
   const extra = withVersion(EXTRA_TAB, table(EXTRA_TAB, ['人物ID', '追加動画ID', '測定バージョン', ...labels], true).map((get) => ({ version: str(get('測定バージョン')), m: row(get, '追加動画ID') })), null);
-  return { summary: { measureVersions: [measureVersion] }, peoples, measurements: [...main, ...extra] };
+  const measurements = [...main, ...extra];
+  // データの版は、数字のある行の版（3.1.0 の行が混ざっていれば 3.1.0 も。書き出すファイルには、使った窓の中でいちばん古い版を書く）
+  const versions = [...new Set(measurements.map((m) => m.measureVersion))].sort();
+  return { summary: { measureVersions: versions.length ? versions : [measureVersion] }, peoples, measurements };
 }

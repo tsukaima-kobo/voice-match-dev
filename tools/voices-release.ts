@@ -6,6 +6,7 @@
 //   node tools/voices-release.ts make --sheet <シートをダウンロードした.xlsx> --all
 //     （--sheet の代わりに、収集の書き出し --snapshot <snapshot.json> も使える）
 //     → data/generated/operator-voices.json を作る（手元の npx vite でも、この声が出る）。音は入らない。
+//       サイトで同じ名前として 1 人しか出ない人がいれば、最後に「注意」として名前を出す（この記録は手元だけ。サイトのビルドの記録には人数だけ）。
 //   node tools/voices-release.ts upload --repo <owner/name> --yes
 //     → 作ったファイルを、--repo のリポジトリの Release に置き（Release が無ければ作る）、そのサイトを作り直す。gh（GitHub CLI）を使う。
 //       --repo は必ず書く（決まった物は無い。手元の gh の設定や GH_REPO で、思っていないリポジトリに置かないため）。
@@ -20,6 +21,7 @@ import { MEASURE_VERSION, readableVersion } from '../src/voice/measure.ts';
 import type { OperatorVoices } from '../src/data/types.ts';
 import { buildOperatorVoices, parseIdList, snapshotFromSheet, type Snapshot } from './operator-voices-lib.ts';
 import { KINDS, parseKinds } from '../src/data/kinds.ts';
+import { fromOperatorVoices, mergeVoices } from '../src/data/sources.ts';
 import { readXlsx } from './xlsx.ts';
 import { DEV, PRODUCTION } from '../src/site-config.ts';
 
@@ -39,6 +41,16 @@ const REPOS = [
   { repo: PRODUCTION.repo, label: `${PRODUCTION.repo}（本番・${PRODUCTION.url}）` },
   { repo: DEV.repo, label: `${DEV.repo}（検証用）` },
 ];
+/** サイトにまとめた時に出ない人（同じ名前・名前が無い）を、名前つきで大きく知らせる（手元の記録だけ） */
+function warnDropped(file: OperatorVoices, warnings: readonly string[] = []): void {
+  const { dropped } = mergeVoices([fromOperatorVoices(file)], MEASURE_VERSION);
+  if (!dropped.length && !warnings.length) return;
+  console.log('==== 注意 ====');
+  for (const w of warnings) console.log(w);
+  if (dropped.length) console.log(`サイトに出ない人: ${dropped.length} 人（${dropped.map((d) => `「${d.name}${d.nameEn ? ` / ${d.nameEn}` : ''}」${d.reason === 'same' ? '前の人と同じ名前' : '名前が無い'}`).join('・')}）`);
+  console.log('==============');
+}
+
 const allowed = ALLOWED[args[0] ?? ''];
 const unknown = !allowed || args.slice(1).some((a, i, rest) => !(allowed.flags.includes(a) || allowed.values.includes(a) || allowed.values.includes(rest[i - 1] ?? '')));
 if (unknown) {
@@ -64,13 +76,14 @@ if (args[0] === 'make') {
     console.error(`--kind の大枠が読めません: ${kind.unknown.join('・') || kindText}（使える物: ${KINDS.map((k) => k.ja).join('・')}）`);
     process.exit(2);
   }
-  const { file, notes } = buildOperatorVoices(snap, { measureVersion: MEASURE_VERSION, only, defaultKinds: kind.mask });
+  const { file, notes, warnings } = buildOperatorVoices(snap, { measureVersion: MEASURE_VERSION, only, defaultKinds: kind.mask });
   for (const n of notes) console.log(n);
   mkdirSync(join(root, 'data', 'generated'), { recursive: true });
   writeFileSync(out, JSON.stringify(file, null, 1) + '\n');
   const byKind = KINDS.map((k) => [k.ja, file.voices.filter((v) => v.kinds?.includes(k.id)).length] as const).filter(([, n]) => n > 0);
   const none = file.voices.filter((v) => !v.kinds?.length).length;
-  console.log(`data/generated/operator-voices.json: ${file.voices.length} 人（測り方の版 ${file.measureVersion}）。大枠: ${byKind.map(([k, n]) => `${k} ${n}`).join('・') || 'なし'}${none ? `・大枠なし ${none}` : ''}`);
+  console.log(`data/generated/operator-voices.json: ${file.voices.length} 人（測り方の版 ${file.measureVersion}。使った窓の中でいちばん古い版）。大枠: ${byKind.map(([k, n]) => `${k} ${n}`).join('・') || 'なし'}${none ? `・大枠なし ${none}` : ''}`);
+  warnDropped(file, warnings);
 } else if (args[0] === 'upload') {
   const repoArg = (opt('--repo') ?? '').trim();
   const target = REPOS.find((r) => r.repo.toLowerCase() === repoArg.toLowerCase());
@@ -91,14 +104,26 @@ if (args[0] === 'make') {
   }
   if (!args.includes('--yes')) {
     console.log(`置く物: data/generated/operator-voices.json（${file.voices.length} 人: ${file.voices.map((v) => v.name).join('・')}）`);
+    warnDropped(file);
     console.log(`Release「${RELEASE_TAG}」に置くと公開になります。決めてから --yes を付けて動かしてください。何もしていません。`);
     process.exit(0);
   }
   // どの gh にも --repo を付ける（手元の gh の設定や GH_REPO ではなく、ここで書いたリポジトリに置く）
   const gh = (...a: string[]) => execFileSync('gh', [...a, '--repo', repo], { cwd: root, stdio: ['ignore', 'pipe', 'inherit'] }).toString();
   const notes = 'サイトを作る時に読む、運営が測った声の代表値です（名前・英語名・所属・所属の英語名・大枠・公式ページ・数字。英語名は書いてある人だけ）。音は入っていません。tools/voices-release.ts が置きます。';
-  const tags = gh('release', 'list', '--limit', '200', '--json', 'tagName', '-q', '.[].tagName').split('\n');
-  if (!tags.includes(RELEASE_TAG)) {
+  // Release があるか（数が多くても見落とさないよう、名前で 1 つだけ見る。無い時の gh は「release not found」で終わる）
+  let exists = true;
+  try {
+    execFileSync('gh', ['release', 'view', RELEASE_TAG, '--json', 'tagName', '--repo', repo], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) {
+    const err = String((e as { stderr?: Buffer }).stderr ?? '');
+    if (!/not found/i.test(err)) {
+      console.error(`Release「${RELEASE_TAG}」があるか確かめられませんでした: ${err.trim() || (e as Error).message}`);
+      process.exit(1);
+    }
+    exists = false;
+  }
+  if (!exists) {
     gh('release', 'create', RELEASE_TAG, '--title', '声のデータ（運営が測った声）', '--notes', notes, '--latest=false');
     console.log(`Release「${RELEASE_TAG}」を作りました。`);
   } else gh('release', 'edit', RELEASE_TAG, '--notes', notes);

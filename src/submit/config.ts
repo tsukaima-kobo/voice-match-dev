@@ -12,7 +12,7 @@ export const PRODUCTION_FORM: SubmitForm = {
   entry: '791146777',
 };
 
-/** 検証用: フォーム「voice-twin 声の登録（検証用）」 */
+/** 検証用: 検証用のリポジトリで作った時のフォーム（本番とは別のフォームとシート） */
 export const DEV_FORM: SubmitForm = {
   url: 'https://docs.google.com/forms/d/e/1FAIpQLScG5r_C3CvAPm8uw5csGCiKsDR2ougYeyIqbPsGh7GAexVNWg/viewform',
   entry: '627800295',

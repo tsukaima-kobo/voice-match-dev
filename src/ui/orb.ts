@@ -41,7 +41,7 @@ void main(){
   vec3 nrm=normalize(vec3(q,z+.001));
   float lit=.55+.45*dot(nrm,normalize(vec3(-.45,.55,.7)));
   float spec=pow(max(0.,dot(reflect(-normalize(vec3(-.35,.5,.8)),nrm),vec3(0,0,1))),28.);
-  float rim=pow(1.-z,2.6);
+  float rim=pow(max(0.,1.-z),2.6);
   col=col*lit+spec*.55+rim*mix(uC3,vec3(1),.35)*.8;
   float glow=exp(-max(0.,d-r)*(5.5-uLevel*2.))*(.32+uLevel*.45+uPulse*.4)*(1.-inside)*smoothstep(1.,.66,d);
   vec3 gcol=mix(uC2,uC1,.5+.5*sin(ang*2.+t*.4));

@@ -43,4 +43,17 @@ describe('声の一覧', () => {
     expect(g.map((x) => x.group)).toEqual(['にじさんじ', 'hololive Indonesia 1期生', 'ホロライブ', null]);
     expect(g[0]!.entries.map((x) => x.id)).toEqual(['v-2', 'v-3']);
   });
+  it('英語のページでは、出す名前（英語名。無い人は日本語の名前）の順に並べる', () => {
+    const en = [
+      { ...e('a', 'あいうえ', 'にじさんじ'), nameEn: 'Zed', groupEn: 'NIJISANJI' },
+      { ...e('b', 'かきくけ', 'にじさんじ'), nameEn: 'Amy' },
+      { ...e('c', 'さしすせ', 'ホロライブ'), groupEn: 'hololive' },
+      { ...e('d', 'たちつて', 'ぶいすぽ'), groupEn: 'VSPO!' },
+    ];
+    expect(groupByAffiliation(en, 'ja')[0]!.entries.map((x) => x.id)).toEqual(['a', 'b']);
+    expect(groupByAffiliation(en, 'en')[0]!.entries.map((x) => x.id)).toEqual(['b', 'a']);
+    // 同じ人数の所属も、出す所属の名前の順（英語では hololive が VSPO! より先）
+    expect(groupByAffiliation(en, 'ja').map((x) => x.group)).toEqual(['にじさんじ', 'ぶいすぽ', 'ホロライブ']);
+    expect(groupByAffiliation(en, 'en').map((x) => x.group)).toEqual(['にじさんじ', 'ホロライブ', 'ぶいすぽ']);
+  });
 });

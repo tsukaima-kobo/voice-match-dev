@@ -5,7 +5,9 @@
 // 使い方:
 //   node tools/intake.ts --sheet            GitHub Actions から（環境変数 GOOGLE_SA_KEY・SHEET_ID、任意で SHEET_RANGE・BLOCK_RANGE・NG_RANGE）
 //   node tools/intake.ts --csv 回答.csv     手で書き出した CSV から（運営の手元で試す時）
-// 書く物: data/generated/user-catalog.json・user-profiles.json（壁 ③ を通った声）。
+// 書く物: data/generated/user-catalog.json・user-profiles.json（壁 ③ を通った声。測り方の版は、使った登録の中でいちばん古い版）、
+//   removed-names.json（「削除」のタブの名前。サイトを作る時に、運営が測った声・拡張機能で測った声にも当てる。src/data/sources.ts。
+//   ページには入らない。data/generated/ はリポジトリにも公開ページにも入らない）。
 // 読む物: スプレッドシートの回答・「削除」のタブ（削除のお願いがあった名前）・「禁止の言葉」のタブ、data/model.json（照合のモデル）。
 // 毎回、回答の全部から作り直す（同じ回答なら同じ結果）。声の ID は名前から決まる（intake-lib.ts の userIdOf）。
 // 記録（Actions のログは公開される）には件数だけを出し、名前は出さない。読めなかった時は誤りで止める（サイトを公開しない）。
@@ -13,8 +15,10 @@
 // 削除のお願いがあった声がまた出てしまうため（止めた日は公開せず、前の日のページのまま）。
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MEASURE_VERSION, readableVersion } from '../src/voice/measure.ts';
-import { defaultModel, type MatchModel } from '../src/match/match.ts';
+import { MEASURE_VERSION } from '../src/voice/measure.ts';
+import type { MatchModel } from '../src/match/match.ts';
+import { modelProblem } from '../src/data/model-file.ts';
+import { oldestVersion } from './versions.ts';
 import type { Catalog, ProfileList } from '../src/data/types.ts';
 import { intake, INTAKE, rowsFromTable } from './intake-lib.ts';
 import { parseCsv } from './csv.ts';
@@ -61,14 +65,22 @@ if (args[0] === '--csv' && args[1]) {
   process.exit(1);
 }
 
-const m = JSON.parse(readFileSync(join(root, 'data', 'model.json'), 'utf8')) as Partial<MatchModel> & { version: string };
-const model: MatchModel = m.version !== 'none' && readableVersion(m.measureVersion) && Array.isArray(m.keys) ? (m as MatchModel) : defaultModel(MEASURE_VERSION);
+// 照合のモデルが使えない時は止める（壁 ③ の近さが変わるため。サイトのビルドも同じ時に止まる。vite.config.ts）
+const modelJson: unknown = JSON.parse(readFileSync(join(root, 'data', 'model.json'), 'utf8'));
+const problem = modelProblem(modelJson);
+if (problem) {
+  console.error(`止めました（今日は公開しません）: ${problem}。照合のモデルを作り直してください（README の「声のデータの作り方」）。`);
+  process.exit(1);
+}
+const model = modelJson as MatchModel;
 const r = intake(rowsFromTable(table), { model, ngWords, blocked });
 
 mkdirSync(out, { recursive: true });
+// 削除の一覧は、登録の声だけでなく、サイトに入れるどの声にも当てる（運営が測った声を Release から消し忘れても、名前か英語名が合えば出さない）
+write('removed-names.json', { version: 1, names: blocked });
 const catalog: Catalog = { version: 1, voices: r.voices.map((v) => ({ id: v.id, name: v.name, ...(v.group ? { group: v.group } : {}), ...(v.kinds ? { kinds: idsOf(v.kinds) } : {}), links: { profile: v.link } })) };
 write('user-catalog.json', catalog);
-const profiles: ProfileList = { version: MEASURE_VERSION, profiles: r.voices.map((v) => ({ id: v.id, version: MEASURE_VERSION, windows: v.used, videos: 0, features: v.features })) };
+const profiles: ProfileList = { version: oldestVersion(r.voices.map((v) => v.version), MEASURE_VERSION), profiles: r.voices.map((v) => ({ id: v.id, version: v.version, windows: v.used, videos: 0, features: v.features })) };
 write('user-profiles.json', profiles);
 
 const c = r.counts;

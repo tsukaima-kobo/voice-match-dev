@@ -520,7 +520,9 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
   const all = SHAPE_LAYERS.flatMap((l) => l.items.map((item) => ({ item, layer: l.key })));
   let step = -1,
     timer = 0,
-    delay = 0;
+    delay = 0,
+    // 案内が、いま項目を光らせている
+    shown = false;
   const off = new AbortController();
   const io = new IntersectionObserver((es) => {
     if (!es.some((e) => e.isIntersecting)) return;
@@ -531,7 +533,7 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
       if (!current) timer = window.setInterval(tour, 2600);
     }, 2600);
   });
-  // 止める: 始まる前の待ち時間の間でも、もう始めない
+  // 止める: 始まる前の待ち時間の間でも、もう始めない。案内が光らせていた項目は消す（押した名前は無いのに、光ったままにしない）
   const stop = () => {
     clearTimeout(delay);
     clearInterval(timer);
@@ -539,16 +541,15 @@ export function renderGuide(box: HTMLElement, views: readonly ShapeView[], value
     io.disconnect();
     off.abort();
     if (tours.get(box) === stop) tours.delete(box);
+    if (shown && !current) pick(null, null, false);
+    shown = false;
   };
   const tour = () => {
     if (current || !box.isConnected) return stop();
     step++;
-    if (step >= all.length) {
-      stop();
-      pick(null, null, false);
-      return;
-    }
+    if (step >= all.length) return stop();
     pick(all[step]!.item, all[step]!.layer, false);
+    shown = true;
   };
   for (const type of ['pointerdown', 'pointerenter', 'focusin']) box.addEventListener(type, stop, { signal: off.signal });
   tours.set(box, stop);

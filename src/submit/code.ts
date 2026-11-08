@@ -3,7 +3,7 @@
 // 受け取った後に tools/intake.ts がもう一度確かめる（ページの確認は回り込めるため）。
 // 入るのは数字・名前・所属や作品名・大枠・公式ページのリンク・測り方と測れた声の質だけ。音は入らない。送った人の情報も入らない。
 import { FEATURE_BY_KEY, FEATURE_KEYS, roundFeature, type FeatureKey, type Features } from '../voice/features.ts';
-import { MEASURE_VERSION } from '../voice/measure.ts';
+import { MEASURE_COMPATIBLE, MEASURE_VERSION, readableVersion } from '../voice/measure.ts';
 import { t } from '../i18n.ts';
 import { KIND_BITS_ALL } from '../data/kinds.ts';
 
@@ -13,7 +13,7 @@ export const CODE_PREFIX = 'voice-match:';
 export interface Submission {
   /** 形の版 */
   v: 1;
-  /** 測り方の版（MEASURE_VERSION）。違う版の数字は使わない */
+  /** 測り方の版（MEASURE_VERSION）。今の版とも、比べてよい前の版（MEASURE_COMPATIBLE）とも違う版の数字は使わない */
   m: string;
   /** 名前 */
   n: string;
@@ -44,9 +44,9 @@ export const LIMITS = {
   minSnr: 15,
 } as const;
 
-/** 人の声としてありうる幅（広め。外れたら壊れた数字か、作った数字） */
+/** 人の声としてありうる幅（広め。外れたら壊れた数字か、作った数字）。声の高さは、測り方が探す 1100 Hz まで */
 export const PLAUSIBLE: Record<FeatureKey, [number, number]> = {
-  pitch: [50, 700],
+  pitch: [50, 1100],
   pitchRange: [0, 36],
   pitchSkew: [-24, 24],
   pitchMotion: [0, 200],
@@ -92,8 +92,13 @@ export const PLAUSIBLE: Record<FeatureKey, [number, number]> = {
   levelRange: [0, 80],
   tilt: [-80, 40],
 };
-/** 無いと使えない項目 */
-export const REQUIRED: readonly FeatureKey[] = ['pitch', 'pitchRange', 'f1', 'f2', 'f3', 'hnr', 'rate'];
+/**
+ * 無くてよい項目（話す速さの揺れ・間の長さ・リズム）。運営が測った 1 万 2 千ほどの 30 秒の窓で、空になったのはこの 3 つだけ
+ * （間の少ない話し方では測れないことがある）。登録は 8 秒以上の声が要るので、ほかの項目は測れる。
+ */
+export const OPTIONAL: readonly FeatureKey[] = ['rateVar', 'pauseLen', 'rhythm'];
+/** 無いと使えない項目（OPTIONAL のほかの全部。数字の少ない送る内容で、壁 ③ を通りやすくしないため） */
+export const REQUIRED: readonly FeatureKey[] = FEATURE_KEYS.filter((k) => !OPTIONAL.includes(k));
 
 /** 短縮 URL（行き先が分からないので受け付けない） */
 const SHORTENERS = ['bit.ly', 't.co', 'tinyurl.com', 'goo.gl', 'is.gd', 'ow.ly', 'buff.ly', 'rebrand.ly', 'cutt.ly', 'shorturl.at', 'x.gd', 'amzn.to'];
@@ -153,13 +158,17 @@ export function decodeSubmission(text: string): Submission | null {
 const INVISIBLE = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2800]/gu;
 export const hasInvisible = (text: string): boolean => text.search(INVISIBLE) >= 0;
 
-/** 名前を比べるための形（見えない文字を除き、全角・半角や大文字・小文字、空白と記号の違いをそろえる） */
+/**
+ * 名前を比べるための形（見えない文字を除き、全角・半角や大文字・小文字、ひらがな・カタカナ、空白と記号の違いをそろえる）。
+ * 削除の一覧・禁止の言葉・同じ名前の見分けに使う（「サクラミコ」「ｻｸﾗﾐｺ」も「さくらみこ」と同じ。声の一覧の探し方 catalog-search.ts の searchKey と同じそろえ方）。
+ */
 export function nameKey(name: string): string {
   return name
     .replace(INVISIBLE, '')
     .normalize('NFKC')
     .replace(INVISIBLE, '')
     .toLowerCase()
+    .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
     .replace(/[\s・･、。,.\-_~〜!！?？'"“”‘’()（）[\]［］【】「」『』]/g, '');
 }
 
@@ -175,7 +184,8 @@ export interface Problem {
 /** 壁 ①: 送る内容を確かめる。問題が無ければ空の配列 */
 export function checkSubmission(s: Submission): Problem[] {
   const out: Problem[] = [];
-  if (s.m !== MEASURE_VERSION) out.push({ kind: 'version', text: t(`測り方の版が違います（${s.m}。今は ${MEASURE_VERSION}）。ページを読み直して、測り直してください。`, `It was measured with another version (${s.m}; now ${MEASURE_VERSION}). Reload the page and measure again.`) });
+  // 今の版か、比べてよい前の版（MEASURE_COMPATIBLE）なら受ける（ページでも取り込みでも同じ）
+  if (!readableVersion(s.m)) out.push({ kind: 'version', text: t(`測り方の版（${s.m}）が違うので使えません（使える版: ${[MEASURE_VERSION, ...MEASURE_COMPATIBLE].join('・')}）。ページを読み直して、測り直してください。`, `It was measured with version ${s.m}, which cannot be used now (usable: ${[MEASURE_VERSION, ...MEASURE_COMPATIBLE].join(', ')}). Reload the page and measure again.`) });
   if (s.f.length !== FEATURE_KEYS.length) {
     out.push({ kind: 'shape', text: t('数字の数が合いません。', 'The number of values does not match.') });
     return out;

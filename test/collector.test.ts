@@ -5,7 +5,7 @@ import type { VoiceFile, VoiceWindow } from '../src/data/types.ts';
 
 const RATE = 1000;
 const chunk = () => new Float32Array(500);
-const playing = (time: number, over: Partial<PlayState> = {}): PlayState => ({ video: 'abc123def45', time, paused: false, seeking: false, rate: 1, ad: false, ...over });
+const playing = (time: number, over: Partial<PlayState> = {}): PlayState => ({ video: 'abc123def45', time, paused: false, seeking: false, rate: 1, ad: false, stalled: false, ...over });
 
 /** `from` から `seconds` 秒分の音を流す（動画の時刻も一緒に進む） */
 function feed(w: Windower, from: number, seconds: number, over: Partial<PlayState> = {}) {
@@ -30,6 +30,7 @@ describe('窓にまとめる', () => {
     for (const [over, reason] of [
       [{ ad: true }, 'ad'],
       [{ paused: true }, 'paused'],
+      [{ stalled: true }, 'stall'],
       [{ rate: 1.5 }, 'speed'],
       [{ video: 'zzzzzzzzzzz' }, 'other-video'],
     ] as const) {
@@ -44,6 +45,51 @@ describe('窓にまとめる', () => {
     feed(w, 0, 20);
     expect(feed(w, 300, 29).length).toBe(0);
     expect(w.lastBreak).toBe('jump');
+  });
+});
+
+describe('読み込みで止まった所', () => {
+  it('音だけ進んで動画の時計が止まったら（無音が流れる）、再生位置が飛んだとは言わずに捨て、止まった所を窓に入れない', () => {
+    const w = new Windower(RATE);
+    feed(w, 100, 10);
+    // 2 秒、動画は 110 秒の所で止まったまま、無音のかたまりが届く
+    for (let k = 0; k < 4; k++) w.push(chunk(), playing(110));
+    expect(w.lastBreak).toBe('stall');
+    // 動き出したら、そこから 30 秒で窓が出る。前の 10 秒は捨てた。入った無音は 0.5 秒まで
+    const got = feed(w, 110, 31);
+    expect(got.length).toBe(1);
+    expect(got[0]!.t0).toBeGreaterThanOrEqual(109.5);
+    expect(got[0]!.t1 - got[0]!.t0).toBeCloseTo(WINDOW_SECONDS, 5);
+  });
+  it('前へ戻ったのは、止まったのではなく再生位置が飛んだ', () => {
+    const w = new Windower(RATE);
+    feed(w, 100, 10);
+    w.push(chunk(), playing(104));
+    expect(w.lastBreak).toBe('jump');
+  });
+  it('動画の時計が少しふらついても（0.1 秒）、捨てない', () => {
+    const w = new Windower(RATE);
+    const got = [];
+    for (let k = 1; k <= 130; k++) {
+      const d = w.push(chunk(), playing(100 + k * 0.5 + 0.1 * Math.sin(k * 1.7)));
+      if (d) got.push(d);
+    }
+    expect(w.lastBreak).toBe(null);
+    expect(got.length).toBe(2);
+  });
+});
+
+describe('受け損ねたかたまり', () => {
+  it('途中までの窓を捨てる。1 秒に満たない時は知らせない', () => {
+    const w = new Windower(RATE);
+    w.push(chunk(), playing(100.5));
+    w.gap();
+    expect(w.lastBreak).toBe(null);
+    expect(w.seconds()).toBe(0);
+    feed(w, 100.5, 5);
+    w.gap();
+    expect(w.lastBreak).toBe('gap');
+    expect(w.seconds()).toBe(0);
   });
 });
 

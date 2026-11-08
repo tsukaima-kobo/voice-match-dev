@@ -1,10 +1,12 @@
 // 収集の拡張機能の、DOM を使わない部分（test/collector.test.ts で試す）。
-// 再生中の音を 30 秒ずつの窓にまとめ、途切れ（一時停止・シーク・広告・速度の変更・動画の切り替え）があれば、その窓は捨てる。
+// 再生中の音を 30 秒ずつの窓にまとめ、途切れ（一時停止・シーク・広告・速度の変更・動画の切り替え・読み込みで止まった所）があれば、その窓は捨てる。
 // 窓の音は measure.ts で数字にしたら捨てる。残すのは数字・動画 ID・時刻だけ。
 import type { Measured } from '../../src/voice/measure.ts';
 import type { VoiceFile, VoiceWindow } from '../../src/data/types.ts';
 
 export const WINDOW_SECONDS = 30;
+/** 音だけ進んで、動画の時計がこれより遅れたら、読み込みで止まった（その間は無音が流れる）とみる（秒） */
+export const STALL_SECONDS = 0.5;
 
 /** 今の再生の様子（content.ts が動画の要素から読む） */
 export interface PlayState {
@@ -14,9 +16,11 @@ export interface PlayState {
   seeking: boolean;
   rate: number;
   ad: boolean;
+  /** 再生中なのに、読み込みで止まっている（動画の readyState が足りない） */
+  stalled: boolean;
 }
 
-export type BreakReason = 'ad' | 'paused' | 'speed' | 'jump' | 'other-video' | 'no-video';
+export type BreakReason = 'ad' | 'paused' | 'stall' | 'speed' | 'jump' | 'gap' | 'other-video' | 'no-video';
 
 export interface Finished {
   pcm: Float32Array;
@@ -38,6 +42,8 @@ export class Windower {
   private chunks: Float32Array[] = [];
   private got = 0;
   private t0 = 0;
+  /** 前のかたまりの動画の時刻 */
+  private last = 0;
   private video: string | null = null;
   readonly sampleRate: number;
   /** 最後に窓を捨てた理由（パネルに出す） */
@@ -58,9 +64,14 @@ export class Windower {
     this.got = 0;
   }
 
+  /** かたまりを受け損ねた（音が途切れた）: 途中までの窓を捨てる。1 秒に満たない時は、知らせずに捨てる */
+  gap(): void {
+    this.reset(this.seconds() >= 1 ? 'gap' : null);
+  }
+
   push(samples: Float32Array, s: PlayState): Finished | null {
     const dur = samples.length / this.sampleRate;
-    const stop: BreakReason | null = !s.video ? 'no-video' : s.ad ? 'ad' : s.paused || s.seeking ? 'paused' : s.rate !== 1 ? 'speed' : null;
+    const stop: BreakReason | null = !s.video ? 'no-video' : s.ad ? 'ad' : s.paused || s.seeking ? 'paused' : s.stalled ? 'stall' : s.rate !== 1 ? 'speed' : null;
     if (stop || !s.video) {
       this.reset(stop);
       return null;
@@ -68,11 +79,17 @@ export class Windower {
     if (this.video !== null && s.video !== this.video) this.reset('other-video');
     this.video = s.video;
     if (this.got === 0) this.t0 = s.time - dur;
-    // 動画の時計は、音と同じだけ進んでいるはず: 1 秒より多くずれたらシーク
-    else if (Math.abs(s.time - (this.t0 + this.got / this.sampleRate + dur)) > 1) {
-      this.reset('jump');
-      this.t0 = s.time - dur;
+    else {
+      // 動画の時計は、音と同じだけ進んでいるはず。先へ 1 秒より多くずれた・前より戻った: シーク。
+      // 音だけ進んで動画の時計が遅れた: 読み込みで止まり、その間は無音が流れた（止まった所は、一時停止と同じに捨てる）
+      const off = s.time - (this.t0 + this.got / this.sampleRate + dur);
+      const brk: BreakReason | null = off > 1 || s.time < this.last - 0.25 ? 'jump' : off < -STALL_SECONDS ? 'stall' : null;
+      if (brk) {
+        this.reset(brk);
+        this.t0 = s.time - dur;
+      }
     }
+    this.last = s.time;
     this.chunks.push(samples);
     this.got += samples.length;
     if (this.got < WINDOW_SECONDS * this.sampleRate) return null;

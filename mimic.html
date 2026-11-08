@@ -50,9 +50,9 @@
               <button type="button" id="ref-mic-find"><span lang="ja">ほかのマイクを選ぶ</span><span lang="en">Choose another mic</span></button>
             </div>
             <ul class="source-notes">
-              <li><span lang="ja"><strong>マイク</strong>: スマホやテレビなど、ほかの機器で流して、マイクに聞かせます。</span><span lang="en"><strong>Mic</strong>: play it on another device, such as a phone or TV, into the microphone.</span></li>
+              <li><span lang="ja"><strong>マイク</strong>: スマホやテレビ、ほかのタブやアプリで流して、マイクに聞かせます（音が聞こえないまま 60 秒たつと止めます）。</span><span lang="en"><strong>Mic</strong>: play it on a phone or TV, or in another tab or app, into the microphone (it stops if no sound is heard for 60 s).</span></li>
               <li id="ref-tab-note" hidden><span lang="ja"><strong>ほかのタブ</strong>: 動画を開いたタブの音を、そのまま取ります（パソコンの Chrome・Edge）。共有する画面で「タブの音声も共有する」をオンにしてください。</span><span lang="en"><strong>Another tab</strong>: captures the sound of the tab with the video directly (Chrome or Edge on a computer). Turn on “Share tab audio” when sharing.</span></li>
-              <li><span lang="ja"><strong>音声ファイル</strong>: 20 MB まで。長い時は最初の 3 分を使います。</span><span lang="en"><strong>Sound file</strong>: up to 20 MB. For a long file, the first 3 minutes are used.</span></li>
+              <li><span lang="ja"><strong>音声ファイル</strong>: mp3・m4a などは 10 MB、wav・flac は 32 MB まで。長い時は最初の 3 分を使います。</span><span lang="en"><strong>Sound file</strong>: up to 10 MB for mp3, m4a and the like, or 32 MB for wav and flac. For a long file, the first 3 minutes are used.</span></li>
             </ul>
             <div class="field" id="ref-catalog-box" hidden>
               <label for="ref-catalog"><span lang="ja">このサイトで測ったお手本から選ぶ</span><span lang="en">Choose from voices measured by this site</span>（<span id="ref-catalog-count"></span>）</label>
@@ -60,7 +60,7 @@
               <datalist id="ref-catalog-list"></datalist>
             </div>
             <div class="field">
-              <label for="ref-name"><span lang="ja">お手本の名前（メモ。画面に出すだけで、どこにも送りません）</span><span lang="en">Name of the model (a note; only shown here, never sent)</span></label>
+              <label for="ref-name"><span lang="ja">お手本の名前（メモ。この画面のほか、結果の画像・「X に投稿」の文・登録の名前の欄にも入ります。外に出るのは、あなたがそれを投稿・送信した時だけです）</span><span lang="en">Name of the model (a note; besides this page, it goes into the result image, the “Post on X” text and the name field for adding the voice. It leaves this device only if you post or send those)</span></label>
               <input type="text" id="ref-name" maxlength="40" autocomplete="off" placeholder="例: 好きなキャラ" data-en-placeholder="e.g. a favourite character" />
             </div>
           </div>
@@ -81,7 +81,7 @@
           <details class="register" id="register" hidden>
             <summary><span lang="ja">この声をサイトに登録する（ログインなし・だれでも）</span><span lang="en">Add this voice to the site (anyone, no login)</span></summary>
             <div class="register-body">
-              <p class="hint"><span lang="ja">登録すると、この声の数字・名前・所属・大枠・リンクが公開され、声をくらべるページの相手になります。毎日まとめて確かめ、別々の 3 人以上の数字がそろった声から出します。音は送りません。あなたの名前やメールも送りません。もう入っている声と、名前・所属の書き方は、<a href="./voices.html">声の一覧</a>で見られます。</span><span lang="en">When added, this voice’s numbers, name, agency, category and link become public and can be compared on the main page. Entries are checked once a day; a voice appears once three or more separate entries agree. No sound is sent, and neither is your name or email. The <a href="./voices.html">voice list</a> shows the voices already here and how names and agencies are written.</span></p>
+              <p class="hint"><span lang="ja">登録すると、この声の数字・名前・所属・大枠・リンクが公開され、声をくらべるページの相手になります。毎日まとめて確かめ、別々の 3 件以上の数字がそろった声から出します。音は送りません。あなたの名前やメールも送りません。もう入っている声と、名前・所属の書き方は、<a href="./voices.html">声の一覧</a>で見られます。</span><span lang="en">When added, this voice’s numbers, name, agency, category and link become public and can be compared on the main page. Entries are checked once a day; a voice appears once three or more separate entries agree. No sound is sent, and neither is your name or email. The <a href="./voices.html">voice list</a> shows the voices already here and how names and agencies are written.</span></p>
               <div class="field">
                 <label for="reg-name"><span lang="ja">名前（必須）</span><span lang="en">Name (required)</span></label>
                 <input type="text" id="reg-name" maxlength="40" autocomplete="off" />

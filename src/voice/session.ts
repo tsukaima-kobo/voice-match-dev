@@ -1,6 +1,7 @@
 // じっくり測る（measure.html）の、画面の無い部分。決まった文を読み続けた声を 30 秒ずつに切って測り、
 // サイトの声の代表値と同じ作り方（30 秒ごとの数字 → 高さが外れた窓を除く → 項目ごとの中央値）でまとめる。
 // 窓の決まりは tools/lib.ts の SELECT と同じ（test/session.test.ts で確かめる）。音は持たない（切った窓は、測る所へ渡したら手放す）。
+// 書き出すファイルは数字だけ。音も、マイクの名前（「山田の AirPods」のように人の名前が入ることがある）も入れない。
 // 乱数を使うのは、決まった文の並びだけ。
 import { type Features } from './features.ts';
 import { medianFeatures, LONG_WINDOW_SECONDS } from './combine.ts';
@@ -90,19 +91,17 @@ export function shuffled(n: number, random: () => number = Math.random): number[
   return a;
 }
 
-/** 書き出すファイル（数字だけ。音・名前は入らない） */
+/** 書き出すファイル（数字だけ。音・名前・マイクの名前は入らない） */
 export interface SessionFile {
   kind: 'voice-match-session';
   version: 1;
   measureVersion: string;
   /** 測った日（YYYY-MM-DD） */
   date: string;
-  /** 使ったマイクの名前（端末が教えた物。分からなければ無し） */
-  mic?: string;
   windows: SessionWindow[];
   median: Features | null;
 }
 
-export function sessionFile(o: { measureVersion: string; date: string; mic?: string; windows: readonly SessionWindow[] }): SessionFile {
-  return { kind: 'voice-match-session', version: 1, measureVersion: o.measureVersion, date: o.date, ...(o.mic ? { mic: o.mic } : {}), windows: [...o.windows], median: summarize(o.windows).median };
+export function sessionFile(o: { measureVersion: string; date: string; windows: readonly SessionWindow[] }): SessionFile {
+  return { kind: 'voice-match-session', version: 1, measureVersion: o.measureVersion, date: o.date, windows: [...o.windows], median: summarize(o.windows).median };
 }

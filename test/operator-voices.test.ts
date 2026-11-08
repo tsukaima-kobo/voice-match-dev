@@ -1,9 +1,9 @@
 // 運営が測った声の代表値（tools/operator-voices-lib.ts）と、サイトでのまとめ方（src/data/sources.ts）
 import { describe, expect, it } from 'vitest';
-import { buildOperatorVoices, parseIdList, type Snapshot } from '../tools/operator-voices-lib.ts';
+import { buildOperatorVoices, parseIdList, sameNameGroups, type Snapshot } from '../tools/operator-voices-lib.ts';
 import { checkOperatorVoices, fromOperatorVoices, mergeVoices } from '../src/data/sources.ts';
 import { FEATURE_KEYS } from '../src/voice/features.ts';
-import { MEASURE_VERSION } from '../src/voice/measure.ts';
+import { MEASURE_COMPATIBLE, MEASURE_VERSION } from '../src/voice/measure.ts';
 
 /** 1 人分の窓（高さだけ変える。ほかの項目は決まった値） */
 function windows(id: string, video: string, pitches: (number | null)[]) {
@@ -100,6 +100,44 @@ describe('運営が測った声の代表値', () => {
 
   it('測り方の版が違うデータは使わない', () => {
     expect(() => buildOperatorVoices(snap([person('a')], windows('a', 'v1', twelve), '0.0.1'), { measureVersion: MEASURE_VERSION, only: null })).toThrow(/版/);
+    // 窓ごとの版が比べられない時も止める
+    const bad = windows('a', 'v1', twelve).map((m) => ({ ...m, measureVersion: '0.0.1' }));
+    expect(() => buildOperatorVoices(snap([person('a')], bad), { measureVersion: MEASURE_VERSION, only: null })).toThrow(/版/);
+  });
+
+  it('ファイルの測り方の版は、使った窓の中でいちばん古い版（今の版だけなら今の版）', () => {
+    const old = MEASURE_COMPATIBLE[0]!;
+    const ver = (ms: Snapshot['measurements'], v: string) => ms.map((m) => ({ ...m, measureVersion: v }));
+    const s = snap([person('a'), person('b')], [...ver(windows('a', 'v1', twelve), old), ...ver(windows('b', 'v1', twelve), MEASURE_VERSION)], MEASURE_VERSION);
+    s.summary = { measureVersions: [old, MEASURE_VERSION] };
+    expect(buildOperatorVoices(s, { measureVersion: MEASURE_VERSION, only: null }).file.measureVersion).toBe(old);
+    // 出す人が今の版の窓だけなら、今の版
+    expect(buildOperatorVoices(s, { measureVersion: MEASURE_VERSION, only: new Set(['b']) }).file.measureVersion).toBe(MEASURE_VERSION);
+    // 窓に版が無い時（収集の書き出し）は、データ全体の版のうちいちばん古い物
+    expect(buildOperatorVoices(snap([person('a')], windows('a', 'v1', twelve), old), { measureVersion: MEASURE_VERSION, only: null }).file.measureVersion).toBe(old);
+  });
+
+  it('氏名が空（記号だけ）の人は入れず、記録に出す', () => {
+    const r = buildOperatorVoices(snap([person('a', { name: '' }), person('b', { name: ' ・ ' }), person('c')], ['a', 'b', 'c'].flatMap((id) => windows(id, 'v1', twelve))), { measureVersion: MEASURE_VERSION, only: null });
+    expect(r.file.voices.map((v) => v.name)).toEqual(['名前 c']);
+    expect(r.notes.join('\n')).toMatch(/a: .*氏名が空/);
+    expect(r.notes.join('\n')).toMatch(/b: .*氏名が空/);
+  });
+
+  it('サイトで同じ名前として 1 人しか出ない人たち（名前か英語名が同じ。カタカナ・ひらがなの違いも同じ）は、大きく知らせる', () => {
+    const r = buildOperatorVoices(
+      snap([person('a', { name: 'ルーナ', nameEn: 'Luna' }), person('b', { name: 'LUNA' }), person('c', { name: 'るーな' }), person('d', { name: 'りん' }), person('e', { name: '凛', nameEn: 'Rin' })], ['a', 'b', 'c', 'd', 'e'].flatMap((id) => windows(id, 'v1', twelve))),
+      { measureVersion: MEASURE_VERSION, only: null },
+    );
+    // ファイルには全員が入る（どれを直すかは運営が決める）
+    expect(r.file.voices).toHaveLength(5);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toMatch(/先の「ルーナ」だけ.*a「ルーナ \/ Luna」・b「LUNA」・c「るーな」/);
+    // サイトでのまとめ方と同じ見方: 出ない人は 2 人
+    const m = mergeVoices([fromOperatorVoices(r.file)], MEASURE_VERSION);
+    expect(m.voices.map((v) => v.name)).toEqual(['ルーナ', 'りん', '凛']);
+    expect(m.dropped.map((d) => [d.name, d.reason])).toEqual([['LUNA', 'same'], ['るーな', 'same']]);
+    expect(sameNameGroups([{ name: 'A' }, { name: 'B', nameEn: 'a' }, { name: 'C', nameEn: 'b' }, { name: 'D' }]).map((g) => g.map((x) => x.name))).toEqual([['A', 'B', 'C']]);
   });
 
   it('一覧の読み方: # から後と空の行は無視', () => {
@@ -139,6 +177,40 @@ describe('サイトでのまとめ方', () => {
       profiles: ['u-1', 'u-2', 'u-3'].map((id) => ({ id, version: MEASURE_VERSION, features: f })),
     };
     expect(mergeVoices([en, users], MEASURE_VERSION).voices.map((v) => v.name)).toEqual(['さくら', 'Sakura']);
+  });
+  it('削除の一覧の名前は、どの元の声にも当てる（名前か英語名が合えば入れない。運営の声を Release から消した後の、登録の同じ名前の声も）', () => {
+    const en = fromOperatorVoices({ version: 1, measureVersion: MEASURE_VERSION, voices: [{ name: 'さくらみこ', nameEn: 'Sakura Miko', link: 'https://example.com/s', features: f }, { name: '残る人', link: 'https://example.com/k', features: f }] });
+    const users = {
+      voices: [
+        { id: 'u-1', name: 'サクラミコ', links: { profile: 'https://example.com/u1' } },
+        { id: 'u-2', name: 'Sakura Miko', links: { profile: 'https://example.com/u2' } },
+        { id: 'u-3', name: '別の人', links: { profile: 'https://example.com/u3' } },
+      ],
+      profiles: ['u-1', 'u-2', 'u-3'].map((id) => ({ id, version: MEASURE_VERSION, features: f })),
+    };
+    // 日本語の名前（書き方が少し違ってもよい）だけを書いても、英語名で登録された声も出ない
+    const byJa = mergeVoices([en, users], MEASURE_VERSION, { removed: ['ｻｸﾗﾐｺ'] });
+    expect(byJa.voices.map((v) => v.name)).toEqual(['残る人', '別の人']);
+    expect(byJa.dropped.map((d) => [d.source, d.name, d.reason])).toEqual([[0, 'さくらみこ', 'removed'], [1, 'サクラミコ', 'removed'], [1, 'Sakura Miko', 'removed']]);
+    // 英語名だけを書いても同じ
+    expect(mergeVoices([en, users], MEASURE_VERSION, { removed: ['sakura miko'] }).voices.map((v) => v.name)).toEqual(['残る人', '別の人']);
+    // Release から消した後（運営の声が無い）: 登録の同じ名前の声は、一覧に日本語と英語の両方を書けば出ない
+    const gone = fromOperatorVoices({ version: 1, measureVersion: MEASURE_VERSION, voices: [] });
+    expect(mergeVoices([gone, users], MEASURE_VERSION).voices.map((v) => v.name)).toEqual(['サクラミコ', 'Sakura Miko', '別の人']);
+    expect(mergeVoices([gone, users], MEASURE_VERSION, { removed: ['さくらみこ', 'Sakura Miko'] }).voices.map((v) => v.name)).toEqual(['別の人']);
+  });
+  it('名前の無い声は入れない。同じ元の中の同じ名前も、入れなかった声として返す', () => {
+    const src = {
+      voices: [
+        { id: 'x-1', name: 'みこ', links: { profile: 'https://example.com/1' } },
+        { id: 'x-2', name: ' ・ ', links: { profile: 'https://example.com/2' } },
+        { id: 'x-3', name: 'ミコ', links: { profile: 'https://example.com/3' } },
+      ],
+      profiles: ['x-1', 'x-2', 'x-3'].map((id) => ({ id, version: MEASURE_VERSION, features: f })),
+    };
+    const m = mergeVoices([src], MEASURE_VERSION);
+    expect(m.voices.map((v) => v.name)).toEqual(['みこ']);
+    expect(m.dropped.map((d) => [d.name, d.reason])).toEqual([[' ・ ', 'noName'], ['ミコ', 'same']]);
   });
   it('運営が測った声のファイルの版が今と違う時は、黙って 0 人にせず止める', () => {
     expect(() => checkOperatorVoices({ version: 1, measureVersion: '0.0.1', voices: [] }, MEASURE_VERSION)).toThrow(/版/);

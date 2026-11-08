@@ -165,10 +165,16 @@ describe('シートから、運営が測った声の代表値を作る', () => {
     const V = [...MEASURE_HEAD, '測定バージョン'];
     const withV = (v: string | null): Cell[][] => [V, ...pitches.map((p, i) => [...measureRow('a', i < 6 ? 'v1' : 'v2', p), v])];
     const build = (rows: Cell[][]) => buildOperatorVoices(snapshotFromSheet(readXlsx(xlsx({ 人物一覧: people, 声の測定値: rows })), MEASURE_VERSION), { measureVersion: MEASURE_VERSION, only: null });
-    expect(build(rows).file.measureVersion).toBe(MEASURE_VERSION);
+    // ファイルには、使った窓の中でいちばん古い版を書く（版の列が無い・空の行は 3.1.0）
+    expect(build(rows).file.measureVersion).toBe('3.1.0');
     expect(build(withV('3.1.0')).file.voices).toHaveLength(1);
     expect(build(withV(MEASURE_VERSION)).file.voices).toHaveLength(1);
+    expect(build(withV(MEASURE_VERSION)).file.measureVersion).toBe(MEASURE_VERSION);
     expect(build(withV(null)).file.voices).toHaveLength(1);
+    expect(build(withV(null)).file.measureVersion).toBe('3.1.0');
+    const mixed: Cell[][] = [V, ...pitches.map((p, i) => [...measureRow('a', i < 6 ? 'v1' : 'v2', p), i % 2 ? MEASURE_VERSION : null])];
+    expect(snapshotFromSheet(readXlsx(xlsx({ 人物一覧: people, 声の測定値: mixed })), MEASURE_VERSION).summary?.measureVersions).toEqual(['3.1.0', MEASURE_VERSION].sort());
+    expect(build(mixed).file.measureVersion).toBe('3.1.0');
     expect(() => build(withV('2.0.0'))).toThrow(/比べられない/);
   });
 });

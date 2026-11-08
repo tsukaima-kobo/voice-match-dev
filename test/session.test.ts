@@ -45,9 +45,12 @@ describe('じっくり測る', () => {
     expect([...order].sort((a, b) => a - b)).toEqual(Array.from({ length: 23 }, (_, i) => i));
   });
 
-  it('書き出すファイルは数字だけ（音・名前は入らない）', () => {
-    const f = sessionFile({ measureVersion: '3.1.0', date: '2026-11-07', mic: '内蔵マイク', windows: Array.from({ length: 10 }, (_, i) => win(i * 30, 200)) });
-    expect(Object.keys(f).sort()).toEqual(['date', 'kind', 'measureVersion', 'median', 'mic', 'version', 'windows']);
+  it('書き出すファイルは数字だけ（音・名前・マイクの名前は入らない）', () => {
+    // 呼ぶ側が余計な物（マイクの名前など）を持っていても、ファイルには入れない
+    const given = { measureVersion: '3.1.0', date: '2026-11-07', mic: '山田の AirPods', label: '山田の AirPods', windows: Array.from({ length: 10 }, (_, i) => win(i * 30, 200)) };
+    const f = sessionFile(given);
+    expect(Object.keys(f).sort()).toEqual(['date', 'kind', 'measureVersion', 'median', 'version', 'windows']);
+    expect(JSON.stringify(f)).not.toContain('AirPods');
     expect(Object.keys(f.windows[0]!).sort()).toEqual(['features', 'ok', 'snrDb', 't0', 'voicedSeconds']);
     expect(f.median!.pitch).toBe(200);
   });

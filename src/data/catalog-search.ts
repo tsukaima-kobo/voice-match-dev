@@ -1,7 +1,9 @@
-// 声の一覧（voices.html）の、画面の無い部分。名前・所属（英語の名前でも）で探す・大枠で絞る・所属ごとに分ける。DOM なし・乱数なし。
+// 声の一覧（voices.html）の、画面の無い部分。名前・所属（英語の名前でも）で探す・大枠で絞る・所属ごとに分ける（今の言葉で出す名前の順）。DOM なし・乱数なし。
 // 探す言葉は、全角と半角・大文字と小文字・ひらがなとカタカナ・空白と「・」の違いを気にしない。
 import type { CatalogEntry } from './types.ts';
 import { maskOf } from './kinds.ts';
+import { nameOf } from './names.ts';
+import { lang as pageLang, type Lang } from '../i18n.ts';
 
 /** 探すための形（全角半角・大文字小文字・ひらがなカタカナ・空白や記号の違いをそろえる） */
 export function searchKey(s: string): string {
@@ -26,8 +28,11 @@ export function filterCatalog(entries: readonly CatalogEntry[], query: string, k
   });
 }
 
-/** 所属ごとに分ける。人の多い所属から（同じ数なら名前順）。所属の無い声は最後。中は名前順。groupEn は、その所属の英語の名前（誰かにあれば） */
-export function groupByAffiliation(entries: readonly CatalogEntry[]): { group: string | null; groupEn?: string; entries: CatalogEntry[] }[] {
+/**
+ * 所属ごとに分ける。人の多い所属から（同じ数なら所属の名前順）。所属の無い声は最後。中は名前順。groupEn は、その所属の英語の名前（誰かにあれば）。
+ * 名前順は、その言葉のページに出す名前で並べる（英語のページでは英語名。無い人は日本語の名前）
+ */
+export function groupByAffiliation(entries: readonly CatalogEntry[], l: Lang = pageLang): { group: string | null; groupEn?: string; entries: CatalogEntry[] }[] {
   const by = new Map<string | null, CatalogEntry[]>();
   for (const e of entries) {
     const g = e.group?.trim() || null;
@@ -35,11 +40,12 @@ export function groupByAffiliation(entries: readonly CatalogEntry[]): { group: s
     if (list) list.push(e);
     else by.set(g, [e]);
   }
-  const cmp = (a: string, b: string) => a.localeCompare(b, 'ja');
+  const cmp = (a: string, b: string) => a.localeCompare(b, l);
+  const shownGroup = (g: { group: string | null; groupEn?: string }) => (l === 'en' && g.groupEn) || g.group || '';
   return [...by]
     .map(([group, list]) => {
       const groupEn = list.find((e) => e.groupEn)?.groupEn;
-      return { group, ...(group && groupEn ? { groupEn } : {}), entries: list.sort((a, b) => cmp(a.name, b.name) || cmp(a.id, b.id)) };
+      return { group, ...(group && groupEn ? { groupEn } : {}), entries: list.sort((a, b) => cmp(nameOf(a, l), nameOf(b, l)) || cmp(a.id, b.id)) };
     })
-    .sort((a, b) => (a.group === null ? 1 : 0) - (b.group === null ? 1 : 0) || b.entries.length - a.entries.length || cmp(a.group ?? '', b.group ?? ''));
+    .sort((a, b) => (a.group === null ? 1 : 0) - (b.group === null ? 1 : 0) || b.entries.length - a.entries.length || cmp(shownGroup(a), shownGroup(b)));
 }

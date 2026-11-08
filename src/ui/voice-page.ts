@@ -64,8 +64,11 @@ type State = 'idle' | 'asking' | 'listening' | 'analysing' | 'failed' | 'done';
 type Msg = () => string;
 const M = (ja: string, en: string): Msg => () => t(ja, en);
 
-const mics = micPicker([{ box: $('mic-pick'), select: $<HTMLSelectElement>('mic-select'), find: $<HTMLButtonElement>('mic-find') }], (text) => {
-  statusEl.textContent = text;
+// マイクの一覧が出せなかった時の知らせも、言葉を切り替えたら出し直す
+const mics = micPicker([{ box: $('mic-pick'), select: $<HTMLSelectElement>('mic-select'), find: $<HTMLButtonElement>('mic-find') }], (msg) => {
+  statusMsg = msg;
+  statusBad = true;
+  statusEl.textContent = msg();
   statusEl.classList.add('bad');
 });
 const ORB_MODE: Partial<Record<State, OrbMode>> = { listening: 'listening', analysing: 'analysing', done: 'done' };
@@ -83,10 +86,11 @@ let reading = false;
 let passage = nextReadingIndex(null);
 /** これまでの回の数字（音は持たない） */
 let takes: Take[] = [];
-/** 前の結果の並び（上がった・下がったを出すため） */
-let lastRank: string[] = [];
-/** 出している結果（言葉を切り替えた時に出し直すため） */
-let shown: { c: Combined; m: Extract<Measured, { ok: true }>; before: string[] } | null = null;
+/**
+ * 出している結果（言葉・探す範囲・比べる相手を変えた時に出し直すため）。prev は、この回の前までの回をまとめた数字。
+ * 上がった・下がったは、prev を「今の」比べる相手で並べた物と比べる（大枠やあなたの声を変えても、同じ相手どうしで比べる）
+ */
+let shown: { c: Combined; m: Extract<Measured, { ok: true }>; prev: Combined | null } | null = null;
 
 /* ---- お題 ---- */
 function showTopic() {
@@ -243,7 +247,6 @@ function cancel() {
 }
 function reset() {
   takes = [];
-  lastRank = [];
   shown = null;
   result.hidden = true;
   show('idle', M('はじめからにしました。前の回の数字も消しました。', 'Started over. The earlier numbers were cleared too.'));
@@ -311,10 +314,8 @@ function setKind(mask: number) {
   if (mask === kindFilter) return;
   kindFilter = mask;
   drawKindChips();
-  if (!shown) return;
-  // 次の回の矢印は、この範囲の中で比べる
-  lastRank = rank(MODEL, shown.c.features, candidates(), 5).map((r) => r.id);
-  draw();
+  // 出している結果を、この範囲で並べ直す（矢印も、前の回をこの範囲で並べた物と比べる）
+  if (shown) draw();
 }
 void voicesReady.then(() => {
   ready = true;
@@ -337,11 +338,9 @@ function drawMineNote() {
   $('mine-in-text').textContent = t('じっくり測ったあなたの声も、比べる相手に入っています（この端末のブラウザーだけ）。', 'Your voice measured in depth is also among the voices compared (this browser only).');
   $('mine-clear').textContent = t('外す', 'Remove');
 }
-/** 比べる相手が変わった時: 出している結果を、今の相手で並べ直す */
+/** 比べる相手が変わった時: 出している結果を、今の相手で並べ直す（矢印も、前の回を今の相手で並べた物と比べる） */
 function rerank() {
-  if (!shown) return;
-  lastRank = rank(MODEL, shown.c.features, candidates(), 5).map((r) => r.id);
-  draw();
+  if (shown) draw();
 }
 $('mine-clear').addEventListener('click', () => {
   clearMine();
@@ -360,15 +359,16 @@ window.addEventListener('storage', () => {
 
 /* ---- 結果 ---- */
 function render(c: Combined, m: Extract<Measured, { ok: true }>) {
-  const before = lastRank;
-  lastRank = PROFILES.length ? rank(MODEL, c.features, candidates(), 5).map((r) => r.id) : [];
-  shown = { c, m, before };
+  // この回の前までの回（数字だけ）。測れなかった回は takes に入らないので、前に出した結果と同じ数字になる
+  shown = { c, m, prev: takes.length > 1 ? combineTakes(takes.slice(0, -1)) : null };
   draw();
 }
-/** 出している結果を、今の言葉で描く */
+/** 出している結果を、今の言葉と、今の比べる相手で描く */
 function draw() {
   if (!shown) return;
-  const { c, m, before } = shown;
+  const { c, m, prev } = shown;
+  // 前の結果の並び（上がった・下がったを出すため）。今の比べる相手で並べ直す
+  const before = prev && PROFILES.length ? rank(MODEL, prev.features, candidates(), 5).map((r) => r.id) : [];
   const f = c.features;
   const level = certaintyOf(c);
   const cert = $('certainty');

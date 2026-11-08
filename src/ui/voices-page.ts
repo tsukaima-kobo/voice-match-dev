@@ -1,11 +1,11 @@
 // 声の一覧のページ（voices.html）: サイトに入っている声を、所属ごとに並べる。名前・所属（英語の名前でも）で探す・大枠で絞る。
-// 出すのはサイトのデータにある物だけ（名前・英語名・所属・大枠・公式ページ）。英語のページでは、英語名があればそれを出す。探す言葉と大枠は URL（?q= ・?kind=）に入れて、そのまま共有できる。
+// 出すのはサイトのデータにある物だけ（名前・英語名・所属・大枠・公式ページ）。英語のページでは、英語名があればそれを出し、その名前の順に並べる。探す言葉と大枠は URL（?q= ・?kind=）に入れて、そのまま共有できる。
 import { CATALOG, voicesReady } from '../data/load.ts';
 import { filterCatalog, groupByAffiliation } from '../data/catalog-search.ts';
 import { KIND_BY_ID, KINDS, kindLabel, kindsOf, maskOf } from '../data/kinds.ts';
 import { el } from './items.ts';
 import { nameOf } from '../data/names.ts';
-import { mountLang, onLang, t } from '../i18n.ts';
+import { lang, mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink } from './share.ts';
 
 mountLang({ ja: '声の一覧｜voice-match', en: 'Voices | voice-match' });
@@ -84,7 +84,8 @@ function draw(): void {
     : t(`${CATALOG.length} 人`, `${CATALOG.length} voices`);
   let left = limit;
   const sections: HTMLElement[] = [];
-  for (const g of groupByAffiliation(hits)) {
+  // 並びは、今の言葉で出す名前の順（言葉を切り替えたら並べ直す）
+  for (const g of groupByAffiliation(hits, lang)) {
     if (left <= 0) break;
     const sec = el('section', 'vl-group card');
     const head = el('h2');

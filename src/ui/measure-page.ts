@@ -2,7 +2,8 @@
 // 作り方はサイトの声と同じ（30 秒ごとの数字 → 高さが外れた窓を除く → 項目ごとの中央値。src/voice/session.ts）。
 // 音はメモリーの中だけ。30 秒の窓は Worker に渡し、測り終えたら 0 で埋まる（途中の音も、止めた時に捨てる）。どこにも送らない。
 // 残すのは、利用者が押した時だけ: 「声のページの相手に入れる」でこの端末のブラウザーに数字だけ（src/data/mine.ts）、
-// 「数字を書き出す」で数字だけのファイル。ページが隠れたら一時停止する（マイクも止める）。声から性別や年齢を判断しない。
+// 「数字を書き出す」で数字だけのファイル（マイクの名前も入れない）。ページが隠れたら一時停止する（マイクも止める）。声から性別や年齢を判断しない。
+// マイクの許可を待っている間も「やめる」で戻れる。
 import { READINGS, readingText } from '../prompts/prompts.ts';
 import { openMic, micErrorText, type Mic } from '../voice/listen.ts';
 import { measureAsync } from '../voice/measure-async.ts';
@@ -35,6 +36,7 @@ const wave = createWave($<HTMLCanvasElement>('wave'));
 const topic = { label: $('topic-label'), text: $('topic-text'), next: $<HTMLButtonElement>('next-text') };
 const btn = {
   start: $<HTMLButtonElement>('start'),
+  cancel: $<HTMLButtonElement>('cancel'),
   pause: $<HTMLButtonElement>('pause'),
   resume: $<HTMLButtonElement>('resume'),
   finish: $<HTMLButtonElement>('finish'),
@@ -49,15 +51,20 @@ type State = 'idle' | 'asking' | 'recording' | 'paused' | 'measuring' | 'done';
 type Msg = () => string;
 const M = (ja: string, en: string): Msg => () => t(ja, en);
 
-const mics = micPicker([{ box: $('mic-pick'), select: $<HTMLSelectElement>('mic-select'), find: $<HTMLButtonElement>('mic-find') }], (text) => {
-  statusEl.textContent = text;
+// マイクの一覧が出せなかった時の知らせも、言葉を切り替えたら出し直す
+const mics = micPicker([{ box: $('mic-pick'), select: $<HTMLSelectElement>('mic-select'), find: $<HTMLButtonElement>('mic-find') }], (msg) => {
+  statusMsg = msg;
+  statusEl.textContent = msg();
   statusEl.classList.add('bad');
 });
 
 let state: State = 'idle';
 let statusMsg: Msg = () => '';
 let mic: Mic | null = null;
+/** 使っているマイクの名前（この画面に出すだけ。書き出すファイルには入れない） */
 let micLabel = '';
+/** マイクを開くたびに増やす（許可を待つ間に「やめる」・一時停止した時、後から開いたマイクをすぐ止める） */
+let listenToken = 0;
 let cutter: WindowCutter | null = null;
 /** 窓にした秒（止めていた間は数えない） */
 let recorded = 0;
@@ -68,6 +75,8 @@ let raf = 0;
 let deck = shuffled(READINGS.length);
 let at = 0;
 let summary: ReturnType<typeof summarize> | null = null;
+/** 「声のページの相手に入れる」が残せなかった時の知らせ（言葉を切り替えても出したままにする） */
+let useNote: Msg | null = null;
 
 /* ---- 決まった文 ---- */
 function showText() {
@@ -90,6 +99,7 @@ topic.next.addEventListener('click', () => {
 /* ---- 見せ方 ---- */
 function texts() {
   btn.start.textContent = t('読みはじめる', 'Start reading');
+  btn.cancel.textContent = t('やめる', 'Stop');
   btn.pause.textContent = t('一時停止', 'Pause');
   btn.resume.textContent = t('続ける', 'Continue');
   btn.finish.textContent = t('ここで終える', 'Finish here');
@@ -105,6 +115,7 @@ function show(next: State, msg: Msg, bad = false) {
   stage.dataset.state = next;
   statusEl.classList.toggle('bad', bad);
   btn.start.hidden = !(next === 'idle' || next === 'done');
+  btn.cancel.hidden = next !== 'asking';
   btn.pause.hidden = next !== 'recording';
   btn.resume.hidden = next !== 'paused';
   btn.finish.hidden = !(next === 'recording' || next === 'paused');
@@ -160,6 +171,7 @@ function stopMic() {
   void keepAwake(false);
 }
 async function listen() {
+  const my = ++listenToken;
   show('asking', M('マイクの許可を待っています…', 'Waiting for microphone permission…'));
   try {
     const m = await openMic(
@@ -171,7 +183,8 @@ async function listen() {
       () => pause(M('マイクが外れたので止めました。つなぎ直して「続ける」を押してください。', 'The microphone went away, so this stopped. Plug it back in and press “Continue”.'), true),
       mics.get(),
     );
-    if (state !== 'asking') {
+    if (my !== listenToken || state !== 'asking') {
+      // 許可を待つ間に「やめる」・一時停止した
       m.stop();
       return;
     }
@@ -188,10 +201,20 @@ async function listen() {
     );
     raf = requestAnimationFrame(tick);
   } catch (e) {
+    if (my !== listenToken || state !== 'asking') return;
     stopMic();
     if ((e as { name?: string } | null)?.name === 'MicGoneError') mics.reset();
     show(windows.length ? 'paused' : 'idle', () => micErrorText(e), true);
   }
+}
+/** マイクの許可を待つ間の「やめる」: 前に読んだ分があれば一時停止に、無ければ最初に戻る */
+function cancelAsking() {
+  if (state !== 'asking') return;
+  listenToken++;
+  stopMic();
+  if (recorded > 0) show('paused', M('やめました。「続ける」で再開します。', 'Stopped. Press “Continue” to go on.'));
+  else show('idle', M('やめました。「読みはじめる」で始めます。', 'Stopped. Press “Start reading” to begin.'));
+  drawProgress();
 }
 function measureWindow(pcm: Float32Array, rate: number) {
   const t0 = recorded;
@@ -209,6 +232,7 @@ function measureWindow(pcm: Float32Array, rate: number) {
 }
 function pause(msg: Msg = M('一時停止しています。「続ける」で再開します（途中の 30 秒に満たない分は使いません）。', 'Paused. Press “Continue” to go on (the unfinished 30 seconds is not used).'), bad = false) {
   if (state !== 'recording' && state !== 'asking') return;
+  listenToken++;
   stopMic();
   show('paused', msg, bad);
   drawProgress();
@@ -239,13 +263,15 @@ function drawResult() {
   const mine = loadMine(MEASURE_VERSION);
   btn.use.hidden = !s.median;
   btn.unuse.hidden = !mine;
-  $('use-note').textContent = mine
-    ? t(`声のページの比べる相手に、「あなた（じっくり測った声・${mine.date}）」が入っています（この端末のブラウザーだけ。数字だけ）。声のページでふつうに話すと、何位に出るかが分かります。`, `“You (measured in depth, ${mine.date})” is among the voices on the comparison page (this browser only, numbers only). Talk on that page as usual to see where you come.`)
-    : t('「声のページの相手に入れる」を押すと、この代表値を、声のページの比べる相手に入れます（この端末のブラウザーだけに数字を残します。外すと消えます）。', '“Add to the comparison page” puts these values among the voices on the comparison page (only the numbers are kept, in this browser only, until you remove them).');
+  $('use-note').textContent = useNote
+    ? useNote()
+    : mine
+      ? t(`声のページの比べる相手に、「あなた（じっくり測った声・${mine.date}）」が入っています（この端末のブラウザーだけ。数字だけ）。声のページでふつうに話すと、何位に出るかが分かります。`, `“You (measured in depth, ${mine.date})” is among the voices on the comparison page (this browser only, numbers only). Talk on that page as usual to see where you come.`)
+      : t('「声のページの相手に入れる」を押すと、この代表値を、声のページの比べる相手に入れます（この端末のブラウザーだけに数字を残します。外すと消えます）。', '“Add to the comparison page” puts these values among the voices on the comparison page (only the numbers are kept, in this browser only, until you remove them).');
   const list = $('matches');
   list.replaceChildren();
   if (s.median && PROFILES.length) {
-    const scale = farScale(MODEL, s.median, PROFILES);
+    const scale = farScale(MODEL, s.median, PROFILES, s.used);
     for (const r of rank(MODEL, s.median, PROFILES, 5)) {
       const v = ENTRY_BY_ID.get(r.id)!;
       const li = el('li', 'match');
@@ -272,18 +298,17 @@ const today = () => {
 btn.use.addEventListener('click', () => {
   if (!summary?.median) return;
   const ok = saveMine({ v: 1, m: MEASURE_VERSION, windows: summary.used, date: today(), features: summary.median as Features });
-  if (!ok) {
-    $('use-note').textContent = t('このブラウザーでは残せませんでした（プライベート ブラウズなど）。', 'This browser would not keep it (private browsing, for example).');
-    return;
-  }
+  useNote = ok ? null : M('このブラウザーでは残せませんでした（プライベート ブラウズなど）。', 'This browser would not keep it (private browsing, for example).');
   drawResult();
 });
 btn.unuse.addEventListener('click', () => {
   clearMine();
+  useNote = null;
   drawResult();
 });
 btn.export.addEventListener('click', () => {
-  const file = sessionFile({ measureVersion: MEASURE_VERSION, date: today(), ...(micLabel ? { mic: micLabel } : {}), windows });
+  // 数字だけ（窓ごとの数字と中央値）。マイクの名前は入れない（「山田の AirPods」のように人の名前が入っていることがある）
+  const file = sessionFile({ measureVersion: MEASURE_VERSION, date: today(), windows });
   const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 1) + '\n'], { type: 'application/json' }));
   const a = el('a');
   a.href = url;
@@ -296,6 +321,7 @@ function reset() {
   windows = [];
   recorded = 0;
   summary = null;
+  useNote = null;
   cutter = null;
   dots.replaceChildren();
   wave.clear();
@@ -310,6 +336,7 @@ btn.again.addEventListener('click', () => {
   show('idle', M('「読みはじめる」を押してください。', 'Press “Start reading”.'));
   drawProgress();
 });
+btn.cancel.addEventListener('click', cancelAsking);
 btn.pause.addEventListener('click', () => pause());
 btn.resume.addEventListener('click', () => void listen());
 btn.finish.addEventListener('click', () => void finish());
