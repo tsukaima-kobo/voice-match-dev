@@ -18,7 +18,8 @@
   - 住所だけ変えたい時は、Variables の `VITE_SITE_URL` に入れる。
 - [ ] 本番のリポジトリに `removal` のラベルを作る（`gh label create removal -R tsukaima-kobo/voice-match --color d93f0b --description 削除のお願い`）。Issue の型（`.github/ISSUE_TEMPLATE/`）はコードと一緒に入る。
 - [x] README の「サイトを開く」などの住所は本番（`https://voice-match.com/`）にした。
-- [ ] 登録のフォーム（`src/submit/config.ts`）を本番のフォームにする（本番で登録を受ける時）。
+- [x] 声の登録は最初から受け付ける（2026-11-08 運営が決定）。本番のフォーム「voice-match 声の登録」とシート「voice-match 声の登録（回答）」（タブ: フォームの回答 1・削除・禁止の言葉）を作った。本番で作ると `src/submit/config.ts` が本番のフォームを使う（検証用は検証用のフォーム）。
+- [ ] 登録の取り込み: dots に本番のシートを見させる（`docs/registration.md` 3）。Google Cloud のサービス アカウントの鍵を作り、本番のシートを閲覧者で共有する（同 4）。本番のリポジトリの Secrets に `GOOGLE_SA_KEY`・`SHEET_ID`（本番のシートの住所の `/d/` と `/edit` の間）、Variables に `SHEET_RANGE` = `フォームの回答 1!A:D`。
 
 ## 3. GitHub のリポジトリの設定（本番）
 
