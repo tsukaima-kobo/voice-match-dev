@@ -1,24 +1,24 @@
 {
  "measureVersion": "3.1.0",
- "speakers": 347,
- "windows": 11298,
+ "speakers": 348,
+ "windows": 11406,
  "diagonal": {
-  "queries": 11232,
-  "top1": 0.44551282051282054,
-  "top5": 0.6500178062678063
+  "queries": 11340,
+  "top1": 0.44638447971781303,
+  "top5": 0.6506172839506172
  },
  "whiten": {
-  "queries": 11232,
-  "top1": 0.5465633903133903,
-  "top5": 0.7366452991452992
+  "queries": 11340,
+  "top1": 0.54673721340388,
+  "top5": 0.7365079365079366
  },
  "chosen": "whiten",
  "likeness": {
-  "typical": 1.7805,
+  "typical": 1.7793,
   "cuts": [
-   1.0233,
-   1.1923,
-   1.3882
+   1.0195,
+   1.1898,
+   1.3879
   ]
  },
  "items": [
@@ -32,23 +32,23 @@
   },
   {
    "key": "pitchSkew",
-   "icc": 0.264
+   "icc": 0.265
   },
   {
    "key": "pitchMotion",
-   "icc": 0.431
+   "icc": 0.43
   },
   {
    "key": "f1",
-   "icc": 0.754
+   "icc": 0.75
   },
   {
    "key": "f2",
-   "icc": 0.566
+   "icc": 0.586
   },
   {
    "key": "f3",
-   "icc": 0.804
+   "icc": 0.806
   },
   {
    "key": "f4",
@@ -56,7 +56,7 @@
   },
   {
    "key": "formantSpacing",
-   "icc": 0.807
+   "icc": 0.809
   },
   {
    "key": "f1Range",
@@ -68,35 +68,35 @@
   },
   {
    "key": "b1",
-   "icc": 0.631
+   "icc": 0.629
   },
   {
    "key": "b2",
-   "icc": 0.743
+   "icc": 0.734
   },
   {
    "key": "centroid",
-   "icc": 0.683
+   "icc": 0.684
   },
   {
    "key": "hammarberg",
-   "icc": 0.655
+   "icc": 0.654
   },
   {
    "key": "slopeLow",
-   "icc": 0.851
+   "icc": 0.85
   },
   {
    "key": "slopeMid",
-   "icc": 0.607
+   "icc": 0.604
   },
   {
    "key": "mfcc1",
-   "icc": 0.792
+   "icc": 0.791
   },
   {
    "key": "mfcc2",
-   "icc": 0.716
+   "icc": 0.713
   },
   {
    "key": "mfcc3",
@@ -104,47 +104,47 @@
   },
   {
    "key": "mfcc4",
-   "icc": 0.768
+   "icc": 0.767
   },
   {
    "key": "mfcc5",
-   "icc": 0.704
+   "icc": 0.7
   },
   {
    "key": "mfcc6",
-   "icc": 0.859
+   "icc": 0.857
   },
   {
    "key": "mfcc7",
-   "icc": 0.663
+   "icc": 0.662
   },
   {
    "key": "mfcc8",
-   "icc": 0.791
+   "icc": 0.792
   },
   {
    "key": "mfcc9",
-   "icc": 0.701
+   "icc": 0.695
   },
   {
    "key": "mfcc10",
-   "icc": 0.784
+   "icc": 0.782
   },
   {
    "key": "mfcc11",
-   "icc": 0.595
+   "icc": 0.593
   },
   {
    "key": "mfcc12",
-   "icc": 0.638
+   "icc": 0.637
   },
   {
    "key": "mfcc13",
-   "icc": 0.631
+   "icc": 0.628
   },
   {
    "key": "mfccDelta",
-   "icc": 0.569
+   "icc": 0.568
   },
   {
    "key": "hnr",
@@ -156,51 +156,51 @@
   },
   {
    "key": "h1h2",
-   "icc": 0.632
+   "icc": 0.633
   },
   {
    "key": "jitter",
-   "icc": 0.536
+   "icc": 0.535
   },
   {
    "key": "shimmer",
-   "icc": 0.652
+   "icc": 0.649
   },
   {
    "key": "rate",
-   "icc": 0.485
+   "icc": 0.484
   },
   {
    "key": "rateVar",
-   "icc": 0.077
+   "icc": 0.076
   },
   {
    "key": "pauseShare",
-   "icc": 0.405
+   "icc": 0.402
   },
   {
    "key": "pauseLen",
-   "icc": 0.187
+   "icc": 0.185
   },
   {
    "key": "runLen",
-   "icc": 0.161
+   "icc": 0.16
   },
   {
    "key": "rhythm",
-   "icc": 0.15
+   "icc": 0.151
   },
   {
    "key": "voicedShare",
-   "icc": 0.482
+   "icc": 0.476
   },
   {
    "key": "levelRange",
-   "icc": 0.523
+   "icc": 0.522
   },
   {
    "key": "tilt",
-   "icc": 0.743
+   "icc": 0.738
   }
  ]
 }

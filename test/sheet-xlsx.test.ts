@@ -122,6 +122,22 @@ describe('シートから、運営が測った声の代表値を作る', () => {
     expect(notes.join('\n')).toMatch(/b: .*公式ページ/);
   });
 
+  it('追加10分の測定値のタブがあれば、同じ人の窓に足す（見出しは人物ID で始まらなくてよい）。版が違えば止める', () => {
+    const EXTRA_HEAD = ['追加タスクID', '人物ID', '追加動画ID', '測定バージョン', ...FEATURE_KEYS.map(sheetLabel)];
+    const extraRow = (id: string, video: string, pitch: number, ver = MEASURE_VERSION): Cell[] => ['task', id, video, ver, ...measureRow(id, video, pitch).slice(8)];
+    // c は元の窓が 6 つで足りない。追加の 6 窓で 12 になり、入る
+    const few: Cell[][] = [MEASURE_HEAD, ...pitches.slice(0, 6).map((p) => measureRow('c', 'v1', p))];
+    const ppl: Cell[][] = [PEOPLE_HEAD, ['c', '名前 c', 'g', '所属区分', '今の所属', 'v1', 'https://example.com/c']];
+    const before = buildOperatorVoices(snapshotFromSheet(readXlsx(xlsx({ 人物一覧: ppl, 声の測定値: few })), MEASURE_VERSION), { measureVersion: MEASURE_VERSION, only: null });
+    expect(before.file.voices).toHaveLength(0);
+    const extra: Cell[][] = [EXTRA_HEAD, ...pitches.slice(6).map((p) => extraRow('c', 'x1', p))];
+    const after = buildOperatorVoices(snapshotFromSheet(readXlsx(xlsx({ 人物一覧: ppl, 声の測定値: few, 追加10分の測定値: extra })), MEASURE_VERSION), { measureVersion: MEASURE_VERSION, only: null });
+    expect(after.file.voices).toHaveLength(1);
+    expect(after.notes.join('\n')).toMatch(/c: 窓 12 → 使う 12.*動画 2 本/);
+    const old: Cell[][] = [EXTRA_HEAD, extraRow('c', 'x1', 200, '0.0.1')];
+    expect(() => snapshotFromSheet(readXlsx(xlsx({ 人物一覧: ppl, 声の測定値: few, 追加10分の測定値: old })), MEASURE_VERSION)).toThrow(/版/);
+  });
+
   it('タブ・見出しが足りない時は止める（項目が今のサイトと違う時など）', () => {
     expect(() => snapshotFromSheet(readXlsx(xlsx({ 人物一覧: people })), MEASURE_VERSION)).toThrow(/声の測定値/);
     const old = [MEASURE_HEAD.slice(0, -1), ...rows.slice(1)];

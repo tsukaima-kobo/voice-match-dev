@@ -109,6 +109,9 @@ export function affiliation(current: string | null | undefined, kind: string | n
   return cur;
 }
 
+/** 窓が少ない人に足した 10 分を、収集が書くタブ */
+const EXTRA_TAB = '追加10分の測定値';
+
 /** 出す人の一覧（1 行 1 人の人物ID。# から後と空の行は無視） */
 export function parseIdList(text: string): Set<string> {
   return new Set(
@@ -128,19 +131,24 @@ export function sheetLabel(key: (typeof FEATURE_KEYS)[number]): string {
 /**
  * スプレッドシート（xlsx をほどいた表）を、収集の書き出しと同じ形にする。
  * 使うタブ: 人物一覧（人物ID・氏名・所属区分・現在所属・公式プロフィール、あれば大枠）と 声の測定値（人物ID・出典動画ID・45 項目）。
- * 見出しは「人物ID」で始まる行。シートには測り方の版が書いていないので、45 項目の見出しが今のサイトと全部同じ時だけ、
- * 今の版（measureVersion）で測った物として扱う。違えば止める。
+ * 追加10分の測定値（窓が少ない人に足した 10 分。人物ID・追加動画ID・45 項目・測定バージョン）があれば、それも同じ人の窓に足す。
+ * 見出しは「人物ID」がある行。シートには測り方の版が書いていないので、45 項目の見出しが今のサイトと全部同じ時だけ、
+ * 今の版（measureVersion）で測った物として扱う。違えば止める。追加のタブは測定バージョンが書いてあるので、それが違っても止める。
  */
 export function snapshotFromSheet(tables: ReadonlyMap<string, Cell[][]>, measureVersion: string): Snapshot {
-  const table = (name: string, need: string[]) => {
+  const table = (name: string, need: string[], optional = false) => {
     const rows = tables.get(name);
-    if (!rows) throw new Error(`シートに「${name}」のタブがありません`);
-    const h = rows.findIndex((r) => r[0] === '人物ID');
-    if (h < 0) throw new Error(`「${name}」に「人物ID」で始まる見出しの行がありません`);
+    if (!rows) {
+      if (optional) return [];
+      throw new Error(`シートに「${name}」のタブがありません`);
+    }
+    const h = rows.findIndex((r) => r.some((c) => String(c ?? '').trim() === '人物ID'));
+    if (h < 0) throw new Error(`「${name}」に「人物ID」がある見出しの行がありません`);
     const at = new Map(rows[h]!.map((c, i) => [String(c ?? '').trim(), i]));
     const missing = need.filter((l) => !at.has(l));
     if (missing.length) throw new Error(`「${name}」に無い見出し: ${missing.join('・')}（測り方や項目が今のサイトと違うかもしれません）`);
-    return rows.slice(h + 1).filter((r) => String(r[0] ?? '').trim()).map((r) => (l: string) => (at.has(l) ? (r[at.get(l)!] ?? null) : null));
+    const id = at.get('人物ID')!;
+    return rows.slice(h + 1).filter((r) => String(r[id] ?? '').trim()).map((r) => (l: string) => (at.has(l) ? (r[at.get(l)!] ?? null) : null));
   };
   const str = (c: Cell) => (c === null ? null : String(c).trim() || null);
   const peoples = table('人物一覧', ['人物ID', '氏名', '所属区分', '現在所属', '公式プロフィール']).map((get) => ({
@@ -152,9 +160,9 @@ export function snapshotFromSheet(tables: ReadonlyMap<string, Cell[][]>, measure
     kinds: str(get('大枠')),
   }));
   const labels = FEATURE_KEYS.map(sheetLabel);
-  const measurements = table('声の測定値', ['人物ID', '出典動画ID', ...labels]).map((get) => ({
+  const row = (get: (l: string) => Cell, video: string) => ({
     personId: str(get('人物ID'))!,
-    videoId: str(get('出典動画ID')) ?? '',
+    videoId: str(get(video)) ?? '',
     ...Object.fromEntries(
       FEATURE_KEYS.map((k, i) => {
         const c = get(labels[i]!);
@@ -162,6 +170,13 @@ export function snapshotFromSheet(tables: ReadonlyMap<string, Cell[][]>, measure
         return [k, x !== null && Number.isFinite(x) ? x : null];
       }),
     ),
-  }));
+  });
+  const extra = table(EXTRA_TAB, ['人物ID', '追加動画ID', '測定バージョン', ...labels], true);
+  const otherVersions = [...new Set(extra.map((get) => str(get('測定バージョン'))).filter((v) => v !== measureVersion))];
+  if (otherVersions.length) throw new Error(`「${EXTRA_TAB}」に、今のサイト（${measureVersion}）と違う測り方の版があります: ${otherVersions.join('・')}`);
+  const measurements = [
+    ...table('声の測定値', ['人物ID', '出典動画ID', ...labels]).map((get) => row(get, '出典動画ID')),
+    ...extra.map((get) => row(get, '追加動画ID')),
+  ];
   return { summary: { measureVersions: [measureVersion] }, peoples, measurements };
 }
