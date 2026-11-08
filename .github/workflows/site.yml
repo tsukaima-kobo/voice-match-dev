@@ -4,9 +4,11 @@
 # 公開の住所（OGP・共有カード・X の投稿に入る）を変えたい時だけ、Variables の VITE_SITE_URL に入れる。
 # 声の登録は Google スプレッドシートだけに置く（運営だけが見られる）。サイトを作る時に tools/intake.ts がシートを読み、
 # 出すと決まった声だけを data/generated/ に作ってページに入れる。リポジトリには書き込まない（履歴に残さない）。
-# シートを読めなかった時は、そこで止める（その日は公開せず、前のページのまま）。鍵は Secrets にだけ置く。
+# シートを読めなかった時は、そこで止める（その日は公開せず、前のページのまま）。「削除」「禁止の言葉」のタブを読めない時も止める。鍵は Secrets にだけ置く。
 # 取り込みは dots の判定（毎日 5:00）が終わった後の時刻に動かす。
 # 運営が測った声は、GitHub の Release「voices-data」の operator-voices.json から取ってくる（tools/voices-release.ts が置く。コミットしない）。
+# その測り方の版が今のサイトと違う時は止める（黙って 0 人で公開しない）。
+# 本番のリポジトリで、検証用のサイト（検索に出さない）ができてしまった時も、公開せずに止める。
 name: site
 
 on:
@@ -51,7 +53,7 @@ jobs:
           BLOCK_RANGE: ${{ vars.BLOCK_RANGE }}
           NG_RANGE: ${{ vars.NG_RANGE }}
         run: node tools/intake.ts --sheet
-      - name: 運営が測った声（Release「voices-data」から。無ければ入れない）
+      - name: 運営が測った声（Release「voices-data」から。無ければ入れない。測り方の版が違えば止める）
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -60,7 +62,16 @@ jobs:
           tags=$(gh release list --limit 200 --json tagName -q '.[].tagName')
           if grep -qx voices-data <<< "$tags"; then
             gh release download voices-data --pattern operator-voices.json --dir data/generated --clobber
-            node -e "const f=require('./data/generated/operator-voices.json'); console.log('運営が測った声: ' + f.voices.length + ' 人')"
+            node -e "
+              import('./src/voice/measure.ts').then(({ MEASURE_VERSION, readableVersion }) => {
+                const f = require('./data/generated/operator-voices.json');
+                if (!readableVersion(f.measureVersion)) {
+                  console.error('::error::運営が測った声（' + f.voices.length + ' 人）の測り方の版は ' + f.measureVersion + ' で、今のサイトは ' + MEASURE_VERSION + ' です。このままでは 1 人も出ないので止めます。測り直して tools/voices-release.ts で置き直してください。');
+                  process.exit(1);
+                }
+                console.log('運営が測った声: ' + f.voices.length + ' 人（測り方の版 ' + f.measureVersion + '）');
+              });
+            "
           else
             echo 'Release voices-data が無いので、運営が測った声は入れません'
           fi
@@ -71,6 +82,17 @@ jobs:
       - run: npm run build
         env:
           VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
+      - name: 本番のリポジトリなら、本番のサイトとしてできたか確かめる（検証用の印 noindex があれば止める）
+        run: |
+          if [ "${GITHUB_REPOSITORY,,}" = "tsukaima-kobo/voice-match" ]; then
+            if grep -q 'name="robots" content="noindex' dist/index.html; then
+              echo "::error::本番のリポジトリ（$GITHUB_REPOSITORY）なのに、検証用のサイトができました。src/site-config.ts の PRODUCTION と VITE_REPO を確かめてください。公開しません。"
+              exit 1
+            fi
+            echo "本番のサイトとしてできました（$GITHUB_REPOSITORY）"
+          else
+            echo "検証用のサイトです（$GITHUB_REPOSITORY）"
+          fi
       - name: Cloudflare Pages へ送る（鍵がある時だけ。プロジェクトが無ければ最初に作る）
         if: env.TO_CLOUDFLARE == 'true'
         env:

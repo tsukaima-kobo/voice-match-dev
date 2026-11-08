@@ -1,7 +1,8 @@
 // 録っている間の解析パネル: 入ってくる声を、その場で少しだけ計算して見せる（声の成分の図・高さの線・数字・測れる項目）。
 // どれも本当に計算した値（飾りの乱数は使わない）。最後の数字は measure.ts が出す。ここは、測っている様子を見せるためだけ。
 //   声の成分の図（スペクトログラム）: 16 kHz にして 20 ms ごとに FFT（512）。縦は 80 Hz〜8 kHz の対数、色は強さ。
-//   高さの線: 20 ms ごとの YIN（40 ms の窓、60〜500 Hz）。同じ縦の目盛りで、成分の図の上に重ねる。
+//   高さの線: 20 ms ごとの YIN（40 ms の窓、60〜1100 Hz。歌や高い声真似も追う。上限より高い音は 1 オクターブ下と取り違えず、捨てる）。
+//            同じ縦の目盛り（80 Hz〜8 kHz）で、成分の図の上に重ねる。
 //   数字: 声の高さ（中央値。Hz と音名）・抑揚（10〜90 %、半音）・明るさ（300 Hz〜4 kHz の重心）・大きさ（dBFS）・声の秒数。
 //   測れる項目: 声の秒数が、項目ごとに要る長さ（features.ts の needOf）に届くと光る。
 // 音は持たない（直近 40 ms だけを、計算のために持つ）。話し終えた後は、45 項目が順に光る「計算中」の演出（その間に Worker が測る）。
@@ -21,8 +22,13 @@ const SR = 16000;
 const HOP = 320;
 const N = 512;
 const YIN_W = 320;
-const TAU_MIN = Math.floor(SR / 500),
-  TAU_MAX = Math.ceil(SR / 60);
+/** 高さの線で追う範囲（Hz。measure.ts の F0_MIN・F0_MAX と同じ） */
+export const LIVE_F0_MIN = 60,
+  LIVE_F0_MAX = 1100;
+const TAU_MIN = Math.floor(SR / LIVE_F0_MAX),
+  TAU_MAX = Math.ceil(SR / LIVE_F0_MIN);
+// 探し始めるのは上限の 2 倍の高さから: 上限より高い音は、周期の何倍かが TAU_MIN の手前に出るので、そこで見つけて捨てられる
+const TAU_FROM = Math.floor(TAU_MIN / 2);
 const F_LO = 80,
   F_HI = 8000;
 const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -63,8 +69,8 @@ function powerSpectrum(x: Float32Array, out: Float32Array, re: Float64Array, im:
   for (let k = 0; k <= N / 2; k++) out[k] = (re[k]! * re[k]! + im[k]! * im[k]!) / (N * N);
 }
 
-/** 直近の音から、高さ（Hz。無ければ 0）: YIN */
-function pitchOf(x: Float32Array, d: Float64Array): number {
+/** 直近の音（16 kHz）から、高さ（Hz。無い時・60〜1100 Hz の外の時は 0）: YIN */
+export function pitchOf(x: Float32Array, d: Float64Array = new Float64Array(TAU_MAX + 2)): number {
   const off = x.length - YIN_W - TAU_MAX - 1;
   if (off < 0) return 0;
   let run = 0;
@@ -78,7 +84,7 @@ function pitchOf(x: Float32Array, d: Float64Array): number {
     run += s;
     d[tau] = run > 0 ? (s * tau) / run : 1;
   }
-  for (let tau = TAU_MIN; tau < TAU_MAX; tau++) {
+  for (let tau = TAU_FROM; tau < TAU_MAX; tau++) {
     if (d[tau]! < 0.15) {
       while (tau + 1 < TAU_MAX && d[tau + 1]! < d[tau]!) tau++;
       const a = d[tau - 1]!,
@@ -86,7 +92,9 @@ function pitchOf(x: Float32Array, d: Float64Array): number {
         c = d[tau + 1]!;
       const den = a - 2 * b + c;
       const t = den !== 0 ? tau + (0.5 * (a - c)) / den : tau;
-      return SR / t;
+      const f = SR / t;
+      // 上限より高い時は、半分の高さにせず、無しにする
+      return f >= LIVE_F0_MIN && f <= LIVE_F0_MAX ? f : 0;
     }
   }
   return 0;

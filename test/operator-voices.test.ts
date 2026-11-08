@@ -1,7 +1,7 @@
 // 運営が測った声の代表値（tools/operator-voices-lib.ts）と、サイトでのまとめ方（src/data/sources.ts）
 import { describe, expect, it } from 'vitest';
 import { buildOperatorVoices, parseIdList, type Snapshot } from '../tools/operator-voices-lib.ts';
-import { fromOperatorVoices, mergeVoices } from '../src/data/sources.ts';
+import { checkOperatorVoices, fromOperatorVoices, mergeVoices } from '../src/data/sources.ts';
 import { FEATURE_KEYS } from '../src/voice/features.ts';
 import { MEASURE_VERSION } from '../src/voice/measure.ts';
 
@@ -58,17 +58,39 @@ describe('運営が測った声の代表値', () => {
     expect(r.notes.join('\n')).toMatch(/zz: データに無い/);
   });
 
-  it('英語名・所属の英語名は、書いてある人だけに付ける（同じ人の後の行だけにあってもよい）。サイトにもそのまま入る', () => {
+  it('英語名は書いてある人だけに付ける（同じ人の後の行だけにあってもよい）。所属の英語名は所属ごとに 1 つ。サイトにもそのまま入る', () => {
     const { file } = buildOperatorVoices(
-      snap([person('a', { nameEn: ' Name A ', groupEn: 'Group EN' }), person('b'), person('b', { nameEn: 'Name B' })], [...windows('a', 'v1', twelve), ...windows('b', 'v1', twelve)]),
+      snap([person('a', { nameEn: ' Name A ', groupEn: 'Group EN' }), person('b'), person('b', { nameEn: 'Name B' }), person('c', { groupName: '別の所属' })], [...windows('a', 'v1', twelve), ...windows('b', 'v1', twelve), ...windows('c', 'v1', twelve)]),
       { measureVersion: MEASURE_VERSION, only: null },
     );
-    expect(file.voices.map((v) => [v.nameEn, v.groupEn])).toEqual([['Name A', 'Group EN'], ['Name B', undefined]]);
+    // b は a と同じ所属なので、所属の英語名も同じ。c は別の所属で、英語名が無い
+    expect(file.voices.map((v) => [v.nameEn, v.groupEn])).toEqual([['Name A', 'Group EN'], ['Name B', 'Group EN'], [undefined, undefined]]);
     const site = fromOperatorVoices(file).voices;
-    expect(site.map((v) => [v.nameEn, v.groupEn])).toEqual([['Name A', 'Group EN'], ['Name B', undefined]]);
+    expect(site.map((v) => [v.nameEn, v.groupEn])).toEqual([['Name A', 'Group EN'], ['Name B', 'Group EN'], [undefined, undefined]]);
     // 英語名の無い人は、今までと同じ形（キーも増えない）
     const old = buildOperatorVoices(snap([person('c')], windows('c', 'v1', twelve)), { measureVersion: MEASURE_VERSION, only: null });
     expect(Object.keys(old.file.voices[0]!).sort()).toEqual(['features', 'group', 'link', 'name']);
+  });
+
+  it('所属の英語名は、所属をそろえていない人の中でいちばん多い物（同じ数なら人物ID の順で先の人）。ほかの書き方は記録に出す', () => {
+    const holo = (id: string, cur: string, groupEn?: string) => person(id, { groupName: 'ホロライブ', currentAffiliation: cur, ...(groupEn ? { groupEn } : {}) });
+    const ms = ['a', 'b', 'c', 'd'].flatMap((id) => windows(id, 'v1', twelve));
+    // a は「ホロライブ4期生」→「ホロライブ」にそろえた人。b・c はそのままの人。d は英語名なし
+    const r = buildOperatorVoices(snap([holo('a', 'ホロライブ4期生', 'hololive 4th Generation'), holo('b', 'ホロライブ', 'hololive production'), holo('c', 'ホロライブ', 'Hololive'), holo('d', 'ホロライブ')], ms), { measureVersion: MEASURE_VERSION, only: null });
+    expect(r.file.voices.map((v) => [v.group, v.groupEn])).toEqual(Array(4).fill(['ホロライブ', 'hololive production']));
+    expect(r.notes.join('\n')).toMatch(/所属「ホロライブ」の英語名は「hololive production」にそろえます（ほかに 「hololive 4th Generation」「Hololive」）/);
+    // そろえた人だけなら、その中でいちばん多い物
+    const only = buildOperatorVoices(snap([holo('a', 'ホロライブ4期生', 'X'), holo('b', 'ホロライブ3期生', 'Y'), holo('c', 'ホロライブ5期生', 'Y')], ['a', 'b', 'c'].flatMap((id) => windows(id, 'v1', twelve))), { measureVersion: MEASURE_VERSION, only: null });
+    expect(only.file.voices.map((v) => v.groupEn)).toEqual(['Y', 'Y', 'Y']);
+  });
+
+  it('同じ人の行がいくつかある時は、項目ごとに空でない最初の値を使う（大枠・公式ページ・今の所属も）', () => {
+    const { file } = buildOperatorVoices(
+      snap([person('a', { officialProfile: null, kinds: null, currentAffiliation: null }), person('a', { officialProfile: 'https://example.com/a2', kinds: '歌手', currentAffiliation: '今の所属' }), person('a', { officialProfile: 'https://example.com/a3', kinds: 'VTuber', currentAffiliation: '別の所属' })], windows('a', 'v1', twelve)),
+      { measureVersion: MEASURE_VERSION, only: null },
+    );
+    expect(file.voices).toHaveLength(1);
+    expect(file.voices[0]).toMatchObject({ link: 'https://example.com/a2', kinds: ['singer'], group: '今の所属' });
   });
 
   it('今の所属があれば、それを出す', () => {
@@ -105,6 +127,24 @@ describe('サイトでのまとめ方', () => {
     const m = mergeVoices([op, users], MEASURE_VERSION);
     expect(m.voices.map((v) => v.name)).toEqual(['さくら', '別の人']);
     expect(m.features).toHaveLength(2);
+  });
+  it('英語名も同じ声の印。前の声の名前か英語名と、後の声の名前か英語名が同じなら入れない', () => {
+    const en = fromOperatorVoices({ version: 1, measureVersion: MEASURE_VERSION, voices: [{ name: 'さくら', nameEn: 'Sakura Miko', link: 'https://example.com/s', features: f }] });
+    const users = {
+      voices: [
+        { id: 'u-1', name: 'sakura miko', links: { profile: 'https://example.com/u1' } },
+        { id: 'u-2', name: '別の人', nameEn: 'さくら', links: { profile: 'https://example.com/u2' } },
+        { id: 'u-3', name: 'Sakura', links: { profile: 'https://example.com/u3' } },
+      ],
+      profiles: ['u-1', 'u-2', 'u-3'].map((id) => ({ id, version: MEASURE_VERSION, features: f })),
+    };
+    expect(mergeVoices([en, users], MEASURE_VERSION).voices.map((v) => v.name)).toEqual(['さくら', 'Sakura']);
+  });
+  it('運営が測った声のファイルの版が今と違う時は、黙って 0 人にせず止める', () => {
+    expect(() => checkOperatorVoices({ version: 1, measureVersion: '0.0.1', voices: [] }, MEASURE_VERSION)).toThrow(/版/);
+    expect(() => checkOperatorVoices({ version: 1, measureVersion: MEASURE_VERSION, voices: [] }, MEASURE_VERSION)).not.toThrow();
+    // 3.1.0 は、声が 500 Hz ほどより高い所だけが違う前の版。そのまま比べてよい（MEASURE_COMPATIBLE）
+    expect(() => checkOperatorVoices({ version: 1, measureVersion: '3.1.0', voices: [] }, MEASURE_VERSION)).not.toThrow();
   });
 });
 

@@ -9,12 +9,14 @@
 // 読む物: スプレッドシートの回答・「削除」のタブ（削除のお願いがあった名前）・「禁止の言葉」のタブ、data/model.json（照合のモデル）。
 // 毎回、回答の全部から作り直す（同じ回答なら同じ結果）。声の ID は名前から決まる（intake-lib.ts の userIdOf）。
 // 記録（Actions のログは公開される）には件数だけを出し、名前は出さない。読めなかった時は誤りで止める（サイトを公開しない）。
+// 「削除」と「禁止の言葉」のタブも必ず読む。読めない時（タブが無い・名前を変えた）も止める。空の一覧として進むと、
+// 削除のお願いがあった声がまた出てしまうため（止めた日は公開せず、前の日のページのまま）。
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MEASURE_VERSION } from '../src/voice/measure.ts';
+import { MEASURE_VERSION, readableVersion } from '../src/voice/measure.ts';
 import { defaultModel, type MatchModel } from '../src/match/match.ts';
 import type { Catalog, ProfileList } from '../src/data/types.ts';
-import { intake, rowsFromTable } from './intake-lib.ts';
+import { intake, INTAKE, rowsFromTable } from './intake-lib.ts';
 import { parseCsv } from './csv.ts';
 import { openSheet } from './sheets.ts';
 import { idsOf } from '../src/data/kinds.ts';
@@ -38,23 +40,29 @@ if (args[0] === '--csv' && args[1]) {
   };
   blocked = firstColumn(opt('--block'), '名前');
   ngWords = firstColumn(opt('--ng'), '言葉');
+  if (!args.includes('--block')) console.log('注意: 削除の一覧（--block）を渡していないので、削除のお願いがあった名前も除いていません。');
 } else if (args[0] === '--sheet') {
   const { GOOGLE_SA_KEY, SHEET_ID, SHEET_RANGE, BLOCK_RANGE, NG_RANGE } = process.env;
   if (!GOOGLE_SA_KEY || !SHEET_ID) {
     console.log('GOOGLE_SA_KEY と SHEET_ID がまだ設定されていません。登録の声は入れずにサイトを作ります。');
     process.exit(0);
   }
-  const sheet = await openSheet(GOOGLE_SA_KEY, SHEET_ID);
-  table = await sheet.read(SHEET_RANGE || 'A:D');
-  blocked = firstColumn(await sheet.readOptional(BLOCK_RANGE || '削除!A:A'), '名前');
-  ngWords = firstColumn(await sheet.readOptional(NG_RANGE || '禁止の言葉!A:A'), '言葉');
+  try {
+    const sheet = await openSheet(GOOGLE_SA_KEY, SHEET_ID);
+    table = await sheet.read(SHEET_RANGE || 'A:D');
+    blocked = firstColumn(await sheet.read(BLOCK_RANGE || '削除!A:A'), '名前');
+    ngWords = firstColumn(await sheet.read(NG_RANGE || '禁止の言葉!A:A'), '言葉');
+  } catch (e) {
+    console.error(`止めました（今日は公開しません。前の日のページのままです）: ${(e as Error).message}`);
+    process.exit(1);
+  }
 } else {
   console.log('使い方: node tools/intake.ts --sheet  または  node tools/intake.ts --csv 回答.csv [--block 削除.csv] [--ng 禁止の言葉.csv]');
   process.exit(1);
 }
 
 const m = JSON.parse(readFileSync(join(root, 'data', 'model.json'), 'utf8')) as Partial<MatchModel> & { version: string };
-const model: MatchModel = m.version !== 'none' && m.measureVersion === MEASURE_VERSION && Array.isArray(m.keys) ? (m as MatchModel) : defaultModel(MEASURE_VERSION);
+const model: MatchModel = m.version !== 'none' && readableVersion(m.measureVersion) && Array.isArray(m.keys) ? (m as MatchModel) : defaultModel(MEASURE_VERSION);
 const r = intake(rowsFromTable(table), { model, ngWords, blocked });
 
 mkdirSync(out, { recursive: true });
@@ -65,4 +73,5 @@ write('user-profiles.json', profiles);
 
 const c = r.counts;
 console.log(`回答 ${c.rows} 件: 判定待ち ${c.pending}・dots が NG ${c.judgedNg}・読めない ${c.unreadable}・壁① ${c.wall1}・禁止の言葉 ${c.ngWord}・削除済み ${c.blocked}・1 日の上限 ${c.overDay}・名前ごとの上限 ${c.overName}・同じ数字 ${c.duplicate} → 受け付け ${c.accepted}`);
+if (c.unknownDay) console.log(`::warning::注意: タイムスタンプの日付を読めない回答が ${c.unknownDay} 件あります。この分は全部で 1 日分として、1 日の上限（${INTAKE.perDay} 件）を数えました。シートのタイムスタンプの形を確かめてください（tools/intake-lib.ts の dayOf）。`);
 console.log(`壁③ を通って、サイトに出す声: ${r.voices.length} 件`);

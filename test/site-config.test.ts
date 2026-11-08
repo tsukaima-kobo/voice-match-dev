@@ -12,6 +12,10 @@ describe('外へのリンク', () => {
     expect(siteFor({ VITE_REPO: DEV.repo })).toEqual({ production: false, url: DEV.url, github: '', issues: DEV.repo });
     expect(siteFor({})).toEqual({ production: false, url: DEV.url, github: '', issues: DEV.repo });
     expect(siteFor({ VITE_REPO: PRODUCTION.repo, VITE_SITE_URL: 'https://example.com/' }).url).toBe('https://example.com/');
+    // GitHub のリポジトリの名前は、大文字・小文字を区別しない
+    expect(siteFor({ VITE_REPO: 'Tsukaima-Kobo/Voice-Match' }).production).toBe(true);
+    expect(siteFor({ VITE_REPO: 'tsukaima-kobo/voice-match-dev' }).production).toBe(false);
+    expect(siteFor({ VITE_REPO: 'someone/voice-match' }).production).toBe(false);
     expect(githubUrl('')).toBeNull();
     expect(githubUrl('tsukaima-kobo/voice-match')).toBe('https://github.com/tsukaima-kobo/voice-match');
     expect(githubUrl('not a repo')).toBeNull();

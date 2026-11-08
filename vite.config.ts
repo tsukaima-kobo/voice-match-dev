@@ -1,11 +1,11 @@
-// サイトのビルド（GitHub Pages 用。どの住所の下に置いても動くよう base は './'）。
+// サイトのビルド（本番は Cloudflare Pages、検証用は GitHub Pages。どの住所の下に置いても動くよう base は './'）。
 // ビルドした HTML には CSP を入れ、外への通信（fetch など）と外の物の読み込みを止める。
 import { defineConfig, type Plugin } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
 import { MEASURE_VERSION } from './src/voice/measure.ts';
 import { packVoices } from './src/data/pack.ts';
-import { fromOperatorVoices, mergeVoices } from './src/data/sources.ts';
+import { checkOperatorVoices, fromOperatorVoices, mergeVoices } from './src/data/sources.ts';
 import type { Catalog, OperatorVoices, ProfileList } from './src/data/types.ts';
 import { siteFor } from './src/site-config.ts';
 
@@ -21,11 +21,14 @@ const csp = (): Plugin => ({
 // 画像は public/og.jpg（1200×630）。ページごとに題と説明を入れる。検証用のサイトは、同じ声が 2 か所で見つからないよう検索に出さない（noindex）。
 const TARGET = siteFor(process.env);
 const SITE_URL = TARGET.url.replace(/\/?$/, '/');
+// どちらのサイトを作るかを、ビルドの記録に出す（.github/workflows/site.yml が、本番のリポジトリで検証用を作っていないかも確かめる）
+console.log(`サイト: ${TARGET.production ? '本番' : '検証用（検索に出さない）'}・${SITE_URL}（VITE_REPO=${process.env.VITE_REPO || 'なし'}）`);
 const OG: Record<string, { title: string; description: string }> = {
   'index.html': { title: 'voice-match｜あなたの声は誰に近い？', description: '一言話すと、声を 45 項目で測って、近い声と、あなただけの声紋を出します。登録不要・音は送らない。Say a phrase and see whose voice is closest to yours, plus your own voiceprint.' },
   'mimic.html': { title: '声真似の点数｜voice-match', description: 'お手本のセリフを真似すると、抑揚・タイミング・声の質で点数と直し方を出します。Imitate a line and get a score with tips.' },
   'voices.html': { title: '声の一覧｜voice-match', description: 'このサイトで比べる相手になる声の一覧。名前・所属で探して、大枠（VTuber・歌手など）で絞れます。The voices on voice-match, searchable by name or agency.' },
   'about.html': { title: 'しくみと約束｜voice-match', description: '声をどう測り、どう比べるか。音を送らない・残さない約束。How voice-match measures voices, and our promises.' },
+  'measure.html': { title: '声をじっくり測る｜voice-match', description: '決まった文を 20 分ほど読むと、サイトの声と同じ作り方であなたの声の代表値を作ります。音は残しません。Read set texts for about 20 minutes and get your voice’s representative values.' },
 };
 const ogp = (): Plugin => ({
   name: 'voice-match-ogp',
@@ -71,9 +74,12 @@ const voicePack = (): Plugin => ({
     const noCatalog: Catalog = { version: 1, voices: [] };
     const noProfiles: ProfileList = { version: MEASURE_VERSION, profiles: [] };
     const noOperator: OperatorVoices = { version: 1, measureVersion: MEASURE_VERSION, voices: [] };
+    // 運営が測った声のファイルがあって、測り方の版が違う時は止める（黙って 0 人で公開しない）
+    const operator = read('./data/generated/operator-voices.json', noOperator);
+    checkOperatorVoices(operator, MEASURE_VERSION);
     const { voices, features } = mergeVoices(
       [
-        fromOperatorVoices(read('./data/generated/operator-voices.json', noOperator)),
+        fromOperatorVoices(operator),
         { voices: read('./data/catalog.json', noCatalog).voices, profiles: read('./data/profiles.json', noProfiles).profiles },
         { voices: read('./data/generated/user-catalog.json', noCatalog).voices, profiles: read('./data/generated/user-profiles.json', noProfiles).profiles },
       ],

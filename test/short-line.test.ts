@@ -1,10 +1,10 @@
 // 一言から測る・話すほど絞り込む（features.ts の needOf・takes.ts）と、セリフ真似（measure.ts の Contour・mimic/line.ts）の試験。
 // 音は合成音（録音なし）。
 import { describe, expect, it } from 'vitest';
-import { CONTOUR_STEP, measureVoice } from '../src/voice/measure.ts';
+import { CONTOUR_STEP, measureVoice, type Contour } from '../src/voice/measure.ts';
 import { FEATURE_KEYS, forLength, LONG_SECONDS, needOf, ONE_LINE_SECONDS, type Features } from '../src/voice/features.ts';
 import { certaintyOf, combineTakes } from '../src/voice/takes.ts';
-import { compareLines, lineScore } from '../src/mimic/line.ts';
+import { align, compareLines, lineScore } from '../src/mimic/line.ts';
 import { mimicScore } from '../src/mimic/mimic.ts';
 import { concat, silence, vowel } from './voice-synth.ts';
 
@@ -60,11 +60,22 @@ describe('話すほど絞り込む', () => {
     expect(d.voicedSeconds).toBe(10);
     expect(d.takes).toBe(2);
   });
-  it('どれだけ確かかを言う: 一言・数秒・長い回 1 つ', () => {
+  it('どれだけ確かかを言う: 一言・1 回で数秒・長い回 1 つ', () => {
     expect(certaintyOf({ voicedSeconds: 1, longest: 1 })).toBe(1);
-    expect(certaintyOf({ voicedSeconds: 4, longest: 1 })).toBe(2);
+    expect(certaintyOf({ voicedSeconds: 3.5, longest: 3.5 })).toBe(2);
     expect(certaintyOf({ voicedSeconds: 12, longest: 3 })).toBe(2);
     expect(certaintyOf({ voicedSeconds: 9, longest: 8.5 })).toBe(3);
+  });
+  it('一言を何回足しても「だいたい」にはならない（抑揚などの項目が出ないため）', () => {
+    expect(certaintyOf({ voicedSeconds: 4, longest: 1 })).toBe(1);
+    const a = { ...base, pitch: 200, pitchRange: 5, hnr: 12 };
+    const c = combineTakes([1.2, 1.2, 1.2].map((voicedSeconds) => ({ features: a, voicedSeconds })));
+    expect(c.voicedSeconds).toBeGreaterThan(3);
+    expect(c.features.pitchRange).toBeNull();
+    expect(certaintyOf(c)).toBe(1);
+    const d = combineTakes([1.2, 3.2].map((voicedSeconds) => ({ features: a, voicedSeconds })));
+    expect(d.features.pitchRange).toBe(5);
+    expect(certaintyOf(d)).toBe(2);
   });
   it('短い回で項目が抜けても、声の点数は上がらない', () => {
     const t = ok(line(1, 180)).features;
@@ -115,6 +126,54 @@ describe('セリフ真似', () => {
     expect(r.intonation).toBeGreaterThanOrEqual(80);
     expect(r.timing).toBeLessThan(85);
     expect(r.tips.map((t) => t.text).join('')).toContain('速く');
+  });
+  it('そろえる道は、前へ進んだ時と同じ費用で戻る（一番安い道を通る）', () => {
+    // 決まった種の揺れのある、短い 2 つの動き。全部の道を調べた一番安い費用と比べる
+    const make = (n: number, seed: number): Contour => {
+      let s = seed;
+      const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+      const pitch = new Float32Array(n),
+        level = new Float32Array(n);
+      for (let k = 0; k < n; k++) {
+        pitch[k] = rnd() < 0.2 ? NaN : 12 + 6 * rnd();
+        level[k] = -30 * rnd();
+      }
+      return { step: CONTOUR_STEP, pitch, level };
+    };
+    const cost = (a: Contour, b: Contour, ra: number, rb: number, i: number, j: number) => {
+      const pa = a.pitch[i]!,
+        pb = b.pitch[j]!;
+      let c = Math.abs((a.level[i]! + 40) / 40 - (b.level[j]! + 40) / 40);
+      if (Number.isFinite(pa) && Number.isFinite(pb)) c += Math.min(Math.abs(pa - ra - (pb - rb)), 12) / 10;
+      else if (Number.isFinite(pa) !== Number.isFinite(pb)) c += 0.5;
+      return c;
+    };
+    for (let seed = 1; seed <= 20; seed++) {
+      const a = make(6 + (seed % 3), seed),
+        b = make(7 + (seed % 4), seed * 31);
+      const n = a.pitch.length,
+        m = b.pitch.length;
+      const inBand = (i: number, j: number) => Math.abs(i / (n - 1) - j / (m - 1)) <= 0.3;
+      const c = (i: number, j: number) => cost(a, b, 14, 15, i, j);
+      // 全部の道の一番安い費用
+      const best = (i: number, j: number): number => {
+        if (!inBand(i, j)) return Infinity;
+        if (i === 0 && j === 0) return c(0, 0);
+        const side = c(i, j) * 1.1 + 0.02;
+        return Math.min(i > 0 && j > 0 ? best(i - 1, j - 1) + c(i, j) : Infinity, i > 0 ? best(i - 1, j) + side : Infinity, j > 0 ? best(i, j - 1) + side : Infinity);
+      };
+      const path = align(a, b, 14, 15);
+      const cells = path.flatMap((js, i) => [...js].reverse().map((j) => [i, j] as const));
+      let total = c(0, 0);
+      for (let k = 1; k < cells.length; k++) {
+        const [pi, pj] = cells[k - 1]!,
+          [i, j] = cells[k]!;
+        total += i > pi && j > pj ? c(i, j) : c(i, j) * 1.1 + 0.02;
+      }
+      expect(cells[0]).toEqual([0, 0]);
+      expect(cells[cells.length - 1]).toEqual([n - 1, m - 1]);
+      expect(total, `seed ${seed}`).toBeCloseTo(best(n - 1, m - 1), 9);
+    }
   });
   it('抑揚・タイミング・声の質の重みは 4 : 2.5 : 3.5。声の質が無くても残りで出す', () => {
     expect(lineScore({ intonation: 100, timing: 0 }, 0)).toBe(40);

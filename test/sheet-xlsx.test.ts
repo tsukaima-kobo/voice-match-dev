@@ -129,7 +129,8 @@ describe('シートから、運営が測った声の代表値を作る', () => {
     const snap = snapshotFromSheet(readXlsx(xlsx({ 人物一覧: ppl, 声の測定値: ms })), MEASURE_VERSION);
     expect(snap.peoples.map((p) => [p.nameEn, p.groupEn])).toEqual([['Name A', 'Agency A'], [null, null]]);
     const { file } = buildOperatorVoices(snap, { measureVersion: MEASURE_VERSION, only: null });
-    expect(file.voices.map((v) => [v.name, v.nameEn, v.groupEn])).toEqual([['名前 a', 'Name A', 'Agency A'], ['名前 b', undefined, undefined]]);
+    // b は a と同じ所属（今の所属）なので、所属の英語名も同じになる（所属ごとに 1 つ）
+    expect(file.voices.map((v) => [v.name, v.nameEn, v.groupEn])).toEqual([['名前 a', 'Name A', 'Agency A'], ['名前 b', undefined, 'Agency A']]);
   });
 
   it('追加10分の測定値のタブがあれば、同じ人の窓に足す（見出しは人物ID で始まらなくてよい）。版が違えば止める', () => {
@@ -146,11 +147,28 @@ describe('シートから、運営が測った声の代表値を作る', () => {
     expect(after.notes.join('\n')).toMatch(/c: 窓 12 → 使う 12.*動画 2 本/);
     const old: Cell[][] = [EXTRA_HEAD, extraRow('c', 'x1', 200, '0.0.1')];
     expect(() => snapshotFromSheet(readXlsx(xlsx({ 人物一覧: ppl, 声の測定値: few, 追加10分の測定値: old })), MEASURE_VERSION)).toThrow(/版/);
+    // まだ測っていない行（数字も測定バージョンも空）は、版を見ない
+    const pending: Cell[][] = [...extra, ['task', 'c', 'x2', null, ...FEATURE_KEYS.map(() => null)]];
+    expect(buildOperatorVoices(snapshotFromSheet(readXlsx(xlsx({ 人物一覧: ppl, 声の測定値: few, 追加10分の測定値: pending })), MEASURE_VERSION), { measureVersion: MEASURE_VERSION, only: null }).file.voices).toHaveLength(1);
+    // 数字があるのに測定バージョンが空の行は止める。誤りには版を並べる
+    const blank: Cell[][] = [EXTRA_HEAD, extraRow('c', 'x1', 200, '0.0.1'), ['task', 'c', 'x2', null, ...measureRow('c', 'x2', 201).slice(8)]];
+    expect(() => snapshotFromSheet(readXlsx(xlsx({ 人物一覧: ppl, 声の測定値: few, 追加10分の測定値: blank })), MEASURE_VERSION)).toThrow(/0\.0\.1・（空）/);
   });
 
   it('タブ・見出しが足りない時は止める（項目が今のサイトと違う時など）', () => {
     expect(() => snapshotFromSheet(readXlsx(xlsx({ 人物一覧: people })), MEASURE_VERSION)).toThrow(/声の測定値/);
     const old = [MEASURE_HEAD.slice(0, -1), ...rows.slice(1)];
     expect(() => snapshotFromSheet(readXlsx(xlsx({ 人物一覧: people, 声の測定値: old })), MEASURE_VERSION)).toThrow(/無い見出し/);
+  });
+
+  it('版の列が無い行は 3.1.0 として読み、今の版と比べてよい版だけを使う。比べられない版があれば止める', () => {
+    const V = [...MEASURE_HEAD, '測定バージョン'];
+    const withV = (v: string | null): Cell[][] => [V, ...pitches.map((p, i) => [...measureRow('a', i < 6 ? 'v1' : 'v2', p), v])];
+    const build = (rows: Cell[][]) => buildOperatorVoices(snapshotFromSheet(readXlsx(xlsx({ 人物一覧: people, 声の測定値: rows })), MEASURE_VERSION), { measureVersion: MEASURE_VERSION, only: null });
+    expect(build(rows).file.measureVersion).toBe(MEASURE_VERSION);
+    expect(build(withV('3.1.0')).file.voices).toHaveLength(1);
+    expect(build(withV(MEASURE_VERSION)).file.voices).toHaveLength(1);
+    expect(build(withV(null)).file.voices).toHaveLength(1);
+    expect(() => build(withV('2.0.0'))).toThrow(/比べられない/);
   });
 });

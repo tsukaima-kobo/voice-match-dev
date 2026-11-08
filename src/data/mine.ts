@@ -1,6 +1,7 @@
 // 「じっくり測ったあなたの声」を、声のページの比べる相手に入れる（この端末のブラウザーだけ。数字だけ。どこにも送らない）。
 // じっくり測る（measure.html）で「声のページの相手に入れる」を押した時だけ残し、「外す」で消す。
 // 本人がその中で何位に出るかで、サイトの当たりやすさを確かめるため。読めない・版が違う時は、無い物として扱う。
+import { readableVersion } from '../voice/measure.ts';
 import { FEATURE_KEYS, type Features } from '../voice/features.ts';
 
 const KEY = 'voice-match-mine';
@@ -21,7 +22,7 @@ export function loadMine(measureVersion: string): Mine | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const o = JSON.parse(raw) as Partial<Mine>;
-    if (o.v !== 1 || o.m !== measureVersion || typeof o.features !== 'object' || o.features === null) return null;
+    if (o.v !== 1 || !readableVersion(o.m, measureVersion) || typeof o.features !== 'object' || o.features === null) return null;
     const f = o.features as Record<string, unknown>;
     if (!FEATURE_KEYS.every((k) => f[k] === null || typeof f[k] === 'number')) return null;
     return o as Mine;

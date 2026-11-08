@@ -8,8 +8,12 @@ interface ServiceKey {
   token_uri?: string;
 }
 
-/** スプレッドシートを開く（通行証を 1 回だけもらい、いくつかの範囲を読む） */
-export async function openSheet(keyJson: string, sheetId: string): Promise<{ read(range: string): Promise<string[][]>; readOptional(range: string): Promise<string[][]> }> {
+/**
+ * スプレッドシートを開く（通行証を 1 回だけもらい、いくつかの範囲を読む）。
+ * 読めない範囲は、空ではなく誤りにする（無いタブの範囲には、Sheets API は 400 を返す）。
+ * 削除のお願いのタブを読めないまま空として進むと、消した人がまた出てしまうため。
+ */
+export async function openSheet(keyJson: string, sheetId: string): Promise<{ read(range: string): Promise<string[][]> }> {
   const key = JSON.parse(keyJson) as ServiceKey;
   const aud = key.token_uri ?? 'https://oauth2.googleapis.com/token';
   const now = Math.floor(Date.now() / 1000);
@@ -23,18 +27,10 @@ export async function openSheet(keyJson: string, sheetId: string): Promise<{ rea
   });
   if (!tok.ok) throw new Error(`Google の通行証をもらえませんでした（HTTP ${tok.status}）`);
   const { access_token } = (await tok.json()) as { access_token: string };
-  const get = (range: string) => fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range)}`, { headers: { authorization: `Bearer ${access_token}` } });
   return {
     async read(range) {
-      const res = await get(range);
-      if (!res.ok) throw new Error(`スプレッドシートを読めませんでした（HTTP ${res.status}）`);
-      return ((await res.json()) as { values?: string[][] }).values ?? [];
-    },
-    // まだ無いかもしれないタブ用: 無いタブの範囲には、Sheets API は 400 を返す
-    async readOptional(range) {
-      const res = await get(range);
-      if (res.status === 400) return [];
-      if (!res.ok) throw new Error(`スプレッドシートを読めませんでした（HTTP ${res.status}）`);
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range)}`, { headers: { authorization: `Bearer ${access_token}` } });
+      if (!res.ok) throw new Error(`スプレッドシートの「${range}」を読めませんでした（HTTP ${res.status}${res.status === 400 ? '。タブが無いか、タブの名前が違います' : ''}）`);
       return ((await res.json()) as { values?: string[][] }).values ?? [];
     },
   };

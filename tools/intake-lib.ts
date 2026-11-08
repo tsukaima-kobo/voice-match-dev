@@ -2,10 +2,12 @@
 // フォームの回答の 1 行 = [タイムスタンプ, 送る内容, 判定, 理由]。判定は dots が書く（壁 ②。OK の行だけ使う）。
 // 壁 ① をもう一度（ページの確認は回り込めるため）、禁止の言葉・削除済みの名前・1 日の上限・同じ数字の重なりを除き、
 // 名前ごとに壁 ③（3 件以上そろったら中央値）で声にする。ID は名前（nameKey）から決まる（記録を持たずに、毎日同じ ID）。
+// 出す名前の書き方・所属・大枠・リンクは、壁 ③ でそろった登録だけから決める（外れた登録のいたずらで変わらないように）。
 import { CODE_PREFIX, checkSubmission, decodeSubmission, featuresOf, nameKey, type Submission } from '../src/submit/code.ts';
-import { consensus } from '../src/submit/consensus.ts';
+import { consensus, CONSENSUS } from '../src/submit/consensus.ts';
+import { medianFeatures } from '../src/voice/combine.ts';
 import { FEATURE_KEYS, type Features } from '../src/voice/features.ts';
-import type { MatchModel } from '../src/match/match.ts';
+import { rank, type MatchModel } from '../src/match/match.ts';
 
 export const INTAKE = {
   /** 1 日に受け付ける件数（壁 ② の後で数える。あふれた分は使わない） */
@@ -45,17 +47,31 @@ export interface UserVoice {
   features: Features;
 }
 
-export type CountKey = 'rows' | 'pending' | 'judgedNg' | 'unreadable' | 'wall1' | 'ngWord' | 'blocked' | 'overDay' | 'overName' | 'duplicate' | 'accepted';
+/** unknownDay: タイムスタンプの日付を読めなかった行（1 日の上限は、まとめて 1 日分として数える） */
+export type CountKey = 'rows' | 'pending' | 'judgedNg' | 'unreadable' | 'wall1' | 'ngWord' | 'blocked' | 'unknownDay' | 'overDay' | 'overName' | 'duplicate' | 'accepted';
 
 /** 表（シートや CSV）から行を取り出す。送る内容が無い行（見出しなど）は飛ばす */
 export function rowsFromTable(table: readonly (readonly string[])[]): Row[] {
   return table.filter((r) => (r[1] ?? '').includes(CODE_PREFIX)).map((r) => ({ at: (r[0] ?? '').trim(), code: r[1] ?? '', verdict: r[2] ?? '', reason: r[3] ?? '' }));
 }
 
-/** タイムスタンプの日付（"2026/11/01 12:34:56" → "2026-11-01"）。読めなければ "unknown" */
+/**
+ * タイムスタンプの日付（"2026/11/01 12:34:56" → "2026-11-01"）。読めなければ "unknown"。
+ * 読める形（Google スプレッドシートの地域の設定で変わる）: 年が先（2026/11/1・2026-11-01・2026.11.1・2026年11月1日）、
+ * 年が後（11/1/2026。月/日/年。前の数が 13 以上の時だけ日/月/年）。
+ */
 export function dayOf(at: string): string {
-  const m = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/.exec(at.trim());
-  return m ? `${m[1]}-${m[2]!.padStart(2, '0')}-${m[3]!.padStart(2, '0')}` : 'unknown';
+  const s = at.trim();
+  let ymd: [number, number, number];
+  let m = /^(\d{4})\s*[/.年-]\s*(\d{1,2})\s*[/.月-]\s*(\d{1,2})(?!\d)/.exec(s);
+  if (m) ymd = [Number(m[1]), Number(m[2]), Number(m[3])];
+  else if ((m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?!\d)/.exec(s))) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    ymd = a > 12 ? [Number(m[3]), b, a] : [Number(m[3]), a, b];
+  } else return 'unknown';
+  const [y, mo, d] = ymd;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return 'unknown';
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
 /** いちばん多い物（同じ数なら先に出た物） */
@@ -83,8 +99,28 @@ export function userIdOf(key: string): string {
   return `u-${n.toString(36).padStart(11, '0')}`;
 }
 
+/**
+ * 壁 ③ で使われる登録（src/submit/consensus.ts の consensus と同じ選び方: まったく同じ数字は 1 件に数え、
+ * 全部の中央値から照合の距離で CONSENSUS.maxDistance より遠い物を除く）。consensus が使った件数（used）と同じ数になる。
+ */
+export function consensusMembers<T extends { features: Features }>(model: MatchModel, items: readonly T[]): T[] {
+  const seen = new Set<string>();
+  const uniq = items.filter((x) => {
+    const k = JSON.stringify(FEATURE_KEYS.map((key) => x.features[key]));
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  if (!uniq.length) return [];
+  const mid = medianFeatures(uniq);
+  return uniq.filter((x) => {
+    const r = rank(model, x.features, [{ id: 'mid', features: mid }], 1)[0];
+    return r !== undefined && r.distance <= CONSENSUS.maxDistance;
+  });
+}
+
 export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: readonly string[]; blocked: readonly string[] }): { accepted: Accepted[]; voices: UserVoice[]; counts: Record<CountKey, number> } {
-  const counts = Object.fromEntries((['rows', 'pending', 'judgedNg', 'unreadable', 'wall1', 'ngWord', 'blocked', 'overDay', 'overName', 'duplicate', 'accepted'] as CountKey[]).map((k) => [k, 0])) as Record<CountKey, number>;
+  const counts = Object.fromEntries((['rows', 'pending', 'judgedNg', 'unreadable', 'wall1', 'ngWord', 'blocked', 'unknownDay', 'overDay', 'overName', 'duplicate', 'accepted'] as CountKey[]).map((k) => [k, 0])) as Record<CountKey, number>;
   const blocked = new Set(o.blocked.map(nameKey));
   const ng = o.ngWords.map(nameKey).filter(Boolean);
   const perDay = new Map<string, number>();
@@ -122,6 +158,7 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
       continue;
     }
     const day = dayOf(row.at);
+    if (day === 'unknown') counts.unknownDay++;
     if ((perDay.get(day) ?? 0) >= INTAKE.perDay) {
       counts.overDay++;
       continue;
@@ -151,12 +188,15 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
     const items = accepted.filter((a) => a.key === key);
     const c = consensus(o.model, items);
     if (!c) continue;
+    // 名前の書き方・所属・大枠・リンクは、そろった登録だけで決める
+    const members = consensusMembers(o.model, items);
+    if (members.length !== c.used) throw new Error('壁 ③ で使った登録の数が合いません（tools/intake-lib.ts の consensusMembers を src/submit/consensus.ts に合わせてください）');
     // 2 つの名前が同じ ID になることは、まず無い。もし起きたら、後の方に印を付ける
     let id = userIdOf(key);
     for (let n = 2; used.has(id); n++) id = `${userIdOf(key)}-${n}`;
     used.add(id);
-    const group = mostCommon(items.map((a) => a.group ?? '').filter(Boolean));
-    voices.push({ id, key, name: mostCommon(items.map((a) => a.name))!, ...(group ? { group } : {}), kinds: majorityKinds(items.map((a) => a.kinds)), link: mostCommon(items.map((a) => a.link))!, used: c.used, features: c.features });
+    const group = mostCommon(members.map((a) => a.group ?? '').filter(Boolean));
+    voices.push({ id, key, name: mostCommon(members.map((a) => a.name))!, ...(group ? { group } : {}), kinds: majorityKinds(members.map((a) => a.kinds)), link: mostCommon(members.map((a) => a.link))!, used: c.used, features: c.features });
   }
   voices.sort((a, b) => (a.id < b.id ? -1 : 1));
   return { accepted, voices, counts };

@@ -12,7 +12,7 @@
 
 ## 2. ファイルを変える
 
-- [x] 本番の住所・スターの導線・削除のお願いの Issue の行き先は、本番のリポジトリで作ると自動で本番の物になる（`site.yml` がリポジトリの名前を `VITE_REPO` に入れ、`src/site-config.ts` の `siteFor` が選ぶ）。ファイルを書き換えなくてよい。
+- [x] 本番の住所・スターの導線・削除のお願いの Issue の行き先は、本番のリポジトリで作ると自動で本番の物になる（`site.yml` がリポジトリの名前を `VITE_REPO` に入れ、`src/site-config.ts` の `siteFor` が選ぶ。大文字・小文字は区別しない）。ファイルを書き換えなくてよい。ビルドの記録に「サイト: 本番」か「サイト: 検証用」と出る。
   - 本番: 住所 `https://voice-match.com/`、見出しの GitHub のリンク・結果の下の「GitHub でスターする」・足元の GitHub・しくみと約束の「オープンソース」の節が出る。スターの数は毎朝のビルドで GitHub から取って、ページに書き込む（見る人のブラウザーは GitHub に問い合わせない）。検索に出る。
   - 検証用: 住所は `https://tsukaima-kobo.github.io/voice-match-dev/`、スターの導線は出さない、検索に出さない（`noindex`）。
   - 住所だけ変えたい時は、Variables の `VITE_SITE_URL` に入れる。
@@ -38,19 +38,23 @@
    - Secrets に `CLOUDFLARE_API_TOKEN`（1 の値）と `CLOUDFLARE_ACCOUNT_ID`（2 の値）
 4. push するか、Actions の site →「Run workflow」。最初の 1 回で Cloudflare に `voice-match` のプロジェクトができ、`https://voice-match.pages.dev/` に出る（名前が取られていたら少し違う住所になる）。
 5. Cloudflare → Workers & Pages → voice-match → カスタムドメイン → `voice-match.com` を追加。同じアカウントのドメインなので、DNS は自動で入る。`www.voice-match.com` も使うなら、同じように足す。
-6. GitHub の Settings → Pages は使わないので、Source を「なし」のままにする。
+6. 本番のリポジトリの Settings → Pages は使わないので、Source を「なし」のままにする（`docs/registration.md` の 4 の 6 は検証用だけ）。
+7. 本番のリポジトリで検証用のサイト（検索に出さない）ができた時は、`site.yml` が公開せずに止める。
 
 ## 3.7 運営が測った声を本番に置く
 
 ```sh
-GH_REPO=tsukaima-kobo/voice-match node tools/voices-release.ts upload --yes
+node tools/voices-release.ts upload --repo tsukaima-kobo/voice-match --yes
 ```
+
+置き先は `--repo` で必ず書く（決まった物は無い。`GH_REPO` や手元の gh の設定では決まらない）。書けるのは本番と検証用だけで、最初に「置き先」を出す（`docs/voices-release.md` の 4）。
 
 ## 3.8 出した後の検証用（tsukaima-kobo/voice-match-dev）
 
 声が本番だけにあれば、削除のお願いを 1 か所で済ませられる。本番のページが見られるようになったら:
 
 - [ ] 検証用の Release「voices-data」を消す（`gh release delete voices-data -R tsukaima-kobo/voice-match-dev --cleanup-tag --yes`）。
+- これからは、運営が測った声も、削除のお願いの後の置き直しも、`--repo tsukaima-kobo/voice-match` で本番に置く。検証用（`--repo tsukaima-kobo/voice-match-dev`）には置かない。
 - [ ] 検証用のサイトを止める（`gh workflow disable site -R tsukaima-kobo/voice-match-dev` と、Settings → Pages → Unpublish site）。
 - 検証用のリポジトリは、コードを作る場所として残す。確かめる時は手元（`npm run dev`）で開く。
 

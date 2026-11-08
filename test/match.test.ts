@@ -1,7 +1,7 @@
 // 照合（src/match/match.ts）と tools/lib.ts の試験。数字は種つきの乱数で作る（声の合成はしない）。
 import { describe, expect, it } from 'vitest';
-import { FEATURE_KEYS, FEATURE_BY_KEY, type Features } from '../src/voice/features.ts';
-import { defaultModel, rank, closeness, closenessWord, farScale } from '../src/match/match.ts';
+import { FEATURE_KEYS, FEATURE_BY_KEY, forLength, ONE_LINE_SECONDS, type Features } from '../src/voice/features.ts';
+import { defaultModel, rank, closeness, closenessWord, distances, farScale, type MatchModel } from '../src/match/match.ts';
 import { evaluate, fitModel, itemStats, LIKENESS_SHARE, likenessScale, medianFeatures, selectWindows, type Speaker } from '../tools/lib.ts';
 import type { VoiceWindow } from '../src/data/types.ts';
 import { gauss, rng } from './voice-synth.ts';
@@ -63,6 +63,90 @@ describe('照合', () => {
   });
 });
 
+/** 逆行列（掃き出し。試験の答え合わせ用） */
+function inverse(a: number[][]): number[][] {
+  const n = a.length;
+  const m = a.map((row, i) => [...row, ...row.map((_, j) => (i === j ? 1 : 0))]);
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(m[r]![c]!) > Math.abs(m[p]![c]!)) p = r;
+    [m[c], m[p]] = [m[p]!, m[c]!];
+    const d = m[c]![c]!;
+    for (let j = 0; j < 2 * n; j++) m[c]![j]! /= d;
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = m[r]![c]!;
+      for (let j = 0; j < 2 * n; j++) m[r]![j]! -= f * m[c]![j]!;
+    }
+  }
+  return m.map((row) => row.slice(n));
+}
+/** 答え合わせ: 両方にある項目だけの、マハラノビス距離を 1 項目あたりに（Σ = (WᵀW)⁻¹ の、その項目の所の逆で） */
+function mahalanobis(model: MatchModel, a: Features, b: Features): number {
+  const z = (f: Features) => model.keys.map((k, i) => (f[k] === null ? null : ((FEATURE_BY_KEY[k].log ? Math.log(f[k]!) : f[k]!) - model.center[i]!) / model.spread[i]!));
+  const u = z(a),
+    v = z(b);
+  const o = model.keys.flatMap((_, i) => (u[i] !== null && v[i] !== null ? [i] : []));
+  const W = model.whiten!;
+  const cov = inverse(W[0]!.map((_, i) => W[0]!.map((_, j) => W.reduce((s, row) => s + row[i]! * row[j]!, 0))));
+  const p = inverse(o.map((i) => o.map((j) => cov[i]![j]!)));
+  const d = o.map((i) => u[i]! - v[i]!);
+  return Math.sqrt(d.reduce((s, x, r) => s + x * d.reduce((t, y, c) => t + p[r]![c]! * y, 0), 0) / o.length);
+}
+
+describe('白色化のモデルで、無い項目のある声を比べる', () => {
+  const speakers = crowd(30, 0.05, 4);
+  // 項目どうしに重なりのあるモデル（ずらした項目を足して、白色化に意味を持たせる）
+  const linked = speakers.map((s) => ({
+    ...s,
+    windows: s.windows.map((w) => ({ ...w, features: { ...w.features, f2: w.features.f1! * 1.6, mfcc2: w.features.mfcc1! / 40 } })),
+  }));
+  const model = fitModel(linked, V, { whiten: true });
+  const profiles = linked.map((s) => ({ id: s.id, features: medianFeatures(s.windows) }));
+  const query = linked[7]!.windows[3]!.features;
+  it('全部の項目がある時も、一部が無い時も、両方にある項目だけのマハラノビス距離（1 項目あたり）になる', () => {
+    expect(model.whiten).toBeDefined();
+    for (const q of [query, forLength(query, ONE_LINE_SECONDS), { ...query, pitch: null, f1: null, mfcc5: null }]) {
+      for (const r of rank(model, q, profiles, 30)) expect(r.distance, r.id).toBeCloseTo(mahalanobis(model, q, profiles.find((p) => p.id === r.id)!.features), 3);
+    }
+  });
+  it('数は、両方にあって比べた項目の数', () => {
+    const short = forLength(query, ONE_LINE_SECONDS);
+    const n = FEATURE_KEYS.filter((k) => short[k] !== null).length;
+    expect(n).toBeLessThan(FEATURE_KEYS.length);
+    expect(rank(model, short, profiles, 1)[0]!.used).toBe(n);
+    expect(rank(model, query, profiles, 1)[0]!.used).toBe(FEATURE_KEYS.length);
+  });
+  it('来た人に無い項目は、相手の値に関わらない（中心の値の人が近くならない）', () => {
+    const short = forLength(query, ONE_LINE_SECONDS);
+    const real = profiles[7]!.features;
+    const centred = { ...real };
+    model.keys.forEach((k, i) => {
+      if (short[k] === null) centred[k] = FEATURE_BY_KEY[k].log ? Math.exp(model.center[i]!) : model.center[i]!;
+    });
+    const r = rank(model, short, [
+      { id: 'b-centre', features: centred },
+      { id: 'a-real', features: real },
+    ]);
+    expect(r[0]!.distance).toBe(r[1]!.distance);
+    expect(r[0]!.id).toBe('a-real');
+  });
+  it('近さは丸めない（言葉は丸める前の値で選ぶ）。並べない近さも同じ値', () => {
+    const d = rank(model, query, profiles, 30).map((x) => x.distance);
+    expect(d.some((x) => Math.round(x * 100) / 100 !== x)).toBe(true);
+    const all = new Map(distances(model, query, profiles).map((x) => [x.id, x.distance]));
+    for (const r of rank(model, query, profiles, 30)) expect(all.get(r.id)).toBe(r.distance);
+    const m = { ...model, likeness: { typical: 9, cuts: [1.0195, 1.1898, 1.3879] as [number, number, number] } };
+    expect(closenessWord(m, 1.0195)).toBe('とても似ている');
+    expect(closenessWord(m, 1.0197)).toBe('よく似ている');
+  });
+  it('一言でも、ほとんどの場合その人を当てる', () => {
+    const r = evaluate(linked, model);
+    expect(r.oneLine.top1).toBeGreaterThan(0.8);
+    expect(r.oneLine.top5).toBeGreaterThanOrEqual(r.oneLine.top1);
+  });
+});
+
 describe('窓の選別と代表値', () => {
   const base = crowd(1, 0.02)[0]!.windows;
   it('別の版・音楽・短い窓・高さが大きく外れた窓を除く', () => {
@@ -92,6 +176,15 @@ describe('モデルと評価', () => {
       if (j % 2 === 0) expect(icc, k).toBeGreaterThan(0.8);
       else expect(icc, k).toBeLessThan(0.3);
     });
+  });
+  it('窓に無い項目は、0 のずれとして数えない（散らばりが小さくならない）', () => {
+    const base = fitModel(speakers, V, { whiten: false });
+    // 半分の窓から pitch を抜く
+    const holes = speakers.map((s) => ({ ...s, windows: s.windows.map((w, i) => (i % 2 ? { ...w, features: { ...w.features, pitch: null } } : w)) }));
+    const m = fitModel(holes, V, { whiten: false });
+    const at = base.keys.indexOf('pitch');
+    expect(m.spread[at]! / base.spread[at]!).toBeGreaterThan(0.8);
+    expect(m.spread[at]! / base.spread[at]!).toBeLessThan(1.25);
   });
   it('別の動画からでも、ほとんどの場合その人を当てる', () => {
     for (const whiten of [false, true]) {

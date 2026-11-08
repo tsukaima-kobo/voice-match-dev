@@ -1,5 +1,6 @@
 // 壁 ③: 同じ声に別々の 3 件以上の数字が届き、互いに近い時だけ、その声を出す。出す数字はその中央値。DOM なし・乱数なし。
-// 1 件だけのでたらめな数字では出せない。近さは照合と同じ距離（src/match/match.ts の rank）。
+// 1 件だけのでたらめな数字では出せない。近さは照合と同じ距離（src/match/match.ts の rank）。両方にある項目だけを比べ、
+// 1 項目あたりにするので、項目の少ない数字（無い項目を null にした物）でも通りやすくはならない。
 import { FEATURE_KEYS, type Features } from '../voice/features.ts';
 import { medianFeatures } from '../voice/combine.ts';
 import { rank, type MatchModel } from '../match/match.ts';

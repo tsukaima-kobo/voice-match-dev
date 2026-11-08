@@ -4,6 +4,7 @@
 //   バイトは「項目ごと」に並べる（同じ項目の数字が続くと、配る時の圧縮がよく効く）。文字にするのは base64。
 // - 名前など: 声ごとの物を、項目ごとの並び（名前・リンク）にする。所属は 1 回だけ書いて番号で指す。
 //   英語の名前は、誰か 1 人でもある時だけ、名前と同じ並び（無い人は空）で入れる。所属の英語の名前も、所属と同じ並びで。
+//   所属の英語の名前は所属ごとに 1 つ: その所属の声に付いている英語の名前のうち、いちばん多い物（同じ数なら先に出た物）。
 //   大枠（src/data/kinds.ts）は、声ごとに 16 個の印を 1 つの数（0〜65535）にする。
 // - 入れるのは、名前（あれば英語名も）・所属・大枠・公式ページ・数字だけ（「しくみと約束」の 05 のとおり）。ID は入れない。
 //   ほどいた後の ID は、ページの中だけの番号（"0"・"1"…）。データが変わると変わるので、リンクには名前を使う。
@@ -75,9 +76,16 @@ export function packVoices(measureVersion: string, voices: readonly CatalogEntry
   const lo: number[] = [];
   const step: number[] = [];
   keys.forEach((k, j) => {
-    const xs = profiles.map((p) => p[k]).filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
-    const min = xs.length ? Math.min(...xs) : 0;
-    const max = xs.length ? Math.max(...xs) : 0;
+    // Math.min(...xs) は、声が十数万になると呼び出しの深さがあふれるので、1 つずつ見る
+    let min = Infinity;
+    let max = -Infinity;
+    for (const p of profiles) {
+      const x = p[k];
+      if (typeof x !== 'number' || !Number.isFinite(x)) continue;
+      if (x < min) min = x;
+      if (x > max) max = x;
+    }
+    if (min > max) min = max = 0;
     const s = max > min ? (max - min) / LEVELS : 0;
     lo.push(min);
     step.push(s);
@@ -88,13 +96,25 @@ export function packVoices(measureVersion: string, voices: readonly CatalogEntry
     });
   });
   const groups: string[] = [];
-  const groupsEn: string[] = [];
+  const groupAt = new Map<string, number>();
+  /** 所属ごとの、英語の名前と付いていた数（出た順） */
+  const enVotes: Map<string, number>[] = [];
   const g = voices.map((v) => {
     if (!v.group) return -1;
-    let at = groups.indexOf(v.group);
-    if (at < 0) at = groups.push(v.group) - 1;
-    if (v.groupEn && !groupsEn[at]) groupsEn[at] = v.groupEn;
+    let at = groupAt.get(v.group);
+    if (at === undefined) {
+      at = groups.push(v.group) - 1;
+      groupAt.set(v.group, at);
+      enVotes.push(new Map());
+    }
+    if (v.groupEn) enVotes[at]!.set(v.groupEn, (enVotes[at]!.get(v.groupEn) ?? 0) + 1);
     return at;
+  });
+  const groupsEn = enVotes.map((votes) => {
+    let best = '';
+    let bestN = 0;
+    for (const [en, n] of votes) if (n > bestN) [best, bestN] = [en, n];
+    return best;
   });
   const nameEn = voices.map((v) => v.nameEn ?? '');
   return {
@@ -106,7 +126,7 @@ export function packVoices(measureVersion: string, voices: readonly CatalogEntry
     name: voices.map((v) => v.name),
     ...(nameEn.some(Boolean) ? { nameEn } : {}),
     groups,
-    ...(groupsEn.some(Boolean) ? { groupsEn: groups.map((_, i) => groupsEn[i] ?? '') } : {}),
+    ...(groupsEn.some(Boolean) ? { groupsEn } : {}),
     g,
     k: voices.map((v) => maskOf(v.kinds ?? [])),
     link: voices.map((v) => v.links.profile),

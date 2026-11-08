@@ -36,11 +36,14 @@ export function combineTakes(takes: readonly Take[]): Combined {
   return { features, voicedSeconds, takes: takes.length, longest };
 }
 
-/** 結果の確かさ: 1 ざっくり（一言）・2 だいたい（声 3 秒から）・3 しっかり（声 8 秒から、速さと間も出る） */
+/**
+ * 結果の確かさ: 1 ざっくり（一言）・2 だいたい（1 回で声 3 秒から、抑揚なども出る）・3 しっかり（1 回で声 8 秒から、速さと間も出る）。
+ * 項目は、その長さの回からしか作らない（needOf）ので、短い回を何回足しても上がらない
+ */
 export type Certainty = 1 | 2 | 3;
 export function certaintyOf(c: Pick<Combined, 'voicedSeconds' | 'longest'>): Certainty {
   if (c.voicedSeconds >= LONG_SECONDS && c.longest >= LONG_SECONDS) return 3;
-  if (c.voicedSeconds >= FEW_SECONDS) return 2;
+  if (c.voicedSeconds >= FEW_SECONDS && c.longest >= FEW_SECONDS) return 2;
   return 1;
 }
 const CERT_JA: Record<Certainty, string> = { 1: 'ざっくり', 2: 'だいたい', 3: 'しっかり' };

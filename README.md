@@ -23,7 +23,7 @@
 ## 約束 / Promises
 
 - 声は端末の中だけで数字にして、すぐに捨てます。どこにも送らず、保存もしません。 / Your voice is turned into numbers on your device and thrown away at once — never sent, never stored.
-- サーバーを持たない静的なサイト（GitHub Pages）で、外のサーバーには何も読みに行きません。 / A static site with no server; it loads nothing from elsewhere.
+- サーバーを持たない静的なサイト（Cloudflare Pages）で、外のサーバーには何も読みに行きません。 / A static site with no server (on Cloudflare Pages); it loads nothing from elsewhere.
 - サイトに置いている 1 人分の声は、45 項目の中央値を 1 つ 1 バイトにした、45 バイトの数字だけです。音は入っていません。 / Each voice on the site is just 45 bytes of numbers — no sound.
 - 声から性別や年齢を判断しません。 / Gender and age are never guessed from a voice.
 - 利用者は何も登録しません。 / No sign-up.
@@ -49,7 +49,8 @@ npm run typecheck        # 型の確認
 npm run build            # dist/ にサイトを作る
 npm run build:collector  # 収集の拡張機能を collector/dist に作る
 npm run build:voices     # data/voices/ から代表値（data/profiles.json）を作る
-npm run eval             # 照合のモデル（data/model.json）と近さの言葉の目安を作り、見分ける力を測る
+npm run eval             # 拡張機能で測った声（data/voices/）から、照合のモデル（data/model.json）と近さの言葉の目安を作り、見分ける力を測る
+node tools/eval.ts --sheet <シート.xlsx>  # 同じことを、運営が測った声（スプレッドシート）から
 npm run intake -- --csv 回答.csv  # 声の登録を取り込む（毎日は GitHub Actions が Google スプレッドシートから）
 node tools/voices-release.ts make --sheet <シート.xlsx> --only <出す人の一覧>  # 運営が測った声の代表値を作る（docs/voices-release.md）
 ```
@@ -79,7 +80,7 @@ node tools/voices-release.ts make --sheet <シート.xlsx> --only <出す人の�
 | `src/ui/live-analysis.ts` | 録っている間の解析パネル（声の成分の図・高さの線・数字・測れる項目）と、計算中の演出 |
 | `src/ui/mic-picker.ts` | 使うマイクを選ぶ |
 | `src/ui/share.ts`・`share-card.ts` | 結果のシェア（X に投稿・画像を保存・画像つきで共有）、共有カード（1080×1350）、作った人のリンク、GitHub のスター |
-| `src/site-config.ts` | 公開の住所・作った人のリンク（X など）・GitHub のリポジトリ（空の間はスターの導線を出さない）・削除のお願いの窓口 |
+| `src/site-config.ts` | 本番か検証用か（`siteFor` がリポジトリの名前で選ぶ。公開の住所・スターの導線・削除のお願いの Issue の行き先が変わる。検証用ではスターの導線を出さない）・作った人のリンク（X など）・削除のお願いの窓口 |
 | `src/i18n.ts`・`public/lang.js` | 言葉（日本語・英語）。見出しの右の JP / EN で切り替え。ページの文は両方を書き、CSS で片方を見せる。最初の言葉は ?lang=・前に選んだ言葉・ブラウザーの言葉の順 |
 | `src/prompts/prompts.ts` | お題と決まった文 |
 | `src/submit/` | 声の登録: 送る内容と壁 ①（`code.ts`）、壁 ③（`consensus.ts`）、Google フォームの住所（`config.ts`） |
@@ -90,14 +91,14 @@ node tools/voices-release.ts make --sheet <シート.xlsx> --only <出す人の�
 | `tools/build-voices.ts`・`channel.ts` | 拡張機能の数字からの代表値づくり、配信の経路で数字がどれだけ動くか |
 | `tools/intake.ts` | 声の登録の取り込み（シートから。壁 ① をもう一度・dots の判定・壁 ③・削除と禁止の言葉のタブ）→ `data/generated/`（ビルドの時だけ） |
 | `tools/github-stars.ts` | スターの数をビルドの時に取ってページに書く（設定がある時だけ） |
-| `.github/workflows/site.yml` | 毎日と push の時に、Release とシートを読んでサイトを作り、GitHub Pages へ公開（リポジトリには書き込まない） |
+| `.github/workflows/site.yml` | 毎日と push の時に、Release とシートを読んでサイトを作り、公開（本番は Cloudflare Pages、検証用は GitHub Pages。リポジトリには書き込まない） |
 | `data/` | 照合のモデル（`model.json`）と評価（`eval-report.json`）。拡張機能で測った声（`catalog.json`・`voices/`・`profiles.json`）。運営が測った声（Release から）と登録から出た声は、サイトを作る時だけ `data/generated/` に作る（リポジトリには入れない） |
 
 ## 声のデータの作り方
 
 - **運営が測った声**: 配信の音から 30 秒ごとに測った数字をスプレッドシートに集め、`tools/voices-release.ts` で 1 人 1 件の代表値にして、GitHub の Release「voices-data」に置きます。サイトを作る時に取ってきます。数字はリポジトリにコミットしません（[手順](docs/voices-release.md)）。
 - **拡張機能で測った声**: `data/catalog.json` に声を足し、収集の拡張機能で配信や動画を再生しながら測って、書き出したファイルを `data/voices/` に入れます（[使い方](docs/collector.md)）。`npm run build:voices` で代表値を作ります。
-- どちらも、`npm run eval` で照合のモデルと近さの言葉の目安を作り直し、`npm run build` でサイトを作り直します。
+- 照合のモデルと近さの言葉の目安は、運営が測った声なら `node tools/eval.ts --sheet <シート.xlsx>`（代表値と同じ窓を使う）、拡張機能で測った声なら `npm run eval` で作り直します。サイトは `npm run build` で作り直します。
 
 ## 本番のリリース
 

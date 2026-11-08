@@ -146,10 +146,19 @@ export function decodeSubmission(text: string): Submission | null {
   return ok ? (raw as Submission) : null;
 }
 
-/** 名前を比べるための形（全角・半角や大文字・小文字、空白と記号の違いをそろえる） */
+/**
+ * 見えない文字: 制御文字・書式の文字（幅の無い空白・書く向きを変える文字など）・表示しない文字（異体字の印・ハングルの埋め字など）・点字の空白。
+ * 名前に混ぜると、同じ名前に見えて別の名前になる（削除の一覧・禁止の言葉・同じ名前の見分けを抜けられる）。壁 ① で断り、nameKey では除く。
+ */
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2800]/gu;
+export const hasInvisible = (text: string): boolean => text.search(INVISIBLE) >= 0;
+
+/** 名前を比べるための形（見えない文字を除き、全角・半角や大文字・小文字、空白と記号の違いをそろえる） */
 export function nameKey(name: string): string {
   return name
+    .replace(INVISIBLE, '')
     .normalize('NFKC')
+    .replace(INVISIBLE, '')
     .toLowerCase()
     .replace(/[\s・･、。,.\-_~〜!！?？'"“”‘’()（）[\]［］【】「」『』]/g, '');
 }
@@ -173,8 +182,10 @@ export function checkSubmission(s: Submission): Problem[] {
   }
   if (!s.ok) out.push({ kind: 'consent', text: t('「公開されている声で、一般の人の声ではない」に印をつけてください。', 'Tick “this is a public voice, not a private person’s”.') });
   const name = s.n.trim();
-  if (!name || [...name].length > LIMITS.name || /[\u0000-\u001f\u007f]/.test(name) || /https?:|www\./i.test(name)) out.push({ kind: 'name', text: t(`名前は 1〜${LIMITS.name} 文字で、URL を入れないでください。`, `The name must be 1–${LIMITS.name} characters, without a URL.`) });
-  if (s.g !== undefined && ([...s.g].length > LIMITS.group || /[\u0000-\u001f\u007f]/.test(s.g) || /https?:/i.test(s.g))) out.push({ kind: 'group', text: t(`所属・作品名は ${LIMITS.group} 文字までで、URL を入れないでください。`, `The agency or title must be up to ${LIMITS.group} characters, without a URL.`) });
+  if (hasInvisible(s.n)) out.push({ kind: 'name', text: t('名前に見えない文字（幅の無い空白・向きを変える文字など）が入っています。消してから作り直してください。', 'The name contains invisible characters (such as zero-width spaces). Remove them and try again.') });
+  else if (!name || !nameKey(name) || [...name].length > LIMITS.name || /https?:|www\./i.test(name)) out.push({ kind: 'name', text: t(`名前は 1〜${LIMITS.name} 文字で、URL を入れないでください。`, `The name must be 1–${LIMITS.name} characters, without a URL.`) });
+  if (s.g !== undefined && hasInvisible(s.g)) out.push({ kind: 'group', text: t('所属・作品名に見えない文字（幅の無い空白・向きを変える文字など）が入っています。消してから作り直してください。', 'The agency or title contains invisible characters (such as zero-width spaces). Remove them and try again.') });
+  else if (s.g !== undefined && ([...s.g].length > LIMITS.group || /https?:/i.test(s.g))) out.push({ kind: 'group', text: t(`所属・作品名は ${LIMITS.group} 文字までで、URL を入れないでください。`, `The agency or title must be up to ${LIMITS.group} characters, without a URL.`) });
   if (!(typeof s.k === 'number' && s.k > 0 && (s.k & ~KIND_BITS_ALL) === 0)) out.push({ kind: 'kinds', text: t('大枠（VTuber・歌手など）を 1 つ以上選んでください。', 'Choose at least one category (VTuber, singer, etc.).') });
   const linkProblem = checkLink(s.l);
   if (linkProblem) out.push({ kind: 'link', text: linkProblem });

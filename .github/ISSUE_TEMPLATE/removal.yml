@@ -6,15 +6,15 @@ body:
   - type: markdown
     attributes:
       value: |
-        voice-match に出ている声を、サイトと公開データ（名前・所属・大枠・公式ページ・声の数字）から消すためのお願いです。ご本人、または所属事務所・運営会社の方からのお願いを受け付けます。
+        voice-match に出ている声を、サイトと公開データ（名前・英語名・所属・所属の英語名・大枠・公式ページ・声の数字）から消すためのお願いです。ご本人、または所属事務所・運営会社の方からのお願いを受け付けます。
         **ここに書いた内容は公開されます。** 公開したくない時は、[Google フォーム](https://docs.google.com/forms/d/e/1FAIpQLSeWtH6Ymeb1bNpSxf8iAe3JI5Qiq_AIDF3TuZgJM35KxaJoJg/viewform) か、メール（contact@voice-match.com）で送ってください。
 
-        This asks us to remove a voice from voice-match and its public data (name, affiliation, category, official page and voice numbers). We accept requests from the person themselves, or from their agency or company.
+        This asks us to remove a voice from voice-match and its public data (name, English name, affiliation, English affiliation name, category, official page and voice numbers). We accept requests from the person themselves, or from their agency or company.
         **What you write here is public.** To keep it private, use the [Google Form](https://docs.google.com/forms/d/e/1FAIpQLSeWtH6Ymeb1bNpSxf8iAe3JI5Qiq_AIDF3TuZgJM35KxaJoJg/viewform) or email contact@voice-match.com.
   - type: input
     id: name
     attributes:
-      label: サイトに出ている名前 / Name shown on the site
+      label: サイトに出ている名前（日本語か英語）/ Name shown on the site (Japanese or English)
     validations:
       required: true
   - type: dropdown
@@ -32,7 +32,7 @@ body:
     id: confirm
     attributes:
       label: 確かめる方法（任意）/ How we can confirm (optional)
-      description: 例: 公式 X のアカウントからも連絡できる など / e.g. you can also contact us from the official X account
+      description: "例: 公式 X のアカウントからも連絡できる など / e.g. you can also contact us from the official X account"
   - type: textarea
     id: note
     attributes:

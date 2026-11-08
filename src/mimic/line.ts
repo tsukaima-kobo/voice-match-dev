@@ -46,8 +46,8 @@ function medianOf(v: ArrayLike<number>): number {
   return a.length % 2 ? a[m]! : (a[m - 1]! + a[m]!) / 2;
 }
 
-/** 2 つの動きをそろえる道（お手本のこま i ごとに、あなたのこま j の並び）。帯の外は通らない */
-function align(a: Contour, b: Contour, ra: number, rb: number): number[][] {
+/** 2 つの動きをそろえる道（お手本のこま i ごとに、あなたのこま j の並び。後ろから並ぶ）。帯の外は通らない。ra・rb はそれぞれの真ん中の高さ */
+export function align(a: Contour, b: Contour, ra: number, rb: number): number[][] {
   const n = a.pitch.length,
     m = b.pitch.length;
   const cost = (i: number, j: number) => {
@@ -63,6 +63,8 @@ function align(a: Contour, b: Contour, ra: number, rb: number): number[][] {
   const band = 0.3;
   const INF = 1e18;
   const D = new Float64Array(n * m).fill(INF);
+  // どこから来たか（0 両方・1 お手本だけ・2 あなただけ）。戻る時は、前へ進んだ時と同じ費用で選んだ所を通る
+  const from = new Uint8Array(n * m);
   const inBand = (i: number, j: number) => Math.abs(i / Math.max(1, n - 1) - j / Math.max(1, m - 1)) <= band;
   for (let i = 0; i < n; i++)
     for (let j = 0; j < m; j++) {
@@ -73,24 +75,25 @@ function align(a: Contour, b: Contour, ra: number, rb: number): number[][] {
         continue;
       }
       // 両方が 1 こま進む時は、そのこまの分だけかかる。片方を止める時は少し多くかかるので、道はまっすぐに近いままになる
-      let best = INF;
-      if (i > 0 && j > 0) best = Math.min(best, D[(i - 1) * m + j - 1]! + c);
-      if (i > 0) best = Math.min(best, D[(i - 1) * m + j]! + c * 1.1 + 0.02);
-      if (j > 0) best = Math.min(best, D[i * m + j - 1]! + c * 1.1 + 0.02);
-      D[i * m + j] = best;
+      const side = c * 1.1 + 0.02;
+      const diag = i > 0 && j > 0 ? D[(i - 1) * m + j - 1]! + c : INF,
+        up = i > 0 ? D[(i - 1) * m + j]! + side : INF,
+        left = j > 0 ? D[i * m + j - 1]! + side : INF;
+      // 同じ費用なら、両方進む方を先に
+      const dir = i === 0 ? 2 : j === 0 ? 1 : diag <= up && diag <= left ? 0 : up <= left ? 1 : 2;
+      D[i * m + j] = dir === 0 ? diag : dir === 1 ? up : left;
+      from[i * m + j] = dir;
     }
   const path: number[][] = Array.from({ length: n }, () => []);
   let i = n - 1,
     j = m - 1;
   path[i]!.push(j);
   while (i > 0 || j > 0) {
-    const diag = i > 0 && j > 0 ? D[(i - 1) * m + j - 1]! : INF,
-      up = i > 0 ? D[(i - 1) * m + j]! : INF,
-      left = j > 0 ? D[i * m + j - 1]! : INF;
-    if (diag <= up && diag <= left) {
+    const d = from[i * m + j]!;
+    if (d === 0) {
       i--;
       j--;
-    } else if (up <= left) i--;
+    } else if (d === 1) i--;
     else j--;
     path[i]!.push(j);
   }

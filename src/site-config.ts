@@ -16,9 +16,9 @@ export const PRODUCTION = { repo: 'tsukaima-kobo/voice-match', url: 'https://voi
 /** 検証用のリポジトリと公開の住所 */
 export const DEV = { repo: 'tsukaima-kobo/voice-match-dev', url: 'https://tsukaima-kobo.github.io/voice-match-dev/' } as const;
 
-/** どちらのサイトを作るか（VITE_REPO が本番のリポジトリの時だけ本番） */
+/** どちらのサイトを作るか（VITE_REPO が本番のリポジトリの時だけ本番。GitHub のリポジトリの名前と同じく、大文字・小文字は区別しない） */
 export function siteFor(e: Env): { production: boolean; url: string; github: string; issues: string } {
-  const production = e.VITE_REPO === PRODUCTION.repo;
+  const production = (e.VITE_REPO ?? '').trim().toLowerCase() === PRODUCTION.repo.toLowerCase();
   const base = production ? PRODUCTION : DEV;
   return { production, url: e.VITE_SITE_URL || base.url, github: production ? PRODUCTION.repo : '', issues: base.repo };
 }

@@ -1,12 +1,12 @@
 // tools/ の共通の計算（DOM なし・ファイルの読み書きなし。test/tools.test.ts で試す）。
 // 窓の選別 → 声ごとの代表値 → 照合のモデル（中心・散らばり・白色化）→ 見分ける力の評価。
-import { FEATURE_BY_KEY, FEATURE_KEYS, type FeatureKey, type Features } from '../src/voice/features.ts';
-import { quantileOf } from '../src/voice/measure.ts';
+import { FEATURE_BY_KEY, FEATURE_KEYS, forLength, ONE_LINE_SECONDS, type FeatureKey, type Features } from '../src/voice/features.ts';
+import { quantileOf, readableVersion } from '../src/voice/measure.ts';
 import { medianFeatures } from '../src/voice/combine.ts';
 
 /** 項目ごとの中央値（サイトの音声ファイルのお手本と同じ計算。src/voice/combine.ts） */
 export { medianFeatures };
-import { rank, standardize, type MatchModel, type Profile } from '../src/match/match.ts';
+import { cholesky, distances, invertLower, rank, type MatchModel, type Profile } from '../src/match/match.ts';
 import type { VoiceWindow } from '../src/data/types.ts';
 
 /** 窓を使う条件 */
@@ -30,7 +30,7 @@ export function selectWindows(windows: readonly VoiceWindow[], version: string):
   const dropped: Record<DropReason, number> = { version: 0, music: 0, short: 0, pitch: 0 };
   const first: VoiceWindow[] = [];
   for (const w of windows) {
-    if (w.version !== version) dropped.version++;
+    if (!readableVersion(w.version, version)) dropped.version++;
     else if (w.gapTonal > SELECT.maxGapTonal) dropped.music++;
     else if (w.voicedSeconds < SELECT.minVoicedSeconds || w.features.pitch === null) dropped.short++;
     else first.push(w);
@@ -78,37 +78,6 @@ export function itemStats(speakers: readonly Speaker[]): { key: FeatureKey; betw
   });
 }
 
-/** 対称な行列のコレスキー分解（下三角）。失敗したら null */
-function cholesky(a: number[][]): number[][] | null {
-  const n = a.length;
-  const l = a.map(() => new Array<number>(n).fill(0));
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j <= i; j++) {
-      let s = a[i]![j]!;
-      for (let k = 0; k < j; k++) s -= l[i]![k]! * l[j]![k]!;
-      if (i === j) {
-        if (!(s > 0)) return null;
-        l[i]![i] = Math.sqrt(s);
-      } else l[i]![j] = s / l[j]![j]!;
-    }
-  }
-  return l;
-}
-/** 下三角行列の逆行列 */
-function invertLower(l: number[][]): number[][] {
-  const n = l.length;
-  const inv = l.map(() => new Array<number>(n).fill(0));
-  for (let i = 0; i < n; i++) {
-    inv[i]![i] = 1 / l[i]![i]!;
-    for (let j = 0; j < i; j++) {
-      let s = 0;
-      for (let k = j; k < i; k++) s -= l[i]![k]! * inv[k]![j]!;
-      inv[i]![j] = s / l[i]![i]!;
-    }
-  }
-  return inv;
-}
-
 export interface FitOptions {
   /** 白色化するか（false なら項目ごとの散らばりだけ） */
   whiten: boolean;
@@ -128,24 +97,40 @@ export function fitModel(speakers: readonly Speaker[], measureVersion: string, o
     const v = profiles.map((p) => p[k]).filter((x): x is number => x !== null).map((x) => transform(k, x));
     return v.length ? quantileOf(v, 0.5) : 0;
   });
-  // 窓ごとに、その人の平均を引く（無い項目はその人の平均とみなす）。全員分をまとめて、同じ人の中の共分散にする
-  const resid: number[][] = [];
-  for (const s of speakers) {
-    const cols = keys.map((k) => s.windows.map((w) => w.features[k]).map((x) => (x === null ? null : transform(k, x))));
-    const means = cols.map((c) => {
-      const v = c.filter((x): x is number => x !== null);
-      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
-    });
-    if (s.windows.length < 2) continue;
-    s.windows.forEach((_, wi) => resid.push(cols.map((c, j) => (c[wi] === null ? 0 : c[wi]! - means[j]!))));
-  }
+  // 窓ごとに、その人の平均（ある値だけの）を引く。全員分をまとめて、同じ人の中の共分散にする。
+  // 項目の組ごとに、両方ある窓だけを数える。自由度は、その窓の数から、その組がある人の数を引いた物
   const n = keys.length;
+  const sum = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  const dof = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  for (const s of speakers) {
+    const resid = keys.map((k) => {
+      const c = s.windows.map((w) => w.features[k]).map((x) => (x === null || !Number.isFinite(x) ? null : transform(k, x)));
+      const v = c.filter((x): x is number => x !== null);
+      const m = v.reduce((a, b) => a + b, 0) / Math.max(1, v.length);
+      return c.map((x) => (x === null ? null : x - m));
+    });
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j <= i; j++) {
+        const ri = resid[i]!,
+          rj = resid[j]!;
+        let acc = 0,
+          seen = 0;
+        for (let w = 0; w < ri.length; w++) {
+          const x = ri[w],
+            y = rj[w];
+          if (x === null || x === undefined || y === null || y === undefined) continue;
+          acc += x * y;
+          seen++;
+        }
+        if (!seen) continue;
+        sum[i]![j] = sum[i]![j]! + acc;
+        dof[i]![j] = dof[i]![j]! + seen - 1;
+      }
+  }
   const cov = Array.from({ length: n }, () => new Array<number>(n).fill(0));
-  for (const r of resid) for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) cov[i]![j] = cov[i]![j]! + r[i]! * r[j]!;
-  const dof = Math.max(1, resid.length - speakers.length);
   for (let i = 0; i < n; i++)
     for (let j = 0; j <= i; j++) {
-      cov[i]![j] = cov[i]![j]! / dof;
+      cov[i]![j] = sum[i]![j]! / Math.max(1, dof[i]![j]!);
       cov[j]![i] = cov[i]![j]!;
     }
   keys.forEach((k, i) => {
@@ -167,18 +152,23 @@ export interface EvalResult {
   queries: number;
   top1: number;
   top5: number;
+  /** 同じ窓を一言（声 3 秒・8 秒が要る項目を無くした物。features.ts の needOf）にした時 */
+  oneLine: { top1: number; top5: number };
 }
 
 /**
  * 見分ける力: 動画が 2 本以上ある人ごとに、1 本の動画を外して残りで代表値を作り、外した動画の窓（30 秒ずつ）1 つずつで、
- * 全員の中で本人が 1 位・5 位以内に入る割合。来た人の声 1 回分を、窓 1 つとみなす。
+ * 全員の中で本人が 1 位・5 位以内に入る割合。来た人の声 1 回分を、窓 1 つとみなす。比べ方はサイトと同じ（src/match/match.ts の rank）。
+ * 一言の割合は、同じ窓から、1 回に声 3 秒・8 秒が要る項目を除いて比べた物。
  * `model` に関数を渡すと、外した動画ごとに、その動画を除いた窓でモデルを作り直す（モデルが答えを見ないように）。
  */
 export function evaluate(speakers: readonly Speaker[], model: MatchModel | ((train: readonly Speaker[]) => MatchModel)): EvalResult {
   const full: Profile[] = speakers.map((s) => ({ id: s.id, features: medianFeatures(s.windows) }));
   let queries = 0,
     top1 = 0,
-    top5 = 0;
+    top5 = 0,
+    short1 = 0,
+    short5 = 0;
   for (const s of speakers) {
     const videos = [...new Set(s.windows.map((w) => w.video))].sort();
     if (videos.length < 2) continue;
@@ -192,10 +182,14 @@ export function evaluate(speakers: readonly Speaker[], model: MatchModel | ((tra
         queries++;
         if (r[0]?.id === s.id) top1++;
         if (r.some((x) => x.id === s.id)) top5++;
+        const o = rank(m, forLength(q.features, ONE_LINE_SECONDS), profiles, 5);
+        if (o[0]?.id === s.id) short1++;
+        if (o.some((x) => x.id === s.id)) short5++;
       }
     }
   }
-  return { queries, top1: queries ? top1 / queries : NaN, top5: queries ? top5 / queries : NaN };
+  const share = (x: number) => (queries ? x / queries : NaN);
+  return { queries, top1: share(top1), top5: share(top5), oneLine: { top1: share(short1), top5: share(short5) } };
 }
 
 /** 近さの言葉の目安で、データに居ない人の 1 位が入る割合（「とても似ている」まで・「よく似ている」まで・「似ている」まで） */
@@ -207,29 +201,19 @@ export const LIKENESS_SHARE = [0.4, 0.8, 0.99] as const;
  * データに居ない人の 1 位が、LIKENESS_SHARE の割合で各言葉に入るようにする。
  */
 export function likenessScale(speakers: readonly Speaker[], model: MatchModel): { typical: number; cuts: [number, number, number] } {
-  const w = model.weight.map((x) => Math.round(Math.max(0, x) * 1000));
-  const profiles = speakers.map((s) => standardize(model, medianFeatures(s.windows)));
-  const d2 = (u: (number | null)[], v: (number | null)[]) => {
-    let a = 0,
-      ws = 0;
-    for (let i = 0; i < u.length; i++) {
-      const x = u[i],
-        y = v[i];
-      if (x === null || x === undefined || y === null || y === undefined || !w[i]) continue;
-      a += w[i]! * (x - y) ** 2;
-      ws += w[i]!;
-    }
-    return ws ? a / ws / 1e8 : NaN;
-  };
+  const profiles: Profile[] = speakers.map((s) => ({ id: s.id, features: medianFeatures(s.windows) }));
   const mids: number[] = [],
     ones: number[] = [];
   speakers.forEach((s, si) => {
+    const others = profiles.filter((_, i) => i !== si);
     for (const q of s.windows) {
-      const u = standardize(model, q.features);
-      const d = profiles.flatMap((p, i) => (i === si ? [] : [d2(u, p)])).filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+      // サイトと同じ比べ方（src/match/match.ts の distances）
+      const d = distances(model, q.features, others)
+        .map((x) => x.distance)
+        .sort((a, b) => a - b);
       if (!d.length) continue;
-      mids.push(Math.sqrt(d.length % 2 ? d[d.length >> 1]! : (d[d.length / 2 - 1]! + d[d.length / 2]!) / 2));
-      ones.push(Math.sqrt(d[0]!));
+      mids.push(d.length % 2 ? d[d.length >> 1]! : (d[d.length / 2 - 1]! + d[d.length / 2]!) / 2);
+      ones.push(d[0]!);
     }
   });
   if (!mids.length) return { typical: 0, cuts: [0.5, 0.9, 1.4] };

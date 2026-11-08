@@ -129,6 +129,29 @@ describe('英語の名前', () => {
   });
 });
 
+describe('所属の英語の名前', () => {
+  it('所属ごとに 1 つ: その所属の声に付いている物のうち、いちばん多い物（同じ数なら先の物）', () => {
+    const { features } = voicesOf(6, 8);
+    const v = (i: number, group: string, groupEn?: string): CatalogEntry => ({ id: `v-${i}`, name: `声 ${i}`, group, ...(groupEn ? { groupEn } : {}), links: { profile: `https://example.com/${i}` } });
+    const voices = [v(0, 'G', 'GE1'), v(1, 'G', 'GE2'), v(2, 'G'), v(3, 'G', 'GE2'), v(4, 'H', 'HE1'), v(5, 'H', 'HE2')];
+    const pack = packVoices(MEASURE_VERSION, voices, features);
+    expect(pack.groups).toEqual(['G', 'H']);
+    expect(pack.groupsEn).toEqual(['GE2', 'HE1']);
+    expect(unpackVoices(pack).voices.map((x) => x.groupEn)).toEqual(['GE2', 'GE2', 'GE2', 'GE2', 'HE1', 'HE1']);
+  });
+});
+
+describe('声が多い時', () => {
+  it('十数万の声でも、最小・最大を出せる（呼び出しの深さがあふれない）', () => {
+    const n = 150_000;
+    const voices: CatalogEntry[] = Array.from({ length: n }, (_, i) => ({ id: String(i), name: String(i), links: { profile: 'https://example.com/' } }));
+    const features = Array.from({ length: n }, (_, i) => ({ pitch: i % 7 === 0 ? null : 100 + (i % 500) }));
+    const pack = packVoices(MEASURE_VERSION, voices, features as unknown as Features[]);
+    expect(pack.lo).toEqual([100]);
+    expect(pack.step[0]).toBeCloseTo(499 / 254, 9);
+  });
+});
+
 describe('大枠の印', () => {
   it('ほどいた数字に、大枠の印（VTuber は 1、歌手は 4、その他は 1<<15）が付く', () => {
     const { voices, features } = voicesOf(10);
