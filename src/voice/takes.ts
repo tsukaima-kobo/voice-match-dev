@@ -38,7 +38,8 @@ export function combineTakes(takes: readonly Take[]): Combined {
 
 /**
  * 結果の確かさ: 1 ざっくり（一言）・2 だいたい（1 回で声 3 秒から、抑揚なども出る）・3 しっかり（1 回で声 8 秒から、速さと間も出る）。
- * 項目は、その長さの回からしか作らない（needOf）ので、短い回を何回足しても上がらない
+ * 項目は、その長さの回からしか作らない（needOf）ので、短い回を何回足しても上がらない。
+ * 近さの言葉の目安も、この 3 つに分けて作る（まとめた数字にある項目から決める。src/match/match.ts の queryKind）
  */
 export type Certainty = 1 | 2 | 3;
 export function certaintyOf(c: Pick<Combined, 'voicedSeconds' | 'longest'>): Certainty {

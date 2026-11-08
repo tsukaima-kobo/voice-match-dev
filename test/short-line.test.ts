@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { CONTOUR_STEP, measureVoice, type Contour } from '../src/voice/measure.ts';
 import { FEATURE_KEYS, forLength, LONG_SECONDS, needOf, ONE_LINE_SECONDS, type Features } from '../src/voice/features.ts';
 import { certaintyOf, combineTakes } from '../src/voice/takes.ts';
+import { queryKind } from '../src/match/match.ts';
 import { align, compareLines, lineScore } from '../src/mimic/line.ts';
 import { mimicScore } from '../src/mimic/mimic.ts';
 import { concat, silence, vowel } from './voice-synth.ts';
@@ -76,6 +77,14 @@ describe('話すほど絞り込む', () => {
     const d = combineTakes([1.2, 3.2].map((voicedSeconds) => ({ features: a, voicedSeconds })));
     expect(d.features.pitchRange).toBe(5);
     expect(certaintyOf(d)).toBe(2);
+  });
+  it('確かさと、近さの言葉の目安の種類（match.ts の queryKind）はそろう', () => {
+    const all = Object.fromEntries(FEATURE_KEYS.map((k) => [k, 100])) as Features;
+    const kind = { 1: 'line', 2: 'few', 3: 'full' } as const;
+    for (const lens of [[1.2], [1.2, 1.2, 1.2], [3.5], [1.2, 3.2], [12, 1], [9], [2, 9]]) {
+      const c = combineTakes(lens.map((voicedSeconds) => ({ features: all, voicedSeconds })));
+      expect(queryKind(c.features), lens.join(',')).toBe(kind[certaintyOf(c)]);
+    }
   });
   it('短い回で項目が抜けても、声の点数は上がらない', () => {
     const t = ok(line(1, 180)).features;

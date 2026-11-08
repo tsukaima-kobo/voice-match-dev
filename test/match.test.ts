@@ -244,7 +244,7 @@ describe('近さの言葉', () => {
   });
   it('モデルに目盛りが無い時は、決まった目盛りを使う', () => {
     const m = defaultModel(V);
-    expect(farScale(m, voiceAt({}), [{ id: 'a', features: voiceAt({ pitch: 0.9 }) }])).toBe(1);
+    expect(farScale(m, voiceAt({}), [{ id: 'a', features: voiceAt({ pitch: 0.9 }) }]).scale).toBe(1);
     expect(closenessWord(m, 0.4)).toBe('とても似ている');
     expect(closenessWord(m, 1.0)).toBe('似ている');
     expect(closenessWord(m, 2)).toBe('似ている所がある');

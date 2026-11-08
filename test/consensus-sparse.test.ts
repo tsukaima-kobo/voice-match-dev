@@ -1,5 +1,5 @@
 // 壁 ③（src/submit/consensus.ts）を、項目の少ない数字で試す。白色化のモデルでも、無い項目を中心とみなさず、
-// 両方にある項目だけで比べるので、項目が少ないほど通りやすくはならない。
+// 両方にある項目で比べる（中央値に無い項目は見込みを足す）ので、項目が少ないほど通りやすくはならない。
 import { describe, expect, it } from 'vitest';
 import { FEATURE_BY_KEY, FEATURE_KEYS, type Features } from '../src/voice/features.ts';
 import { defaultModel, type MatchModel } from '../src/match/match.ts';
