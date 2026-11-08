@@ -2,6 +2,8 @@
 // こちらの音は、答えが来るまでだけ持つ（Worker が読めない・落ちた時に、その場で測り直すため）。答えが来たら 0 で埋める。
 // Worker が読めない（入れ替えの後の 404 など）・落ちた時は、待っている物を全部その場で測り、その後もその場で測る。
 // 測る途中で誤りが出ても、測れなかった（invalid）として返す（画面が「計算しています」のまま止まらないように）。
+// Worker が何も言わずに止まった時（答えも誤りも来ない）も、待っている間に WAIT_MS 何も来なければ、Worker を止めて（渡した写しも
+// 一緒に消える）、待っている物を全部その場で測る。
 import { measureVoice, type Measured, type MeasureOptions } from './measure.ts';
 import MeasureWorker from './measure.worker.ts?worker';
 
@@ -12,11 +14,22 @@ interface Job {
   resolve: (m: Measured) => void;
 }
 
+/** 待っている物があるのに、Worker からこれだけ何も来なければ、止まったとみなす（ミリ秒。遅い端末で 40 秒の音を測っても届く長さ） */
+export const WAIT_MS = 60_000;
+
 let worker: Worker | null = null;
 /** Worker が使えないと分かった（この後は、その場で測る） */
 let broken = false;
 let next = 0;
 const waiting = new Map<number, Job>();
+/** Worker を見張る時計（待っている物がある間だけ） */
+let watch: ReturnType<typeof setTimeout> | null = null;
+
+/** 見張りをやり直す: 待っている物があれば、今から WAIT_MS 後に、まだ何も来ていなければ Worker をあきらめる */
+function rewatch(): void {
+  if (watch !== null) clearTimeout(watch);
+  watch = waiting.size ? setTimeout(giveUp, WAIT_MS) : null;
+}
 
 /** その場で測る。誤りが出ても測れなかったとして返し、音は 0 で埋める */
 function measureHere(pcm: Float32Array, rate: number, opts: MeasureOptions): Measured {
@@ -37,6 +50,8 @@ function measureLater(job: Job): void {
 /** Worker が使えなくなった: 止めて、待っている物を全部その場で測る */
 function giveUp(): void {
   broken = true;
+  if (watch !== null) clearTimeout(watch);
+  watch = null;
   const w = worker;
   worker = null;
   try {
@@ -57,6 +72,7 @@ function getWorker(): Worker | null {
       const job = waiting.get(e.data.id);
       if (!job) return;
       waiting.delete(e.data.id);
+      rewatch();
       if (e.data.m) {
         job.pcm.fill(0);
         job.resolve(e.data.m);
@@ -83,6 +99,8 @@ export function measureAsync(pcm: Float32Array, rate: number, opts: MeasureOptio
   return new Promise((resolve) => {
     const job: Job = { pcm, rate, opts, resolve };
     waiting.set(id, job);
+    // 待っている物が無かった時だけ、見張りを始める（前の物の答えを待つ間は、その時計のまま）
+    if (waiting.size === 1) rewatch();
     try {
       // 写しを渡す（こちらの音は、答えが来るまで残す）
       w.postMessage({ id, pcm, rate, opts });

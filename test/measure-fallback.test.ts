@@ -1,5 +1,6 @@
 // src/voice/measure.ts の、測れなかった時だけ動く道の試験。合成音だけを使う（録音なし。乱数は種つき）。
-// 1. 低い声の短い声: 周期の数でなく長さで足りるか見る。足りなければ noisy でなく short。
+// 1. 低い声の短い声: 周期の数でなく長さで足りるか見る。足りなければ noisy でなく short。ただし、その低い高さが確かな時だけ
+//    （息の多い声を、本当の高さの半分で測れたことにしない）。
 // 2. 長い録音の一部だけで話した声: 話した所を切り出して、同じセリフの短い録音と同じに測る。
 import { describe, expect, it } from 'vitest';
 import { measureVoice, type Measured } from '../src/voice/measure.ts';
@@ -23,6 +24,18 @@ describe('低い声の短い声', () => {
   });
   it('声が足りない時は noisy でなく short（高さによらない）', () => {
     for (const f0 of [85, 150]) expect(measureVoice(steady(f0, 0.4), R, ONE), `${f0} Hz`).toMatchObject({ ok: false, reason: 'short' });
+  });
+  const glide = (mid: number) => (t: number) => mid * 2 ** ((8 * (Math.abs(((t * 0.5) % 1) - 0.5) - 0.25)) / 12);
+  const talk = bursts(5, { share: 0.8, floor: 0.3, group: 7, pause: 0.4 });
+  const breathy = (f0: number, F1: number, F2: number, breath: number, seed: number) =>
+    concat(silence(R, 0.6), vowel({ rate: R, seconds: 3, f0: glide(f0), jitter: 0.01, shimmer: 0.04, breath, formants: [[F1, 80], [F2, 90], [2700, 160]], envelope: talk, seed }), silence(R, 0.6, 0.0003, 9));
+  it('息の多い声が本当の高さの半分ほどに出た時は、低い声として緩めない（前と同じ noisy。3.2.0 は 200 Hz の声を 102 Hz で測った）', () => {
+    for (const [f0, F1, F2, br, seed] of [[200, 700, 1200, 0.15, 900], [200, 800, 1250, 0.15, 1000], [260, 600, 1000, 0.2, 800], [300, 500, 1500, 0.3, 700]] as const)
+      expect(measureVoice(breathy(f0, F1, F2, br, seed), R, ONE), `${f0} Hz`).toMatchObject({ ok: false, reason: 'noisy' });
+  });
+  it('息の多い低い声でも、高さが確かなら測れる（80 Hz）', () => {
+    const m = ok(measureVoice(breathy(80, 700, 1200, 0.2, 1780), R, ONE));
+    expect(Math.abs(m.features.pitch! / 80 - 1)).toBeLessThan(0.03);
   });
 });
 

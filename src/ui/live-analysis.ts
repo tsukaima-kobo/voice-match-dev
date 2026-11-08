@@ -1,13 +1,15 @@
 // 録っている間の解析パネル: 入ってくる声を、その場で少しだけ計算して見せる（声の成分の図・高さの線・数字・測れる項目）。
 // どれも本当に計算した値（飾りの乱数は使わない）。最後の数字は measure.ts が出す。ここは、測っている様子を見せるためだけ。
 //   声の成分の図（スペクトログラム）: 16 kHz にして 20 ms ごとに FFT（512）。縦は 80 Hz〜8 kHz の対数、色は強さ。
-//   高さの線: 20 ms ごとの YIN（40 ms の窓、60〜1100 Hz。歌や高い声真似も追う。上限より高い音は 1 オクターブ下と取り違えず、捨てる）。
-//            同じ縦の目盛り（80 Hz〜8 kHz）で、成分の図の上に重ねる。
+//   高さの線: 20 ms ごとに、測る時と同じ探し方（measure.ts の pitchNow。60〜1100 Hz。歌や高い声真似も追う。上限より高い音は
+//            1 オクターブ下と取り違えず、捨てる）。線と最後の数字が食い違わないように。同じ縦の目盛り（80 Hz〜8 kHz）で、成分の図の
+//            上に重ねる。高さを見るには前後の音が要るので、図と線は 64 ms 遅れて出る。
 //   数字: 声の高さ（中央値。Hz と音名）・抑揚（10〜90 %、半音）・明るさ（300 Hz〜4 kHz の重心）・大きさ（dBFS）・声の秒数。
 //   測れる項目: 声の秒数が、項目ごとに要る長さ（features.ts の needOf）に届くと光る。
-// 音は持たない（直近 40 ms だけを、計算のために持つ）。話し終えた後は、45 項目が順に光る「計算中」の演出（その間に Worker が測る）。
+// 音は持たない（直近 128 ms だけを、計算のために持つ）。話し終えた後は、45 項目が順に光る「計算中」の演出（その間に Worker が測る）。
 import { FEATURE_KEYS, FEATURES, FEW_SECONDS, GROUP_NAMES, LONG_SECONDS, needOf, ONE_LINE_SECONDS, type FeatureGroup } from '../voice/features.ts';
 import { onLang, t } from '../i18n.ts';
+import { NOW_LEN, pitchNow } from '../voice/measure.ts';
 
 export type LiveMode = 'off' | 'listening' | 'analysing' | 'done';
 export interface LiveAnalysis {
@@ -21,14 +23,6 @@ export interface LiveAnalysis {
 const SR = 16000;
 const HOP = 320;
 const N = 512;
-const YIN_W = 320;
-/** 高さの線で追う範囲（Hz。measure.ts の F0_MIN・F0_MAX と同じ） */
-export const LIVE_F0_MIN = 60,
-  LIVE_F0_MAX = 1100;
-const TAU_MIN = Math.floor(SR / LIVE_F0_MAX),
-  TAU_MAX = Math.ceil(SR / LIVE_F0_MIN);
-// 探し始めるのは上限の 2 倍の高さから: 上限より高い音は、周期の何倍かが TAU_MIN の手前に出るので、そこで見つけて捨てられる
-const TAU_FROM = Math.floor(TAU_MIN / 2);
 const F_LO = 80,
   F_HI = 8000;
 const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -69,35 +63,9 @@ function powerSpectrum(x: Float32Array, out: Float32Array, re: Float64Array, im:
   for (let k = 0; k <= N / 2; k++) out[k] = (re[k]! * re[k]! + im[k]! * im[k]!) / (N * N);
 }
 
-/** 直近の音（16 kHz）から、高さ（Hz。無い時・60〜1100 Hz の外の時は 0）: YIN */
-export function pitchOf(x: Float32Array, d: Float64Array = new Float64Array(TAU_MAX + 2)): number {
-  const off = x.length - YIN_W - TAU_MAX - 1;
-  if (off < 0) return 0;
-  let run = 0;
-  d[0] = 1;
-  for (let tau = 1; tau <= TAU_MAX; tau++) {
-    let s = 0;
-    for (let i = 0; i < YIN_W; i++) {
-      const v = x[off + i]! - x[off + i + tau]!;
-      s += v * v;
-    }
-    run += s;
-    d[tau] = run > 0 ? (s * tau) / run : 1;
-  }
-  for (let tau = TAU_FROM; tau < TAU_MAX; tau++) {
-    if (d[tau]! < 0.15) {
-      while (tau + 1 < TAU_MAX && d[tau + 1]! < d[tau]!) tau++;
-      const a = d[tau - 1]!,
-        b = d[tau]!,
-        c = d[tau + 1]!;
-      const den = a - 2 * b + c;
-      const t = den !== 0 ? tau + (0.5 * (a - c)) / den : tau;
-      const f = SR / t;
-      // 上限より高い時は、半分の高さにせず、無しにする
-      return f >= LIVE_F0_MIN && f <= LIVE_F0_MAX ? f : 0;
-    }
-  }
-  return 0;
+/** 直近の音（16 kHz。終わりの NOW_LEN サンプル）の真ん中の高さ（Hz。無い時・60〜1100 Hz の外の時は 0）。測る時と同じ探し方 */
+export function pitchOf(x: Float32Array): number {
+  return pitchNow(x);
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string) => {
@@ -203,8 +171,10 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
   };
 
   // 状態
-  // 16 kHz にした直近の数十 ms を、回して上書きする入れ物に持つ。計算のため、20 ms ごとにそのまま `ring` に写す
-  const L = N + TAU_MAX + YIN_W;
+  // 16 kHz にした直近の 128 ms を、回して上書きする入れ物に持つ。計算のため、20 ms ごとにそのまま `ring` に写す。
+  // 図の列と高さは、どちらもその真ん中（64 ms 前）の物
+  const L = NOW_LEN;
+  const mid = (L - N) >> 1;
   const circle = new Float32Array(L);
   const ring = new Float32Array(L);
   let w = 0;
@@ -221,7 +191,6 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
   const pw = new Float32Array(N / 2 + 1);
   const re = new Float64Array(N),
     im = new Float64Array(N);
-  const d = new Float64Array(TAU_MAX + 2);
   const frame = new Float32Array(N);
   const ctx = spec.getContext('2d')!;
   let rowBin: Float32Array = new Float32Array(0);
@@ -260,12 +229,12 @@ export function createLiveAnalysis(box: HTMLElement): LiveAnalysis {
   function hop(): void {
     ring.set(circle.subarray(w));
     ring.set(circle.subarray(0, w), L - w);
-    frame.set(ring.subarray(ring.length - N));
+    frame.set(ring.subarray(mid, mid + N));
     powerSpectrum(frame, pw, re, im);
     let tot = 0;
-    for (let i = ring.length - N; i < ring.length; i++) tot += ring[i]! * ring[i]!;
+    for (let i = mid; i < mid + N; i++) tot += ring[i]! * ring[i]!;
     const level = 10 * Math.log10(tot / N + 1e-12);
-    const p = level > -50 ? pitchOf(ring, d) : 0;
+    const p = level > -50 ? pitchOf(ring) : 0;
     const isVoiced = p > 0;
     if (isVoiced) {
       voiced += HOP / SR;

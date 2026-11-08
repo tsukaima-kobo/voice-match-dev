@@ -22,11 +22,15 @@ import { FEATURE_KEYS, roundFeature, type Features } from './features.ts';
 // 背景を引くのは、声と背景の差が 40 dB より小さい時だけ（静かな部屋では引かない）。
 // 2026-11-08 版 3.2.0: 声の高さを 1100 Hz まで探す（歌・高い声の真似）。前は 500 Hz までで、それより高い所は捨てるか、
 // 1 オクターブ低く測っていた。上限より高い音は、低く測らずに捨てる。
+// 2026-11-08 版 3.3.0: 3.2.0 は、息の多い声で 2 倍音・3 倍音を本当の高さと取り違え、1 オクターブ高く測っていた。500 Hz より
+// 高い答えは、周期がはっきりしていて、低い方の高さの倍音の山が無い時だけ取る（それ以外は 3.1.0 と同じ答え）。上限より高い答えの
+// 時も、3.1.0 の答えを捨てない。低い声の短い声を測れたことにするのは、その低い高さが確かな時だけ。
 /** 測り方の版（数字の意味が変わったら上げる。事前に測ったお手本の数字と利用者の数字は、同じ版どうしで比べる） */
-export const MEASURE_VERSION = '3.2.0';
+export const MEASURE_VERSION = '3.3.0';
 /** 今の版と比べてよい前の版。3.1.0 との違いは、声が 500 Hz ほどより高い所だけ（そこは捨てるか、1 オクターブ低く測っていた）。
- * 3.1.0 で測った 350 人の数字は、そのまま使う */
-export const MEASURE_COMPATIBLE: readonly string[] = ['3.1.0'];
+ * 3.1.0 で測った 350 人の数字は、そのまま使う。3.2.0 は、息の多い声を 1 オクターブ高く測ることがあったが、短い間に集めた数字を
+ * 捨てないよう、比べてよいことにしておく（運営が後で外してよい） */
+export const MEASURE_COMPATIBLE: readonly string[] = ['3.1.0', '3.2.0'];
 
 /** 今の版と比べてよい版か（今の版か、MEASURE_COMPATIBLE） */
 export function readableVersion(v: string | null | undefined, current: string = MEASURE_VERSION): boolean {
@@ -377,10 +381,69 @@ const OLD_TAU = Math.floor(RATE / OLD_F0_MAX);
 const SHORT_MARGIN = 0.04;
 /** 短い周期の 2 周期目の谷は、1 周期目よりこれだけ浅いまで（VOICED_MAX より深ければ、いくら浅くてもよい） */
 const REPEAT_MARGIN = 0.15;
+/** 短い周期は、谷がこれより深い（周期がはっきりした）時だけ取る。息の多い声は、2 倍音・3 倍音の周期の谷も本当の周期の谷と
+ * 同じくらい深くなり、谷では見分けられない（そういう声は、前の版と同じく 500 Hz までで測る） */
+const SHORT_CLEAR = 0.06;
+/** 低い方の答えの倍音（短い周期の倍音でない物）の山が、そのすぐ横の何倍あれば、低い方が本当の高さとするか（パワー） */
+const LOW_PEAK = 10;
+/** 倍音の山を見る上の端（Hz。YIN に渡す音は 1500 Hz より上を切ってある）と、見る倍音の数（低い倍音ほど、周期のゆらぎで
+ * 山が崩れにくい） */
+const PEAK_BAND = 1500;
+const PEAK_HARMONICS = 6;
+
+/** x の `centre` を中心にした n サンプル（2 のべき乗）の Hann 窓での、`hz` のパワー（Goertzel。ビンとビンの間でもよい） */
+function powerAt(x: Float64Array, centre: number, n: number, hz: number): number {
+  const w = windowOf('hann', n);
+  const c = 2 * Math.cos((2 * Math.PI * hz) / RATE);
+  const start = centre - (n >> 1);
+  let s1 = 0,
+    s2 = 0;
+  for (let i = 0; i < n; i++) {
+    const j = start + i;
+    const s0 = (j >= 0 && j < x.length ? x[j]! * w[i]! : 0) + c * s1 - s2;
+    s2 = s1;
+    s1 = s0;
+  }
+  return Math.max(0, s1 * s1 + s2 * s2 - c * s1 * s2);
+}
+
+/**
+ * 周期 `low` の倍音のうち、周期 `high` の倍音でない物の山が、そのすぐ横（倍音の間）の何倍か（パワーの比。見る所が無ければ 0）。
+ * 声が本当に `low` の高さなら、そこに倍音の山がある（息の雑音の中でも、すぐ横より強い）。`high` の高さなら、そこは倍音の間で、
+ * すぐ横と同じくらい
+ */
+function lowerPeaks(x: Float64Array, centre: number, low: number, high: number): number {
+  const fo = RATE / low,
+    fs = RATE / high;
+  // 窓は low の 8 周期以上: 山の幅（Hann の 2 ビン）が fo / 4 より狭くなる
+  const n = Math.max(256, Math.min(2048, 2 ** Math.ceil(Math.log2(8 * low))));
+  const side = Math.max(fo / 4, (2 * RATE) / n);
+  /** high の倍音から room Hz 以上離れているか */
+  const offHigh = (hz: number, room: number) => Math.abs(hz / fs - Math.round(hz / fs)) * fs >= room;
+  let peak = 0,
+    gap = 0;
+  for (let m = 1; m <= PEAK_HARMONICS && m * fo <= PEAK_BAND; m++) {
+    const h = m * fo;
+    if (!offHigh(h, side)) continue;
+    let g = 0,
+      k = 0;
+    for (const v of [h - side, h + side]) {
+      if (v < 80 || !offHigh(v, 1.5 * side)) continue;
+      g += powerAt(x, centre, n, v);
+      k++;
+    }
+    if (!k) continue;
+    peak += powerAt(x, centre, n, h);
+    gap += g / k;
+  }
+  return gap > 0 ? peak / gap : 0;
+}
+
 /**
  * 周期 tauMin..tauMax（サンプル）の声を探す。OLD_TAU より長い周期は前の版と同じ探し方。`wide` の時は短い周期（500 Hz より
  * 高い声）も、上限の 2 倍の高さ（tauMin の半分）から探す: 上限より高い音は、周期の何倍かが tauMin の手前に出るので、低く測らずに
- * 捨てられる。`alt` は、取らなかった方の答え（周期。無ければ 0）
+ * 捨てられる。短い周期を取るのは、周期がはっきりしていて、低い方の高さの倍音の山が無い時だけ（それ以外は前の版の答え）。
+ * `alt` は、取らなかった方の答え（周期。無ければ 0）
  */
 function yin(x: Float64Array, sq: Float64Array, b: number, tauMin: number, tauMax: number, d: Float64Array, wide: boolean): { tau: number; dip: number; alt: number } {
   const e0 = sq[b + YIN_W]! - sq[b]!;
@@ -422,10 +485,10 @@ function yin(x: Float64Array, sq: Float64Array, b: number, tauMin: number, tauMa
     tau = OLD_TAU;
     for (let t = OLD_TAU + 1; t <= tauMax; t++) if (d[t]! < d[tau]!) tau = t;
   }
-  const old = { tau: refine(tau, OLD_TAU), dip: d[tau]! };
+  const old = { tau: refine(tau, OLD_TAU), dip: d[tau]!, alt: 0 };
   if (!old.tau) old.dip = 1;
-  if (!wide) return { ...old, alt: 0 };
-  // それより短い周期の谷。前の範囲のいちばん深い谷と同じくらい深ければ、そちらを取る
+  if (!wide) return old;
+  // それより短い周期の谷
   const from = tauMin >> 1;
   let near = firstDip(from, OLD_TAU - 1);
   if (near < 0) {
@@ -433,7 +496,7 @@ function yin(x: Float64Array, sq: Float64Array, b: number, tauMin: number, tauMa
     for (let t = from + 1; t < OLD_TAU; t++) if (d[t]! < d[near]!) near = t;
     if (d[OLD_TAU]! < d[near]!) near = -1;
   }
-  if (near < from || near > OLD_TAU || d[near]! > VOICED_MAX) return { ...old, alt: 0 };
+  if (near < from || near > OLD_TAU || d[near]! > VOICED_MAX) return old;
   // 半分の周期の谷も同じくらい深ければ、そちら（その周期の谷が浅いと、2 周期目を先に見つける。上限より高い音も、低く測らずに
   // 上限の外として捨てられる）
   for (;;) {
@@ -446,12 +509,72 @@ function yin(x: Float64Array, sq: Float64Array, b: number, tauMin: number, tauMa
   }
   // 声なら 2 周期目にも同じくらいの谷がある（声の響きで色の付いた息の音は、1 周期目だけ深い）
   const d2 = Math.min(d[2 * near - 1]!, d[2 * near]!, d[2 * near + 1]!);
-  if (d2 > VOICED_MAX && d2 > d[near]! + REPEAT_MARGIN) return { ...old, alt: 0 };
-  const short = refine(near, 2);
+  if (d2 > VOICED_MAX && d2 > d[near]! + REPEAT_MARGIN) return old;
+  let short = refine(near, 2);
+  if (!short) return old;
+  const centre = b + (YIN_W >> 1);
+  /** 周期 low（high より低い高さ）の倍音の山があるか */
+  const lower = (low: number, high: number) => low > high * 1.2 && low <= tauMax && lowerPeaks(x, centre, low, high) > LOW_PEAK;
+  /** 前の版の答え（短い周期は、範囲の中なら、取らなかった方の答えとして） */
+  const keep = () => ({ ...old, alt: short >= tauMin ? short : 0 });
+  // 周期の 2 倍・3 倍の高さの倍音の山があれば、そちらが本当の高さ: 前の範囲なら前の版の答え、500 Hz より高ければそこからまた確かめる
+  // （強い 2 倍音を、上限の外や 1 オクターブ上と取り違えない）
+  for (;;) {
+    let up = 0;
+    for (const k of [2, 3]) {
+      if (!lower(k * short, short)) continue;
+      up = k * short;
+      break;
+    }
+    if (!up) {
+      // 前の版の答えの高さの倍音の山があれば、それ（2 倍・3 倍と同じ所は、もう見た）
+      if (Math.abs(old.tau - 2 * short) > 1 && Math.abs(old.tau - 3 * short) > 1 && lower(old.tau, short)) return keep();
+      break;
+    }
+    if (up >= OLD_TAU) return keep();
+    let t = Math.round(up);
+    while (t > from && d[t - 1]! < d[t]!) t--;
+    while (t < OLD_TAU && d[t + 1]! < d[t]!) t++;
+    if (t >= OLD_TAU || d[t]! > VOICED_MAX) return keep();
+    near = t;
+    short = refine(t, 2);
+    if (!short) return old;
+  }
+  // 周期がはっきりしない（息の多い）時も、前の版の答え（息の多い声は、倍音の山が雑音に埋もれて見分けられない。上限より高い時も、
+  // 前の版の答えを捨てない）
+  const dip = d[near]!;
+  if (dip > SHORT_CLEAR) return keep();
+  // 上限より高い音: 低く測らずに捨てる
+  if (short < tauMin) return { tau: short, dip, alt: 0 };
+  // 前の範囲のいちばん深い谷と同じくらい深ければ、短い周期
   let best = Infinity;
   for (let t = OLD_TAU; t <= tauMax; t++) if (d[t]! < best) best = d[t]!;
-  if (d[near]! <= best + SHORT_MARGIN) return { tau: short, dip: short ? d[near]! : 1, alt: old.dip <= VOICED_MAX ? old.tau : 0 };
-  return { ...old, alt: short };
+  if (dip <= best + SHORT_MARGIN) return { tau: short, dip, alt: old.dip <= VOICED_MAX ? old.tau : 0 };
+  return keep();
+}
+
+/** pitchNow に渡す音の長さ（16 kHz のサンプル。128 ms）。その真ん中の高さを出す */
+export const NOW_LEN = 2048;
+const nowBuf = { x: new Float64Array(NOW_LEN), sq: new Float64Array(NOW_LEN + 1), d: new Float64Array(Math.ceil(RATE / F0_MIN) + 2) };
+/**
+ * 16 kHz の直近の音（終わりの NOW_LEN サンプル）の、真ん中（64 ms 前）の声の高さ（Hz。無い時・60〜1100 Hz の外の時は 0）。
+ * 測る時と同じ探し方（60 Hz より下と 1500 Hz より上を切ってから、同じ YIN）。録っている間の高さの線に使う
+ */
+export function pitchNow(x: ArrayLike<number>): number {
+  if (x.length < NOW_LEN) return 0;
+  const { sq, d } = nowBuf;
+  const raw = nowBuf.x;
+  for (let i = 0; i < NOW_LEN; i++) {
+    const v = Number(x[x.length - NOW_LEN + i]);
+    raw[i] = Number.isFinite(v) ? v : 0;
+  }
+  const lp = biquad(biquad(biquad(raw, 'high', 60, RATE), 'low', 1500, RATE), 'low', 1500, RATE);
+  for (let i = 0; i < NOW_LEN; i++) sq[i + 1] = sq[i]! + lp[i]! * lp[i]!;
+  const tauMin = Math.floor(RATE / F0_MAX),
+    tauMax = Math.ceil(RATE / F0_MIN);
+  const r = yin(lp, sq, (NOW_LEN >> 1) - (YIN_W >> 1), tauMin, tauMax, d, true);
+  const hz = r.tau > 0 ? RATE / r.tau : 0;
+  return r.dip <= VOICED_MAX && hz >= F0_MIN && hz <= F0_MAX ? hz : 0;
 }
 
 /* ---- 周期を1つずつたどる（相互相関） ---- */
@@ -1159,8 +1282,8 @@ function measure(pcm: ArrayLike<number>, sampleRate: number, opts: MeasureOption
       fft(reC, imC);
       for (let q = 0; q <= CEP_N / 2; q++) cep[q] = dB((reC[q]! * reC[q]! + imC[q]! * imC[q]!) / (CEP_N * CEP_N));
       const sm3 = (q: number) => (cep[Math.max(0, q - 1)]! + cep[q]! + cep[Math.min(CEP_N / 2, q + 1)]!) / 3;
-      // OLD_F0_MAX より高い枠だけ、その枠の周期の少し手前（2 サンプル）から探す
-      const q0 = Math.max(2, Math.min(qLo, Math.floor(RATE / f0[f]!) - 2));
+      // OLD_F0_MAX より高い枠だけ、その枠の周期の少し手前（2 サンプル）から探す（それより低い枠は、前の版と同じ所から）
+      const q0 = f0[f]! > OLD_F0_MAX ? Math.max(2, Math.floor(RATE / f0[f]!) - 2) : qLo;
       let best = q0;
       for (let q = q0; q <= Math.min(qHi, CEP_N / 2 - 1); q++) if (sm3(q) > sm3(best)) best = q;
       let sx = 0,
@@ -1346,10 +1469,26 @@ function measure(pcm: ArrayLike<number>, sampleRate: number, opts: MeasureOption
   // 低い声は 1 周期が長く、同じ長さの声でも周期が少ない。周期の数で足りない時だけ、FAIR_HZ の声と同じ長さで足りるとする
   // （足りる数の時は、前と同じに測る）
   const few = nCycles < 60 || dT.length < 40 || matches.length < 40;
-  const scale = few ? Math.min(1, f0Hz / FAIR_HZ) : 1;
+  let scale = 1,
+    doubt = false;
+  if (few && f0Hz < FAIR_HZ) {
+    // ただし、その低い高さが確かな時だけ: 声のある枠の半分以上で、その高さの倍音のうち 2 倍・3 倍の高さの倍音でない物の山がある。
+    // 息の多い声は、本当の周期の 2 つ分・3 つ分を 1 周期と取り違えて低く出ることがあり、それは測れたことにしない
+    let n = 0,
+      sure = 0;
+    for (let f = 0; f < nF; f++) {
+      if (!isVs(f)) continue;
+      n++;
+      const T = RATE / f0[f]!,
+        c = f * HOP + WIN / 2;
+      if (lowerPeaks(lp, c, T, T / 2) > LOW_PEAK && lowerPeaks(lp, c, T, T / 3) > LOW_PEAK) sure++;
+    }
+    if (sure >= 0.5 * n) scale = f0Hz / FAIR_HZ;
+    else doubt = true;
+  }
   if (!(nCycles >= 60 * scale && dT.length >= 40 * scale && matches.length >= 40 * scale)) {
-    // 取れた周期がほぼはっきりしていて、話した所の多くに声があれば、声が短かっただけ
-    const short = tried > 0 && nClear >= 0.5 * tried && voicedShare >= 0.25;
+    // 取れた周期がほぼはっきりしていて、話した所の多くに声があれば、声が短かっただけ（高さが確かでない時は、前と同じ noisy）
+    const short = !doubt && tried > 0 && nClear >= 0.5 * tried && voicedShare >= 0.25;
     return fail(short ? 'short' : 'noisy', info1);
   }
   const trimmedMean = (x: number[]) => {
