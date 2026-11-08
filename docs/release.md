@@ -6,17 +6,19 @@
 ## 1. 決めておくこと
 
 - [x] ライセンス: MIT（2026-11-01 運営が決定。`LICENSE` と README の最後に書いた）。本番のリポジトリにも `LICENSE` をそのまま入れる。
-- [ ] 本番のリポジトリの名前（例: `tsukaima-kobo/voice-match`）。
+- [x] 本番のリポジトリの名前: `tsukaima-kobo/voice-match`（2026-11-07 運営が決定）。`src/site-config.ts` の `PRODUCTION`。
 - [x] 公開の住所: `https://voice-match.com/`（2026-11-04 運営が Cloudflare で取得。サイトは同じ Cloudflare アカウントの Pages に置く。手順は 3.5）。
 - [x] 削除のお願いの窓口（2026-11-07）: Google フォーム「voice-match 削除のお願い」（運営のアカウント。回答はメールで知らせる）・メール contact@voice-match.com（Cloudflare のメール転送で運営の Gmail へ）・GitHub の Issue（`.github/ISSUE_TEMPLATE/removal.yml`）。住所は `src/site-config.ts` の `removal`。
 
 ## 2. ファイルを変える
 
-- [ ] `src/site-config.ts` の `github` に本番のリポジトリ（`"tsukaima-kobo/voice-match"` など）を入れる。これで、見出しの GitHub のリンク・結果の下の「GitHub でスターする」・足元の GitHub・しくみと約束の「オープンソース」の節が出る。スターの数は毎朝のビルドで GitHub から取って、ページに書き込む（見る人のブラウザーは GitHub に問い合わせない）。
-- [ ] `src/site-config.ts` の `removal.issues` を本番のリポジトリにする（しくみと約束の「削除のお願い」の GitHub の Issue の行き先）。本番のリポジトリに `removal` のラベルを作る（`gh label create removal -R <本番> --color d93f0b --description 削除のお願い`）。Issue の型（`.github/ISSUE_TEMPLATE/`）はコードと一緒に入る。
-- [ ] 公開の住所を、本番のリポジトリの Settings → Secrets and variables → Actions → Variables に `VITE_SITE_URL` = `https://voice-match.com/` として入れる（OGP・共有カード・X の投稿に入る住所。`site.yml` はもう読むようになっている）。
-- [ ] README の「サイトを開く」などの住所を本番に変える。
-- [ ] 登録のフォーム（`src/submit/config.ts`）を本番のフォームにする。
+- [x] 本番の住所・スターの導線・削除のお願いの Issue の行き先は、本番のリポジトリで作ると自動で本番の物になる（`site.yml` がリポジトリの名前を `VITE_REPO` に入れ、`src/site-config.ts` の `siteFor` が選ぶ）。ファイルを書き換えなくてよい。
+  - 本番: 住所 `https://voice-match.com/`、見出しの GitHub のリンク・結果の下の「GitHub でスターする」・足元の GitHub・しくみと約束の「オープンソース」の節が出る。スターの数は毎朝のビルドで GitHub から取って、ページに書き込む（見る人のブラウザーは GitHub に問い合わせない）。検索に出る。
+  - 検証用: 住所は `https://tsukaima-kobo.github.io/voice-match-dev/`、スターの導線は出さない、検索に出さない（`noindex`）。
+  - 住所だけ変えたい時は、Variables の `VITE_SITE_URL` に入れる。
+- [ ] 本番のリポジトリに `removal` のラベルを作る（`gh label create removal -R tsukaima-kobo/voice-match --color d93f0b --description 削除のお願い`）。Issue の型（`.github/ISSUE_TEMPLATE/`）はコードと一緒に入る。
+- [x] README の「サイトを開く」などの住所は本番（`https://voice-match.com/`）にした。
+- [ ] 登録のフォーム（`src/submit/config.ts`）を本番のフォームにする（本番で登録を受ける時）。
 
 ## 3. GitHub のリポジトリの設定（本番）
 
@@ -33,10 +35,23 @@
 2. Cloudflare の画面で「アカウント ID」を控える（Workers & Pages の画面の右側など）。
 3. 本番のリポジトリ → Settings → Secrets and variables → Actions:
    - Secrets に `CLOUDFLARE_API_TOKEN`（1 の値）と `CLOUDFLARE_ACCOUNT_ID`（2 の値）
-   - Variables に `VITE_SITE_URL` = `https://voice-match.com/`
 4. push するか、Actions の site →「Run workflow」。最初の 1 回で Cloudflare に `voice-match` のプロジェクトができ、`https://voice-match.pages.dev/` に出る（名前が取られていたら少し違う住所になる）。
 5. Cloudflare → Workers & Pages → voice-match → カスタムドメイン → `voice-match.com` を追加。同じアカウントのドメインなので、DNS は自動で入る。`www.voice-match.com` も使うなら、同じように足す。
 6. GitHub の Settings → Pages は使わないので、Source を「なし」のままにする。
+
+## 3.7 運営が測った声を本番に置く
+
+```sh
+GH_REPO=tsukaima-kobo/voice-match node tools/voices-release.ts upload --yes
+```
+
+## 3.8 出した後の検証用（tsukaima-kobo/voice-match-dev）
+
+声が本番だけにあれば、削除のお願いを 1 か所で済ませられる。本番のページが見られるようになったら:
+
+- [ ] 検証用の Release「voices-data」を消す（`gh release delete voices-data -R tsukaima-kobo/voice-match-dev --cleanup-tag --yes`）。
+- [ ] 検証用のサイトを止める（`gh workflow disable site -R tsukaima-kobo/voice-match-dev` と、Settings → Pages → Unpublish site）。
+- 検証用のリポジトリは、コードを作る場所として残す。確かめる時は手元（`npm run dev`）で開く。
 
 ## 4. 広める（スターは買わない・交換しない。GitHub の規約で禁止）
 

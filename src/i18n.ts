@@ -4,7 +4,7 @@
 // 最初の言葉は public/lang.js が決める（URL の ?lang=、前に選んだ言葉、ブラウザーの言葉の順）。選んだ言葉だけを、この端末に覚える。
 // ブラウザーの無い所（試験・tools）では日本語。
 export type Lang = 'ja' | 'en';
-const KEY = 'voice-twin-lang';
+const KEY = 'voice-match-lang';
 
 export let lang: Lang = typeof document !== 'undefined' && document.documentElement.dataset.lang === 'en' ? 'en' : 'ja';
 const listeners = new Set<() => void>();

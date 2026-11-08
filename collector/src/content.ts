@@ -1,4 +1,4 @@
-// voice-twin 収集（運営用の Chrome 拡張機能）: YouTube の再生ページの右下に小さな板を出す。運営がお手本の声を選んで
+// voice-match 収集（運営用の Chrome 拡張機能）: YouTube の再生ページの右下に小さな板を出す。運営がお手本の声を選んで
 // 「測る」を押し、自分で配信を再生すると、<video> の音を 30 秒ずつ measure.ts（サイトと同じコード）で数字にする。
 // 音はメモリーの中だけに置き、数字にしたら捨てる。どこにも送らない。残すのは数字・動画 ID・時刻だけ（chrome.storage.local）。
 // 「書き出し」で data/voices/<id>.json の形のファイルを保存し、運営がリポジトリへ入れる。
@@ -41,7 +41,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEl
   return e;
 }
 
-const host = el('div', { id: 'voice-twin-collector' });
+const host = el('div', { id: 'voice-match-collector' });
 const shadow = host.attachShadow({ mode: 'closed' });
 const css = new CSSStyleSheet();
 css.replaceSync(`
@@ -78,7 +78,7 @@ const tallyLine = el('div', { className: 'muted' });
 const box = el(
   'div',
   { className: 'box' },
-  el('div', { className: 'head' }, 'voice-twin 収集', minBtn),
+  el('div', { className: 'head' }, 'voice-match 収集', minBtn),
   el('div', { className: 'row' }, idInput, datalist),
   nameLine,
   el('div', { className: 'row' }, startBtn, exportBtn, clearBtn),
@@ -198,7 +198,7 @@ async function hook(video: HTMLVideoElement) {
   let stop = () => {};
   try {
     await ctx.audioWorklet.addModule(chrome.runtime.getURL('capture.worklet.js'));
-    const node = new AudioWorkletNode(ctx, 'voice-twin-capture', { numberOfOutputs: 1, outputChannelCount: [1] });
+    const node = new AudioWorkletNode(ctx, 'voice-match-capture', { numberOfOutputs: 1, outputChannelCount: [1] });
     node.port.onmessage = (e: MessageEvent<Float32Array>) => onChunk(e.data);
     src.connect(node);
     node.connect(ctx.destination);

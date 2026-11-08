@@ -13,7 +13,7 @@ export default defineConfig({
     lib: {
       entry: 'src/content.ts',
       formats: ['iife'],
-      name: 'voiceTwinCollector',
+      name: 'voiceMatchCollector',
       fileName: () => 'content.js',
     },
   },

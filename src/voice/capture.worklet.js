@@ -1,6 +1,6 @@
 // マイク（サイト）や再生中の動画（収集の拡張機能）の音を、そのまま 2048 サンプルずつ渡すだけの AudioWorklet。
 // 音を変えず、出力は無音。「stop」を受けたら、それきり動かない。
-class VoiceTwinCapture extends AudioWorkletProcessor {
+class VoiceMatchCapture extends AudioWorkletProcessor {
   constructor() {
     super();
     this.buf = new Float32Array(2048);
@@ -32,4 +32,4 @@ class VoiceTwinCapture extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('voice-twin-capture', VoiceTwinCapture);
+registerProcessor('voice-match-capture', VoiceMatchCapture);

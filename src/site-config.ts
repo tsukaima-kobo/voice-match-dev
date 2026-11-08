@@ -1,14 +1,33 @@
 // サイトの外へのリンクと、共有の設定。ここ 1 か所だけを書き換える。
-// - url: 公開の住所（X の投稿・OGP に入れる）。ビルドの時に VITE_SITE_URL で上書きできる（本番のリポジトリで使う）。
+// - 本番か検証用か: GitHub Actions が VITE_REPO にリポジトリの名前を入れる。本番のリポジトリ（PRODUCTION.repo）で作った時だけ本番になり、
+//   公開の住所・スターの導線・削除のお願いの Issue の行き先が本番の物になる。検証用は検索に出さない（vite.config.ts）。
+// - url: 公開の住所（X の投稿・OGP に入れる）。VITE_SITE_URL があれば、住所だけそれにする。
 // - maker: 作った人（使い魔工房）のリンク。https:// で始まる物だけが出る。新しいタブで開く。
-// - github: GitHub のリポジトリ（"owner/name"）。空の間は、スターの導線を一つも出さない（本番のリリースまで空にしておく）。
+// - github: GitHub のリポジトリ（"owner/name"）。空の時は、スターの導線を一つも出さない（検証用では空）。
 // - removal: 削除のお願いの窓口（Google フォーム・メール・GitHub の Issue）。
 export type MakerLinkId = 'x' | 'youtube' | 'note' | 'zenn' | 'qiita';
 
-const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
+type Env = Record<string, string | undefined>;
+/** サイトの中では Vite が入れる import.meta.env、ビルドの道具（node）では process.env */
+const env: Env = (import.meta as { env?: Env }).env ?? (globalThis as { process?: { env: Env } }).process?.env ?? {};
+
+/** 本番のリポジトリと公開の住所 */
+export const PRODUCTION = { repo: 'tsukaima-kobo/voice-match', url: 'https://voice-match.com/' } as const;
+/** 検証用のリポジトリと公開の住所 */
+export const DEV = { repo: 'tsukaima-kobo/voice-match-dev', url: 'https://tsukaima-kobo.github.io/voice-match-dev/' } as const;
+
+/** どちらのサイトを作るか（VITE_REPO が本番のリポジトリの時だけ本番） */
+export function siteFor(e: Env): { production: boolean; url: string; github: string; issues: string } {
+  const production = e.VITE_REPO === PRODUCTION.repo;
+  const base = production ? PRODUCTION : DEV;
+  return { production, url: e.VITE_SITE_URL || base.url, github: production ? PRODUCTION.repo : '', issues: base.repo };
+}
+const TARGET = siteFor(env);
 
 export const SITE = {
-  url: env.VITE_SITE_URL || 'https://tsukaima-kobo.github.io/voice-match-dev/',
+  /** 本番のサイトか（検証用なら false） */
+  production: TARGET.production,
+  url: TARGET.url,
   /** X の投稿に付けるハッシュタグ（# は付けない） */
   hashtags: ['voicematch', '声真似練習場'],
   maker: {
@@ -22,13 +41,13 @@ export const SITE = {
       qiita: 'https://qiita.com/tsukaima_kobo',
     } as Readonly<Record<MakerLinkId, string | null>>,
   },
-  /** 例: "tsukaima-kobo/voice-match"。本番のリリースまで空（スターの導線を出さない） */
-  github: '',
-  /** 削除のお願いの窓口（しくみと約束の 07）。issues は Issue を立てるリポジトリ（本番のリリースで本番のリポジトリにする） */
+  /** 本番では本番のリポジトリ、検証用では空（スターの導線を出さない） */
+  github: TARGET.github,
+  /** 削除のお願いの窓口（しくみと約束の 07）。issues は Issue を立てるリポジトリ（本番では本番、検証用では検証用） */
   removal: {
     form: 'https://docs.google.com/forms/d/e/1FAIpQLSeWtH6Ymeb1bNpSxf8iAe3JI5Qiq_AIDF3TuZgJM35KxaJoJg/viewform',
     email: 'contact@voice-match.com',
-    issues: 'tsukaima-kobo/voice-match-dev',
+    issues: TARGET.issues,
   },
 };
 

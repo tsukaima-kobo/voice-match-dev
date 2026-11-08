@@ -2,7 +2,7 @@
 // 音はメモリーの中だけに置き、呼んだ側が数字にしたら捨てる。どこにも送らない、端末にも残さない。
 // 止めた時はすぐトラックを止め、AudioContext を閉じる。
 // タブの音は、ブラウザーの「共有」の画面で利用者がタブを選んだ時だけ取れる（声真似の練習のお手本用）。映像は使わない。
-// `?test=1` の時だけ window.__voiceTwin.feed(samples, rate) で、マイクの代わりに決まった音を流せる（画面の確認用）。
+// `?test=1` の時だけ window.__voiceMatch.feed(samples, rate) で、マイクの代わりに決まった音を流せる（画面の確認用）。
 // マイクは選べる（listMics の一覧の deviceId を openMic に渡す）。一覧の名前は、ブラウザーがマイクを許可した後にだけ見える。
 import workletUrl from './capture.worklet.js?url&no-inline';
 import { t } from '../i18n.ts';
@@ -25,14 +25,14 @@ interface TestHook {
 }
 declare global {
   interface Window {
-    __voiceTwin?: TestHook;
+    __voiceMatch?: TestHook;
     webkitAudioContext?: typeof AudioContext;
   }
 }
 
 let fed: { samples: Float32Array; rate: number } | null = null;
 if (new URLSearchParams(location.search).has('test')) {
-  window.__voiceTwin = {
+  window.__voiceMatch = {
     feed(samples, rate) {
       fed = { samples: Float32Array.from(samples), rate };
     },
@@ -133,7 +133,7 @@ async function listenTo(stream: MediaStream, onChunk: (x: Float32Array) => void,
   let detach = () => {};
   try {
     await ctx.audioWorklet.addModule(workletUrl);
-    const node = new AudioWorkletNode(ctx, 'voice-twin-capture', { numberOfOutputs: 1, outputChannelCount: [1] });
+    const node = new AudioWorkletNode(ctx, 'voice-match-capture', { numberOfOutputs: 1, outputChannelCount: [1] });
     node.port.onmessage = (e: MessageEvent<Float32Array>) => onChunk(e.data);
     src.connect(node);
     node.connect(ctx.destination);

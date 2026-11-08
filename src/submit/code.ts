@@ -8,7 +8,7 @@ import { t } from '../i18n.ts';
 import { KIND_BITS_ALL } from '../data/kinds.ts';
 
 /** 送る内容の頭（フォームの回答の中から見つけるため） */
-export const CODE_PREFIX = 'voice-twin:';
+export const CODE_PREFIX = 'voice-match:';
 
 export interface Submission {
   /** 形の版 */

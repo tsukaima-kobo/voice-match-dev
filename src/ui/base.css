@@ -1,4 +1,4 @@
-/* voice-twin の見た目。外のフォントも画像も読まない（外へ何も取りに行かないため）。色は全部この変数から（oklch）。
+/* voice-match の見た目。外のフォントも画像も読まない（外へ何も取りに行かないため）。色は全部この変数から（oklch）。
    横幅は固定しない: 余白・文字・並びは画面の幅に合わせて流れる（clamp・grid の auto-fill・コンテナークエリー）。
    新しい CSS（@property・view()・@starting-style・::details-content・view transition）は、使えないブラウザーでは飾りが減るだけ。 */
 

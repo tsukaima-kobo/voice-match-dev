@@ -2,7 +2,7 @@
 // フォームの回答の 1 行 = [タイムスタンプ, 送る内容, 判定, 理由]。判定は dots が書く（壁 ②。OK の行だけ使う）。
 // 壁 ① をもう一度（ページの確認は回り込めるため）、禁止の言葉・削除済みの名前・1 日の上限・同じ数字の重なりを除き、
 // 名前ごとに壁 ③（3 件以上そろったら中央値）で声にする。ID は名前（nameKey）から決まる（記録を持たずに、毎日同じ ID）。
-import { checkSubmission, decodeSubmission, featuresOf, nameKey, type Submission } from '../src/submit/code.ts';
+import { CODE_PREFIX, checkSubmission, decodeSubmission, featuresOf, nameKey, type Submission } from '../src/submit/code.ts';
 import { consensus } from '../src/submit/consensus.ts';
 import { FEATURE_KEYS, type Features } from '../src/voice/features.ts';
 import type { MatchModel } from '../src/match/match.ts';
@@ -49,7 +49,7 @@ export type CountKey = 'rows' | 'pending' | 'judgedNg' | 'unreadable' | 'wall1' 
 
 /** 表（シートや CSV）から行を取り出す。送る内容が無い行（見出しなど）は飛ばす */
 export function rowsFromTable(table: readonly (readonly string[])[]): Row[] {
-  return table.filter((r) => (r[1] ?? '').includes('voice-twin:')).map((r) => ({ at: (r[0] ?? '').trim(), code: r[1] ?? '', verdict: r[2] ?? '', reason: r[3] ?? '' }));
+  return table.filter((r) => (r[1] ?? '').includes(CODE_PREFIX)).map((r) => ({ at: (r[0] ?? '').trim(), code: r[1] ?? '', verdict: r[2] ?? '', reason: r[3] ?? '' }));
 }
 
 /** タイムスタンプの日付（"2026/11/01 12:34:56" → "2026-11-01"）。読めなければ "unknown" */

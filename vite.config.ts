@@ -7,18 +7,20 @@ import { MEASURE_VERSION } from './src/voice/measure.ts';
 import { packVoices } from './src/data/pack.ts';
 import { fromOperatorVoices, mergeVoices } from './src/data/sources.ts';
 import type { Catalog, OperatorVoices, ProfileList } from './src/data/types.ts';
+import { siteFor } from './src/site-config.ts';
 
 const CSP = ["default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:", "connect-src 'none'", "font-src 'self'", "object-src 'none'", "base-uri 'none'", "form-action 'none'"].join('; ');
 
 const csp = (): Plugin => ({
-  name: 'voice-twin-csp',
+  name: 'voice-match-csp',
   apply: 'build',
   transformIndexHtml: (html) => html.replace('<meta charset="utf-8" />', `<meta charset="utf-8" />\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`),
 });
 
-// SNS で共有された時の見た目（OGP・X のカード）。住所は絶対の物が要るので、公開の住所（VITE_SITE_URL、無ければ検証用）から作る。
-// 画像は public/og.jpg（1200×630）。ページごとに題と説明を入れる。
-const SITE_URL = (process.env.VITE_SITE_URL || 'https://tsukaima-kobo.github.io/voice-match-dev/').replace(/\/?$/, '/');
+// SNS で共有された時の見た目（OGP・X のカード）。住所は絶対の物が要るので、公開の住所（src/site-config.ts の siteFor）から作る。
+// 画像は public/og.jpg（1200×630）。ページごとに題と説明を入れる。検証用のサイトは、同じ声が 2 か所で見つからないよう検索に出さない（noindex）。
+const TARGET = siteFor(process.env);
+const SITE_URL = TARGET.url.replace(/\/?$/, '/');
 const OG: Record<string, { title: string; description: string }> = {
   'index.html': { title: 'voice-match｜あなたの声は誰に近い？', description: '一言話すと、声を 45 項目で測って、近い声と、あなただけの声紋を出します。登録不要・音は送らない。Say a phrase and see whose voice is closest to yours, plus your own voiceprint.' },
   'mimic.html': { title: '声真似の点数｜voice-match', description: 'お手本のセリフを真似すると、抑揚・タイミング・声の質で点数と直し方を出します。Imitate a line and get a score with tips.' },
@@ -26,7 +28,7 @@ const OG: Record<string, { title: string; description: string }> = {
   'about.html': { title: 'しくみと約束｜voice-match', description: '声をどう測り、どう比べるか。音を送らない・残さない約束。How voice-match measures voices, and our promises.' },
 };
 const ogp = (): Plugin => ({
-  name: 'voice-twin-ogp',
+  name: 'voice-match-ogp',
   transformIndexHtml(html, ctx) {
     const page = ctx.filename.split('/').pop() ?? 'index.html';
     const o = OG[page] ?? OG['index.html']!;
@@ -45,7 +47,8 @@ const ogp = (): Plugin => ({
       ['og:locale:alternate', 'en_US'],
     ]
       .map(([k, v]) => `<meta property="${k}" content="${esc(v!)}" />`)
-      .concat([`<meta name="twitter:card" content="summary_large_image" />`, `<meta name="twitter:image" content="${esc(`${SITE_URL}og.jpg`)}" />`]);
+      .concat([`<meta name="twitter:card" content="summary_large_image" />`, `<meta name="twitter:image" content="${esc(`${SITE_URL}og.jpg`)}" />`])
+      .concat(TARGET.production ? [] : ['<meta name="robots" content="noindex, nofollow" />']);
     return html.replace('</title>', `</title>\n    ${tags.join('\n    ')}`);
   },
 });
@@ -55,7 +58,7 @@ const ogp = (): Plugin => ({
 // 拡張機能で測った声（data/catalog.json・profiles.json）、登録から出した声（data/generated/user-*.json）。まとめ方は src/data/sources.ts。
 const VOICE_PACK = 'virtual:voice-pack';
 const voicePack = (): Plugin => ({
-  name: 'voice-twin-voice-pack',
+  name: 'voice-match-voice-pack',
   resolveId: (id) => (id === VOICE_PACK ? `\0${VOICE_PACK}` : undefined),
   load(id) {
     if (id !== `\0${VOICE_PACK}`) return undefined;

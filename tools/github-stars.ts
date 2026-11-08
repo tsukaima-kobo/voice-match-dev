@@ -10,7 +10,7 @@ if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
   console.log('GitHub のリポジトリが設定されていません（site-config.ts の github）。スターの数は取りません。');
   process.exit(0);
 }
-const headers: Record<string, string> = { accept: 'application/vnd.github+json', 'user-agent': 'voice-twin-build' };
+const headers: Record<string, string> = { accept: 'application/vnd.github+json', 'user-agent': 'voice-match-build' };
 if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 try {
   const res = await fetch(`https://api.github.com/repos/${repo}`, { headers });

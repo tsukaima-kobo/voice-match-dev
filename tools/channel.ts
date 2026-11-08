@@ -33,7 +33,7 @@ if (!files.length) {
   console.log('使い方: node tools/channel.ts 声1.wav 声2.wav … [--write]');
   process.exit(1);
 }
-const work = mkdtempSync(join(tmpdir(), 'voice-twin-channel-'));
+const work = mkdtempSync(join(tmpdir(), 'voice-match-channel-'));
 const diffs: Record<FeatureKey, number[]> = Object.fromEntries(FEATURE_KEYS.map((k) => [k, []])) as unknown as Record<FeatureKey, number[]>;
 try {
   for (const file of files) {

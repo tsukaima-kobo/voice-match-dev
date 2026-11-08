@@ -5,7 +5,7 @@
 import { listMics, micChoiceSupported, type MicChoice } from '../voice/listen.ts';
 import { onLang, t } from '../i18n.ts';
 
-const KEY = 'voice-twin-mic';
+const KEY = 'voice-match-mic';
 const defaultLabel = () => t('いつものマイク（端末の設定）', 'Default microphone (device setting)');
 
 export interface MicPicker {

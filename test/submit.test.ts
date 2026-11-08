@@ -31,8 +31,8 @@ describe('送る内容と壁 ①', () => {
   });
   it('送る内容でない物は読まない', () => {
     expect(decodeSubmission('hello')).toBeNull();
-    expect(decodeSubmission('voice-twin:{oops')).toBeNull();
-    expect(decodeSubmission('voice-twin:{"v":2}')).toBeNull();
+    expect(decodeSubmission('voice-match:{oops')).toBeNull();
+    expect(decodeSubmission('voice-match:{"v":2}')).toBeNull();
   });
   it('同意なし・よくない名前・よくないリンク・質の悪い録音は断る', () => {
     const kinds = (s: ReturnType<typeof sub>) => checkSubmission(s).map((p) => p.kind);
@@ -117,9 +117,9 @@ describe('取り込み', () => {
     expect(r.counts).toMatchObject({ blocked: 1, ngWord: 1, duplicate: 1, overName: 2 });
   });
   it('シートを読む: 見出しは飛ばし、列はそのまま', () => {
-    const t = parseCsv('タイムスタンプ,送る内容,判定,理由\r\n"2026/11/01 1:00:00","voice-twin:{""v"":1}",OK,"よい, とても"\n');
-    expect(t[1]).toEqual(['2026/11/01 1:00:00', 'voice-twin:{"v":1}', 'OK', 'よい, とても']);
-    expect(rowsFromTable(t)).toEqual([{ at: '2026/11/01 1:00:00', code: 'voice-twin:{"v":1}', verdict: 'OK', reason: 'よい, とても' }]);
+    const t = parseCsv('タイムスタンプ,送る内容,判定,理由\r\n"2026/11/01 1:00:00","voice-match:{""v"":1}",OK,"よい, とても"\n');
+    expect(t[1]).toEqual(['2026/11/01 1:00:00', 'voice-match:{"v":1}', 'OK', 'よい, とても']);
+    expect(rowsFromTable(t)).toEqual([{ at: '2026/11/01 1:00:00', code: 'voice-match:{"v":1}', verdict: 'OK', reason: 'よい, とても' }]);
     expect(dayOf('2026/1/2 3:04:05')).toBe('2026-01-02');
     expect(dayOf('?')).toBe('unknown');
   });

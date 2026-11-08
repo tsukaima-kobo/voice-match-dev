@@ -1,6 +1,7 @@
 # サイトのビルドと公開。main に push した時と、毎日 6:00（日本時間）に動く。
 # 置き場所: Secrets に CLOUDFLARE_API_TOKEN と CLOUDFLARE_ACCOUNT_ID がある時は Cloudflare Pages（voice-match.com）、無い時は GitHub Pages。
-# 公開の住所（OGP・共有カード・X の投稿に入る）は Variables の VITE_SITE_URL。無ければ src/site-config.ts の既定。
+# 本番か検証用かは、リポジトリの名前（VITE_REPO）で決まる（src/site-config.ts の siteFor）。本番の時だけ、本番の住所・スターの導線・検索に出す。
+# 公開の住所（OGP・共有カード・X の投稿に入る）を変えたい時だけ、Variables の VITE_SITE_URL に入れる。
 # 声の登録は Google スプレッドシートだけに置く（運営だけが見られる）。サイトを作る時に tools/intake.ts がシートを読み、
 # 出すと決まった声だけを data/generated/ に作ってページに入れる。リポジトリには書き込まない（履歴に残さない）。
 # シートを読めなかった時は、そこで止める（その日は公開せず、前のページのまま）。鍵は Secrets にだけ置く。
@@ -29,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TO_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+      VITE_REPO: ${{ github.repository }}
     outputs:
       cloudflare: ${{ steps.where.outputs.cloudflare }}
     steps:

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "voice-twin 収集",
+  "name": "voice-match 収集",
   "version": "0.1.0",
-  "description": "運営が再生している配信の声を、その場で数字にします。音は保存も送信もしません。voice-twin の運営用（ストアには出しません）。",
+  "description": "運営が再生している配信の声を、その場で数字にします。音は保存も送信もしません。voice-match の運営用（ストアには出しません）。",
   "permissions": ["storage"],
   "content_scripts": [
     {
