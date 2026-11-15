@@ -97,6 +97,19 @@ describe('スプレッドシートの xlsx を読む', () => {
     expect(t[1]).toEqual([null, '葛葉', 'その場']);
   });
 
+  it('空の文字が <si/>・<t/> と書かれていても、後の文字がずれない', () => {
+    const files = {
+      'xl/workbook.xml': '<workbook><sheets><sheet name="s" sheetId="1" r:id="r1"/></sheets></workbook>',
+      'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="r1" Target="worksheets/a.xml"/></Relationships>',
+      'xl/sharedStrings.xml': '<sst><si><t>人物ID</t></si><si/><si><t>a</t></si><si><r><t xml:space="preserve"/></r><r><t>名前 a</t></r></si></sst>',
+      'xl/worksheets/a.xml': '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2" t="s"><v>3</v></c></row></sheetData></worksheet>',
+    };
+    expect(readXlsx(zip(files, () => false)).get('s')).toEqual([
+      ['人物ID', ''],
+      ['a', '名前 a'],
+    ]);
+  });
+
   it('xlsx でない物は止める', () => {
     expect(() => readXlsx(Buffer.from('not a zip'))).toThrow(/zip/);
   });

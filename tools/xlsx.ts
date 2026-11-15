@@ -50,9 +50,9 @@ function attrs(s: string): Record<string, string> {
   return o;
 }
 
-/** <t> の文字をつなぐ（ふりがな <rPh> は除く） */
+/** <t> の文字をつなぐ（ふりがな <rPh> は除く。空の <t/> も読む） */
 function texts(xml: string): string {
-  return [...xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '').matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map((m) => decode(m[1]!)).join('');
+  return [...xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '').matchAll(/<t(?:\s[^>]*?)?(?:\/>|>([\s\S]*?)<\/t>)/g)].map((m) => decode(m[1] ?? '')).join('');
 }
 
 /** "AB12" の AB → 27（0 から） */
@@ -69,7 +69,8 @@ export function readXlsx(buf: Buffer): Map<string, Cell[][]> {
   const workbook = text('xl/workbook.xml');
   const rels = text('xl/_rels/workbook.xml.rels');
   if (!workbook || !rels) throw new Error('xlsx の中に、シートの一覧がありません');
-  const shared = [...(text('xl/sharedStrings.xml') ?? '').matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => texts(m[1]!));
+  // 空の文字は <si/> と書かれることもある（数え落とすと、後の文字が全部 1 つずれる）
+  const shared = [...(text('xl/sharedStrings.xml') ?? '').matchAll(/<si\b[^>]*?(?:\/>|>([\s\S]*?)<\/si>)/g)].map((m) => texts(m[1] ?? ''));
   const targets = new Map<string, string>();
   for (const m of rels.matchAll(/<Relationship\b([^>]*)>/g)) {
     const a = attrs(m[1]!);

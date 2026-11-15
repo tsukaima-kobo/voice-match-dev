@@ -1,6 +1,6 @@
 // 運営が測った声の代表値（tools/operator-voices-lib.ts）と、サイトでのまとめ方（src/data/sources.ts）
 import { describe, expect, it } from 'vitest';
-import { buildOperatorVoices, parseIdList, sameNameGroups, type Snapshot } from '../tools/operator-voices-lib.ts';
+import { buildOperatorVoices, parseIdList, releaseProblem, sameNameGroups, type Snapshot } from '../tools/operator-voices-lib.ts';
 import { checkOperatorVoices, fromOperatorVoices, mergeVoices } from '../src/data/sources.ts';
 import { FEATURE_KEYS } from '../src/voice/features.ts';
 import { MEASURE_COMPATIBLE, MEASURE_VERSION } from '../src/voice/measure.ts';
@@ -132,12 +132,32 @@ describe('運営が測った声の代表値', () => {
     // ファイルには全員が入る（どれを直すかは運営が決める）
     expect(r.file.voices).toHaveLength(5);
     expect(r.warnings).toHaveLength(1);
-    expect(r.warnings[0]).toMatch(/先の「ルーナ」だけ.*a「ルーナ \/ Luna」・b「LUNA」・c「るーな」/);
+    expect(r.warnings[0]).toMatch(/出るのは「ルーナ」だけ.*a「ルーナ \/ Luna」・b「LUNA」・c「るーな」/);
     // サイトでのまとめ方と同じ見方: 出ない人は 2 人
     const m = mergeVoices([fromOperatorVoices(r.file)], MEASURE_VERSION);
     expect(m.voices.map((v) => v.name)).toEqual(['ルーナ', 'りん', '凛']);
     expect(m.dropped.map((d) => [d.name, d.reason])).toEqual([['LUNA', 'same'], ['るーな', 'same']]);
     expect(sameNameGroups([{ name: 'A' }, { name: 'B', nameEn: 'a' }, { name: 'C', nameEn: 'b' }, { name: 'D' }]).map((g) => g.map((x) => x.name))).toEqual([['A', 'B', 'C']]);
+  });
+
+  it('名前がつながった 3 人（A・B / a・C / b）では、知らせる「出る人」がサイトと同じ（A と C）', () => {
+    const r = buildOperatorVoices(
+      snap([person('a', { name: 'A' }), person('b', { name: 'B', nameEn: 'a' }), person('c', { name: 'C', nameEn: 'b' })], ['a', 'b', 'c'].flatMap((id) => windows(id, 'v1', twelve))),
+      { measureVersion: MEASURE_VERSION, only: null },
+    );
+    expect(mergeVoices([fromOperatorVoices(r.file)], MEASURE_VERSION).voices.map((v) => v.name)).toEqual(['A', 'C']);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toMatch(/出るのは「A」「C」だけ/);
+  });
+
+  it('Release に置かない物: 声が 0 人（一覧に人物ID ではなく名前を書いた時など）・形や測り方の版が違う物', () => {
+    const r = buildOperatorVoices(snap([person('a')], windows('a', 'v1', twelve)), { measureVersion: MEASURE_VERSION, only: parseIdList('名前 a\n') });
+    expect(r.file.voices).toHaveLength(0);
+    expect(releaseProblem(r.file, MEASURE_VERSION)).toMatch(/0 人/);
+    expect(releaseProblem({ ...r.file, measureVersion: '0.0.1' }, MEASURE_VERSION)).toMatch(/版/);
+    expect(releaseProblem({ version: 1, measureVersion: MEASURE_VERSION } as never, MEASURE_VERSION)).toMatch(/形/);
+    const ok = buildOperatorVoices(snap([person('a')], windows('a', 'v1', twelve)), { measureVersion: MEASURE_VERSION, only: null });
+    expect(releaseProblem(ok.file, MEASURE_VERSION)).toBeNull();
   });
 
   it('一覧の読み方: # から後と空の行は無視', () => {
@@ -266,6 +286,35 @@ describe('画面に出す所属の名前', () => {
     );
     expect(r.file.voices.map((v) => v.group ?? '')).toEqual(['にじさんじ', 'にじさんじ', 'にじさんじ', '個人勢', '個人勢', '', '']);
     expect(r.notes.join('\n')).toMatch(/所属として出さない所属区分.*「国際VTuber」1 人/);
+  });
+
+  it('現在所属が、そろえる前の所属区分の書き方で始まる時も、そろえた名前にする（現在所属が空の人と同じ）', () => {
+    const twelve = Array(12).fill(200);
+    const ppl = [
+      ...['a', 'b', 'c', 'd'].map((id) => person(id, { groupId: 'nijisanji', groupName: 'にじさんじ' })),
+      person('e', { groupId: 'nijisanji', groupName: 'NIJISANJI' }),
+      person('f', { groupId: 'nijisanji', groupName: 'NIJISANJI', currentAffiliation: 'NIJISANJI' }),
+      person('g', { groupId: 'nijisanji', groupName: 'NIJISANJI', currentAffiliation: 'NIJISANJI（公式プロフィール掲載）' }),
+    ];
+    const r = buildOperatorVoices(
+      { summary: { measureVersions: [MEASURE_VERSION] }, peoples: ppl, measurements: ppl.flatMap((p) => windows(p.personId, 'v1', twelve)) },
+      { measureVersion: MEASURE_VERSION, only: null },
+    );
+    expect(r.file.voices.map((v) => v.group ?? '')).toEqual(Array(7).fill('にじさんじ'));
+  });
+
+  it('現在所属が「…を卒業済み」のように所属を離れたと書いている時は、前の所属（所属区分）を出さない', async () => {
+    const { affiliation } = await import('../tools/operator-voices-lib.ts');
+    expect(affiliation('預見娛樂を卒業済み', '預見娛樂')).toBe('');
+    expect(affiliation('Graduated from Example Live', 'Example Live')).toBe('');
+    expect(affiliation('ホロライブ / 秘密結社holoX / 配信活動終了（Affiliate）', 'ホロライブ')).toBe('');
+    // 「元…」と書いた所属や、メモの中の「卒業生」は、今までどおり
+    expect(affiliation('元ホロライブ2期生（公式表記：卒業生）', 'ホロライブ')).toBe('元ホロライブ2期生');
+    expect(affiliation('Independent (graduated from Example Live)', 'Example Live')).toBe('個人勢');
+    // 手元の記録に、所属を出さないわけを出す
+    const r = buildOperatorVoices(snap([person('a', { groupName: '預見娛樂', currentAffiliation: '預見娛樂を卒業済み' })], windows('a', 'v1', Array(12).fill(200))), { measureVersion: MEASURE_VERSION, only: null });
+    expect(r.file.voices[0]!.group).toBeUndefined();
+    expect(r.notes.join('\n')).toMatch(/a: .*所属を出しません（現在所属「預見娛樂を卒業済み」）/);
   });
 });
 

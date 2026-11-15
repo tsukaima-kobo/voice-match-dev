@@ -12,14 +12,15 @@
 //       --repo は必ず書く（決まった物は無い。手元の gh の設定や GH_REPO で、思っていないリポジトリに置かないため）。
 //       書けるのは本番（tsukaima-kobo/voice-match）と検証用（tsukaima-kobo/voice-match-dev）だけ。
 //       公開になるので、運営が決めてから。--yes が無い時は、置く物と置き先を見せるだけで何もしない。
+//       声が 0 人のファイルは置かない（サイトの運営が測った声が黙って 0 人になるため）。
 // 知らないオプションがあれば、何もしないで止まる。
 // 出す人の一覧: 1 行に 1 人の人物ID。# から後は無視。手順は docs/voices-release.md。
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MEASURE_VERSION, readableVersion } from '../src/voice/measure.ts';
+import { MEASURE_VERSION } from '../src/voice/measure.ts';
 import type { OperatorVoices } from '../src/data/types.ts';
-import { buildOperatorVoices, parseIdList, snapshotFromSheet, type Snapshot } from './operator-voices-lib.ts';
+import { buildOperatorVoices, parseIdList, releaseProblem, snapshotFromSheet, type Snapshot } from './operator-voices-lib.ts';
 import { KINDS, parseKinds } from '../src/data/kinds.ts';
 import { fromOperatorVoices, mergeVoices } from '../src/data/sources.ts';
 import { readXlsx } from './xlsx.ts';
@@ -98,8 +99,9 @@ if (args[0] === 'make') {
     process.exit(2);
   }
   const file = JSON.parse(readFileSync(out, 'utf8')) as OperatorVoices;
-  if (file.version !== 1 || !readableVersion(file.measureVersion) || !Array.isArray(file.voices)) {
-    console.error(`ファイルの形か測り方の版が違います（今のサイト: ${MEASURE_VERSION}）。make で作り直してください。`);
+  const problem = releaseProblem(file, MEASURE_VERSION);
+  if (problem) {
+    console.error(`置きません: ${problem}`);
     process.exit(2);
   }
   if (!args.includes('--yes')) {

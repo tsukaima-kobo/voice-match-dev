@@ -8,7 +8,7 @@
 // 大枠（VTuber・歌手など）は、シートの「大枠」の列（無ければ make の --kind）から。
 // 英語の名前は、シートの「英語名」「所属の英語名」の列（任意。公式の英語の書き方）から。
 // 同じ人の行がいくつかある時は、項目ごとに、空でない最初の値を使う（名前・所属・公式ページ・大枠・英語名のどれも）。
-// 所属: 所属区分が集めた時の分け方（地域・言語・名簿・未確認）や、録った時の所属の時は出さない。所属区分ID ごとに書き方を 1 つにそろえる（affiliation）。
+// 所属: 所属区分が集めた時の分け方（地域・言語・名簿・未確認）や、録った時の所属の時、現在所属が「…を卒業済み」の時は出さない。所属区分ID ごとに書き方を 1 つにそろえる（affiliation）。
 // 所属の英語名は、画面に出す所属（affiliation でそろえた物）ごとに 1 つにそろえる（groupEnByGroup）。
 // 書き出すのは名前（あれば英語名も）・所属・大枠・公式ページ・数字だけ（Release は公開なので、人物ID や窓の数は手元の記録だけに出す）。
 import { FEATURE_BY_KEY, FEATURE_KEYS, formatFeature, type Features } from '../src/voice/features.ts';
@@ -19,7 +19,7 @@ import type { OperatorVoices } from '../src/data/types.ts';
 import { medianFeatures, SELECT } from './lib.ts';
 import { idsOf, parseKinds } from '../src/data/kinds.ts';
 import { oldestVersion } from './versions.ts';
-import { voiceKeys } from '../src/data/sources.ts';
+import { fromOperatorVoices, mergeVoices, voiceKeys } from '../src/data/sources.ts';
 
 export interface Snapshot {
   summary?: { measureVersions?: string[] };
@@ -114,10 +114,10 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
     const group = affiliation(p.currentAffiliation, p.groupName, p.groupId ? labels.get(p.groupId) : undefined);
     const parsed = parseKinds(p.kinds ?? '');
     const kinds = idsOf(parsed.mask || (o.defaultKinds ?? 0));
-    const extra = [group && group !== (p.currentAffiliation ?? '').trim() ? `所属「${group}」` : '', parsed.unknown.length ? `大枠の読めない言葉「${parsed.unknown.join('・')}」` : '', kinds.length ? '' : '大枠なし'].filter(Boolean);
-    notes.push(extra.length ? `${note}、${extra.join('、')}` : note);
     // exact: 所属を「現在所属」のまま出す人（「ホロライブ4期生」→「ホロライブ」のように、そろえた人ではない）
     const cur = currentOf(p.currentAffiliation);
+    const extra = [group && group !== (p.currentAffiliation ?? '').trim() ? `所属「${group}」` : '', LEFT.test(cur) ? `所属を出しません（現在所属「${cur}」）` : '', parsed.unknown.length ? `大枠の読めない言葉「${parsed.unknown.join('・')}」` : '', kinds.length ? '' : '大枠なし'].filter(Boolean);
+    notes.push(extra.length ? `${note}、${extra.join('、')}` : note);
     for (const w of kept) used.add(w.version ?? oldestVersion(versions, o.measureVersion));
     picked.push({ id, name: p.name.trim(), nameEn: (p.nameEn ?? '').trim(), group, groupEn: group ? (p.groupEn ?? '').trim() : '', exact: !cur || cur === group, kinds, link, features: medianFeatures(kept) });
   }
@@ -137,8 +137,12 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
   });
   const bad = [...used].filter((v) => !readableVersion(v, o.measureVersion));
   if (bad.length) throw new Error(`測り方の版が合いません（窓: ${bad.join('・')}、今のサイト: ${o.measureVersion}）`);
-  const warnings = sameNameGroups(picked).map((g) => `同じ名前として扱われる人がいます。サイトには人物ID の順で先の「${g[0]!.name}」だけが出ます: ${g.map((v) => `${v.id}「${v.name}${v.nameEn ? ` / ${v.nameEn}` : ''}」`).join('・')}（シートの氏名・英語名を確かめてください）`);
-  return { file: { version: 1, measureVersion: oldestVersion(used, oldestVersion(versions, o.measureVersion)), voices }, notes, warnings };
+  const file: OperatorVoices = { version: 1, measureVersion: oldestVersion(used, oldestVersion(versions, o.measureVersion)), voices };
+  // サイトに出る人は、サイトと同じまとめ方で決める（名前がつながった 3 人以上では、出るのが先の 1 人だけとは限らない）
+  const shown = new Set(mergeVoices([fromOperatorVoices(file)], o.measureVersion).voices.map((v) => v.id));
+  const shownOf = (v: (typeof picked)[number]) => shown.has(`o-${picked.indexOf(v)}`);
+  const warnings = sameNameGroups(picked).map((g) => `同じ名前として扱われる人がいます。サイトに出るのは${g.filter(shownOf).map((v) => `「${v.name}」`).join('')}だけです: ${g.map((v) => `${v.id}「${v.name}${v.nameEn ? ` / ${v.nameEn}` : ''}」`).join('・')}（シートの氏名・英語名を確かめてください）`);
+  return { file, notes, warnings };
 }
 
 /**
@@ -210,6 +214,9 @@ export function groupLabel(kind: string | null | undefined): string {
 /** 個人で活動している人（「個人」「個人勢」「Independent」で始まる） */
 const INDEPENDENT = /^(個人|independent\b)/i;
 
+/** 「現在所属」が、所属区分の所属を離れた・活動を終えたと書いている（「預見娛樂を卒業済み」「配信活動終了」など）。所属区分は前の所属なので、どちらも出さない */
+const LEFT = /卒業|graduat|脱退|引退|活動終了/i;
+
 /** 「現在所属」からメモを除いた物（所属ではない物は空） */
 const currentOf = (current: string | null | undefined): string => {
   const cur = stripNote(current ?? '');
@@ -244,15 +251,28 @@ export function groupLabelsById(people: Iterable<{ personId: string; groupId?: s
  * 画面に出す所属の名前。シートの「現在所属」には、調べた時のメモ（「ホロライブ（公式個人プロフィール掲載）」など）が入っているので、
  * かっこの中を除く。「所属区分」で始まる物は所属区分の名前に（「ホロライブ4期生」→「ホロライブ」）、個人で活動している人は「個人勢」にそろえる。
  * 所属区分が所属ではない物（集めた時の分け方）や、今の所属と言えない物（録った時の所属など）の時は、現在所属が無ければ空（所属を出さない）。
+ * 現在所属が「…を卒業済み」のように所属を離れたと書いている時も空（所属区分の名前にそろえると、前の所属を今の所属として出してしまう）。
  * label: 所属区分ID でそろえた名前（groupLabelsById）。所属区分が出せる時だけ使う。
  */
 export function affiliation(current: string | null | undefined, kind: string | null | undefined, label?: string): string {
   const cur = currentOf(current);
+  if (LEFT.test(cur)) return '';
   const own = groupLabel(kind);
   const k = own ? label || own : '';
   if (!cur) return INDEPENDENT.test(k) ? '個人勢' : k;
-  if (k && cur.startsWith(k)) return k;
+  // 現在所属が、その人の所属区分の書き方（そろえる前）で始まる時も、そろえた名前に（「NIJISANJI」→「にじさんじ」）
+  if (own && (cur.startsWith(k) || cur.startsWith(own))) return k;
   return cur;
+}
+
+/**
+ * Release に置けない理由（tools/voices-release.ts の upload が使う）。置ける時は null。
+ * 形や測り方の版が違う物と、声が 0 人の物（一覧に人物ID ではなく名前を書いた時など。置くとサイトの運営が測った声が黙って 0 人になる）は置かない。
+ */
+export function releaseProblem(file: Partial<OperatorVoices>, measureVersion: string): string | null {
+  if (file.version !== 1 || !Array.isArray(file.voices) || !readableVersion(file.measureVersion, measureVersion)) return `ファイルの形か測り方の版が違います（今のサイト: ${measureVersion}）。make で作り直してください。`;
+  if (!file.voices.length) return '声が 1 人も入っていません（置くと、サイトの運営が測った声が 0 人になります）。出す人の一覧の人物ID を確かめて、make で作り直してください。';
+  return null;
 }
 
 /** 「声の測定値」に測定バージョンの列が無かった頃の行の版 */
