@@ -4,6 +4,7 @@
 // 名前ごとに壁 ③（3 件以上そろったら中央値）で声にする。ID は名前（nameKey）から決まる（記録を持たずに、毎日同じ ID）。
 // 出す名前の書き方・所属・大枠・リンクは、壁 ③ でそろった登録だけから決める（外れた登録のいたずらで変わらないように）。
 // 決める時は、同じ音の写し（数字を少し変えた物）を 1 件と数える（1 つの音から何件も送って、多数決を取れないように）。
+// 所属は、書かなかった登録も 1 票と数える（groupVote。1 件だけが書いた所属は出さない）。
 // 声の測り方の版は、そろった登録の中でいちばん古い版（今の版と、比べてよい前の版 MEASURE_COMPATIBLE が混ざることがある）。
 import { CODE_PREFIX, checkSubmission, decodeSubmission, featuresOf, nameKey, type Submission } from '../src/submit/code.ts';
 import { consensus, consensusMembers, withoutCopies } from '../src/submit/consensus.ts';
@@ -92,6 +93,17 @@ function mostCommon(values: readonly string[]): string | undefined {
     bestN = 0;
   for (const v of values) if (n.get(v)! > bestN) [best, bestN] = [v, n.get(v)!];
   return best;
+}
+
+/**
+ * 所属: 空（書かなかった登録）も 1 票と数えた多数決。空がいちばん多いか、空と同じ数で並んだら、所属なし
+ * （そろった登録の 1 件だけが書いた所属が、そのまま出ないように）
+ */
+export function groupVote(groups: readonly string[]): string | undefined {
+  const best = mostCommon(groups);
+  if (!best) return undefined;
+  const count = (g: string) => groups.filter((x) => x === g).length;
+  return count(best) > count('') ? best : undefined;
 }
 
 /** 名前（nameKey）から決まる声の ID（u- と 11 文字。53 ビットのハッシュ cyrb53）。運営の声の ID（v-）とは重ならない */
@@ -187,7 +199,7 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
     used.add(id);
     // 名前の書き方などの多数決は、写しを 1 件として（consensus が中央値に使う登録と同じ。仮のモデルでは、まったく同じ数字だけを 1 件に）
     const voters = o.model.likeness ? withoutCopies(o.model, members) : members;
-    const group = mostCommon(voters.map((a) => a.group ?? '').filter(Boolean));
+    const group = groupVote(voters.map((a) => a.group ?? ''));
     voices.push({ id, key, name: mostCommon(voters.map((a) => a.name))!, ...(group ? { group } : {}), kinds: majorityKinds(voters.map((a) => a.kinds)), link: mostCommon(voters.map((a) => a.link))!, used: c.used, version: oldestVersion(members.map((a) => a.version), MEASURE_VERSION), features: c.features });
   }
   voices.sort((a, b) => (a.id < b.id ? -1 : 1));

@@ -41,4 +41,16 @@ describe('壁 ③ の写し', () => {
     expect(consensus(model, items([voiceAt(-1.1), voiceAt(0), voiceAt(1.1)]))?.used).toBe(3);
     expect(consensus(model, items([voiceAt(-1.3), voiceAt(0), voiceAt(1.3)]))).toBeNull();
   });
+  it('別の声の 1 つの音の写しを何件送っても、そろっていた別々の 3 件は外れない（外れ値を外す中央値も、写しを 1 件として取る）', () => {
+    const agreed = [voiceAt(-0.4), voiceAt(0), voiceAt(0.4)];
+    const far = voiceAt(2);
+    for (const copies of [0, 2, 3, 5, 8]) {
+      const all = items([...agreed, ...Array.from({ length: copies }, (_, i) => nudge(far, i + 1))]);
+      // 前は写しが 3 件から中央値が写しの方へ寄り、そろっていた 3 件が外れて、声が出なかった
+      const c = consensus(model, all);
+      expect(c?.used, `写し ${copies} 件`).toBe(3);
+      expect(c!.features.f1).toBeCloseTo(agreed[1]!.f1!, 0);
+      expect(consensusMembers(model, all).map((x) => x.features)).toEqual(agreed);
+    }
+  });
 });

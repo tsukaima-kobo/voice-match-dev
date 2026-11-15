@@ -32,6 +32,7 @@ function apart(model: MatchModel, a: Features, b: Features): number {
 
 /**
  * 壁 ③ で使われる登録: まったく同じ数字は 1 件に数え、全部の中央値から照合の距離で CONSENSUS.maxDistance より遠い物を除く。
+ * その中央値は、写しを 1 件とした物で取る（1 つの音の写しを何件も送って中央値を寄せ、そろっていた登録を外させないように）。
  * consensus が通した時の used と同じ数になる（tools/intake-lib.ts は、名前の書き方などをこの登録だけで決める）
  */
 export function consensusMembers<T extends { features: Features }>(model: MatchModel, items: readonly T[]): T[] {
@@ -44,7 +45,8 @@ export function consensusMembers<T extends { features: Features }>(model: MatchM
     return true;
   });
   if (!uniq.length) return [];
-  const mid = medianFeatures(uniq);
+  // 仮のモデル（画面の目盛りから作った物）は距離の目盛りが違うので、写しをまとめない（consensus と同じ）
+  const mid = medianFeatures(model.likeness ? withoutCopies(model, uniq) : uniq);
   return uniq.filter((x) => {
     const r = rank(model, x.features, [{ id: 'mid', features: mid }], 1)[0];
     return r !== undefined && r.distance <= CONSENSUS.maxDistance;

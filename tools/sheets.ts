@@ -35,6 +35,7 @@ export async function openSheet(keyJson: string, sheetId: string): Promise<{ rea
   const { access_token } = (await tok.json()) as { access_token: string };
   return {
     async read(range) {
+      // 範囲は URL の 1 つの区切りとして入れる（空白のあるタブの名前を囲む ' と空白も、そのまま Google に届く: 'フォームの回答 1'!A:D）
       const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range)}`, { headers: { authorization: `Bearer ${access_token}` } });
       if (!res.ok) throw new Error(`スプレッドシートの「${range}」を読めませんでした（HTTP ${res.status}${res.status === 400 ? '。タブが無いか、タブの名前が違います' : ''}）`);
       return ((await res.json()) as { values?: string[][] }).values ?? [];

@@ -156,6 +156,9 @@ describe('取り込み', () => {
   const code = (f: Features, name = '試験のキャラ') => encodeSubmission(sub({ features: f, name }));
   const rows = (list: [string, string, string][]): Row[] => list.map(([at, c, verdict]) => ({ at, code: c, verdict, reason: '' }));
   const three = [voice(220, 2), voice(222, 3), voice(218, 4)];
+  // 距離の目盛りが分かるモデル（項目どうしの重なりの無い白色化と likeness。写しをまとめるのは、この時だけ）
+  const scaled: MatchModel = { ...model, whiten: model.keys.map((_, i) => model.keys.map((_, j) => (i === j ? 1 : 0))), likeness: { typical: 1.8, cuts: [1, 1.2, 1.4] } };
+  const at = (z: number): Features => Object.fromEntries(scaled.keys.map((k, i) => { const x = scaled.center[i]! + z * scaled.spread[i]!; return [k, roundFeature(k, FEATURE_BY_KEY[k].log ? Math.exp(x) : x)]; })) as Features;
   it('dots が OK を付けた行だけ使い、合う 3 つから声を作る。ID は名前から', () => {
     const r = intake(
       rows([
@@ -257,9 +260,6 @@ describe('取り込み', () => {
     expect(consensusMembers(model, r.accepted)).toHaveLength(3);
   });
   it('名前の書き方・所属・大枠・リンクの多数決では、同じ音の写し（数字を少し変えた物）を 1 件と数える', () => {
-    // 距離の目盛りが分かるモデル（項目どうしの重なりの無い白色化と likeness。写しをまとめるのは、この時だけ）
-    const scaled: MatchModel = { ...model, whiten: model.keys.map((_, i) => model.keys.map((_, j) => (i === j ? 1 : 0))), likeness: { typical: 1.8, cuts: [1, 1.2, 1.4] } };
-    const at = (z: number): Features => Object.fromEntries(scaled.keys.map((k, i) => { const x = scaled.center[i]! + z * scaled.spread[i]!; return [k, roundFeature(k, FEATURE_BY_KEY[k].log ? Math.exp(x) : x)]; })) as Features;
     const nudge = (f: Features, n: number): Features => ({ ...f, pitch: roundFeature('pitch', f.pitch! + n * 0.1) });
     const one = (f: Features, link: string, group: string, kinds: number, day: string): [string, string, string] => [day, encodeSubmission(sub({ features: f, link, group, kinds })), 'OK'];
     // 別々の 3 件が先に来て、1 つの音の写しが 4 件（2 日に分けて、1 日の上限の中）
@@ -277,6 +277,26 @@ describe('取り込み', () => {
     expect(r.voices).toHaveLength(1);
     // 写しは 1 件なので、別々の 3 件の方が多い（前は写しの 4 件が勝っていた）。使った件数（used）は今までどおり写しも数える
     expect(r.voices[0]).toMatchObject({ used: 7, link: 'https://example.com/chara', group: '試験の作品', kinds: 0b1 });
+  });
+  it('所属は、書かなかった登録も 1 票と数える。1 件だけが書いた所属は出さない。書かなかった登録と同じ数で並んでも出さない', async () => {
+    const { groupVote } = await import('../tools/intake-lib.ts');
+    const one = (z: number, group: string | undefined, day: string): Row => ({ at: day, code: encodeSubmission(sub({ features: at(z), group })), verdict: 'OK', reason: '' });
+    const groupFor = (groups: (string | undefined)[]) => {
+      const r = intake(groups.map((g, i) => one([-0.4, 0, 0.4, 0.8, -0.8][i]!, g, `2026/11/1${i} 09:00:00`)), { model: scaled, ngWords: [], blocked: [] });
+      expect(r.voices).toHaveLength(1);
+      // どれも、そろった登録（壁 ③ で使った登録）
+      expect(r.voices[0]!.used).toBe(groups.length);
+      return r.voices[0]!.group;
+    };
+    // 前は、そろった 4 件のうち 1 件だけが書いた所属が出ていた
+    expect(groupFor([undefined, undefined, undefined, 'いたずらの所属'])).toBeUndefined();
+    expect(groupFor(['試験の作品', '試験の作品', '試験の作品', undefined])).toBe('試験の作品');
+    expect(groupFor(['試験の作品', '試験の作品', undefined, undefined])).toBeUndefined();
+    expect(groupFor(['試験の作品', '試験の作品', undefined, 'べつの作品'])).toBe('試験の作品');
+    expect(groupVote(['', 'a', 'a', 'b'])).toBe('a');
+    expect(groupVote(['a', 'b', ''])).toBeUndefined();
+    expect(groupVote(['a', 'b'])).toBe('a');
+    expect(groupVote([])).toBeUndefined();
   });
   it('シートを読む: 見出しは飛ばし、列はそのまま', () => {
     const t = parseCsv('タイムスタンプ,送る内容,判定,理由\r\n"2026/11/01 1:00:00","voice-match:{""v"":1}",OK,"よい, とても"\n');

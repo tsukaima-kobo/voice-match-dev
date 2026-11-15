@@ -26,6 +26,24 @@ describe('スプレッドシートを読む', () => {
     const sheet = await openSheet(key, 'sheet-id');
     expect(await sheet.read('削除!A:A')).toEqual([]);
   });
+  it('空白のあるタブの名前を \' で囲んだ範囲は、\' と空白がそのまま届く（URL の 1 つの区切りとして入れる）', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      urls.push(String(url));
+      return String(url).includes('oauth2') ? new Response(JSON.stringify({ access_token: 't' }), { status: 200 }) : new Response(JSON.stringify({ values: [] }), { status: 200 });
+    });
+    const sheet = await openSheet(key, 'sheet-id');
+    for (const range of ["'フォームの回答 1'!A:D", '削除!A:A', "'It''s a tab'!A:D", 'A:D']) {
+      await sheet.read(range);
+      const u = new URL(urls.at(-1)!);
+      const parts = u.pathname.split('/');
+      // 範囲は最後の 1 区切りだけ（/ や ? や # で切れない）。読み戻すと元の範囲
+      expect(parts.slice(0, -1).join('/')).toBe('/v4/spreadsheets/sheet-id/values');
+      expect(decodeURIComponent(parts.at(-1)!), range).toBe(range);
+      expect(u.search + u.hash).toBe('');
+      expect(urls.at(-1)).not.toMatch(/ /);
+    }
+  });
   it('鍵の JSON が壊れている時、誤りの文に鍵の一部を出さない（Actions の記録は公開される）', async () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
