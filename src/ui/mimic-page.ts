@@ -850,9 +850,13 @@ document.addEventListener('visibilitychange', () => {
   // お手本を聞かせている時は止めない（ほかのタブやアプリで流すため。音が来ないまま WAIT_MAX 秒で止まる）
   if (document.hidden && (mimState === 'listening' || mimState === 'asking')) mimCancel();
 });
+// ページを離れる時は止めて、音を捨てる。戻るで戻った時に「聞いています」のまま止まって見えないよう、画面も戻す
+// （タブを切り替えただけでは来ない。お手本をほかのタブで流している間は止めない）
 window.addEventListener('pagehide', () => {
-  refTake.stop();
-  mimTake.stop();
+  if (refState === 'asking' || refState === 'listening') refCancel();
+  else refTake.stop();
+  if (mimState === 'asking' || mimState === 'listening') mimCancel();
+  else mimTake.stop();
 });
 
 function failText(reason: MeasureFail, voiced: number | undefined, model: boolean): string {
@@ -863,7 +867,10 @@ function failText(reason: MeasureFail, voiced: number | undefined, model: boolea
     case 'quiet':
       return model ? t('お手本の音が小さくて測れませんでした。音量を上げてください。', 'The model was too quiet to measure. Turn the volume up.') : t('声が小さくて測れませんでした。マイクに少し近づいて話してください。', 'The voice was too quiet to measure. Move a little closer to the microphone.');
     case 'noisy':
-      return model ? t('お手本に、声のほかの音（BGM・効果音・雑音）が多くて測れませんでした。声だけの所を選んでください。', 'The model has too many other sounds (BGM, effects, noise). Choose a part with the voice alone.') : t('まわりの音が大きくて、声とうまく分けられませんでした。静かな所で、もう一度話してください。', 'The surroundings were too loud to separate the voice. Try again somewhere quiet.');
+      // ほかの音のほか、静かな所でも、息の多い声・ささやき声でこうなる。ほかの音が多いとは言い切らない
+      return model
+        ? t('お手本の声をはっきり聞き取れませんでした。BGM・効果音・雑音や、息の多い声・ささやき声だと、こうなることがあります。声がはっきりした、声だけの所を選んでください。', 'The model’s voice could not be picked out clearly. BGM, sound effects, noise, or a breathy or whispered voice can cause this. Choose a part where the voice is clear and alone.')
+        : t('声をはっきり聞き取れませんでした。まわりの音や、息の多い声・ささやき声だと、こうなることがあります。静かな所で、ささやかずに、もう一度話してください。', 'The voice could not be picked out clearly. Background sound, or a breathy or whispered voice, can cause this. Try again somewhere quiet, without whispering.');
     case 'clipped':
       return model ? t('お手本の音が大きすぎて、割れていました。音量を少し下げてください。', 'The model was so loud that it distorted. Turn the volume down a little.') : t('声が大きすぎて、音が割れていました。マイクから少し離れてください。', 'The voice was so loud that it distorted. Move a little away from the microphone.');
     case 'short':

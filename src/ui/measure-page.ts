@@ -117,7 +117,8 @@ function show(next: State, msg: Msg, bad = false) {
   btn.start.hidden = !(next === 'idle' || next === 'done');
   btn.cancel.hidden = next !== 'asking';
   btn.pause.hidden = next !== 'recording';
-  btn.resume.hidden = next !== 'paused';
+  // 測れた 30 秒が足りないまま終えた時も、「続ける」で読み足せる（「読みはじめる」は最初からになる）
+  btn.resume.hidden = !(next === 'paused' || (next === 'done' && !summary?.median));
   btn.finish.hidden = !(next === 'recording' || next === 'paused');
   mics.lock(next === 'asking' || next === 'recording' || next === 'measuring');
   texts();
@@ -138,7 +139,7 @@ function addDot(w: SessionWindow) {
   dots.append(li);
 }
 function failText(r: MeasureFail): string {
-  return r === 'short' ? t('声が少ない', 'too little voice') : r === 'silent' || r === 'quiet' ? t('音が小さい', 'too quiet') : r === 'noisy' ? t('雑音が多い', 'too noisy') : r === 'clipped' ? t('音が割れている', 'clipped') : t('測れない', 'could not measure');
+  return r === 'short' ? t('声が少ない', 'too little voice') : r === 'silent' || r === 'quiet' ? t('音が小さい', 'too quiet') : r === 'noisy' ? t('声をはっきり聞き取れない', 'voice not clear enough') : r === 'clipped' ? t('音が割れている', 'clipped') : t('測れない', 'could not measure');
 }
 function tick() {
   drawProgress();
@@ -240,6 +241,8 @@ function pause(msg: Msg = M('一時停止しています。「続ける」で再
 async function finish() {
   if (state !== 'recording' && state !== 'paused') return;
   stopMic();
+  // 窓にならなかった途中の分は捨てたので、使う分だけの長さにする
+  drawProgress();
   show('measuring', M('残りの 30 秒を数字にしています…', 'Working out the last sets…'));
   if (inFlight === 0) await showResult();
 }
@@ -248,7 +251,7 @@ async function finish() {
 async function showResult() {
   await voicesReady;
   summary = summarize(windows);
-  show('done', summary.median ? M('測り終えました。', 'Done.') : M(`測れた 30 秒が ${SESSION_SELECT.minWindows} に足りないので、代表値は作れませんでした。もう少し長く読んでください。`, `Fewer than ${SESSION_SELECT.minWindows} sets were measured, so no representative values could be made. Please read a little longer.`), !summary.median);
+  show('done', summary.median ? M('測り終えました。', 'Done.') : M(`測れた 30 秒が ${SESSION_SELECT.minWindows} に足りないので、代表値は作れませんでした。「続ける」で、もう少し読んでください。`, `Fewer than ${SESSION_SELECT.minWindows} sets were measured, so no representative values could be made. Press “Continue” to read a little more.`), !summary.median);
   drawResult();
 }
 function drawResult() {
@@ -338,7 +341,11 @@ btn.again.addEventListener('click', () => {
 });
 btn.cancel.addEventListener('click', cancelAsking);
 btn.pause.addEventListener('click', () => pause());
-btn.resume.addEventListener('click', () => void listen());
+btn.resume.addEventListener('click', () => {
+  // 終えた後に読み足す時は、前の結果を隠す（また終えたら作り直す）
+  if (state === 'done') result.hidden = true;
+  void listen();
+});
 btn.finish.addEventListener('click', () => void finish());
 // ページが隠れたら一時停止（マイクも止める）
 document.addEventListener('visibilitychange', () => {

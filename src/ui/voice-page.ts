@@ -271,7 +271,8 @@ function failText(reason: MeasureFail, voiced: number | undefined): string {
     case 'quiet':
       return t('声が小さくて測れませんでした。マイクに少し近づいて、ふだんの声で話してください。', 'The voice was too quiet to measure. Move a little closer and talk in your usual voice.');
     case 'noisy':
-      return t('まわりの音が大きくて、声とうまく分けられませんでした。静かな所で、もう一度測ってください。', 'The surroundings were too loud to separate the voice. Try again somewhere quiet.');
+      // まわりの音のほか、静かな所でも、息の多い声・ささやき声でこうなる。まわりがうるさいとは言い切らない
+      return t('声をはっきり聞き取れませんでした。まわりの音や、息の多い声・ささやき声だと、こうなることがあります。静かな所で、ふだんの声で、もう一度測ってください。', 'The voice could not be picked out clearly. Background sound, or a breathy or whispered voice, can cause this. Try again somewhere quiet, in your usual voice.');
     case 'clipped':
       return t('声が大きすぎて、音が割れていました。マイクから少し離れてください。', 'The voice was so loud that it distorted. Move a little away from the microphone.');
     case 'short':
@@ -300,15 +301,20 @@ function drawKindChips() {
   if (kindFilter && !counts.some(([k]) => 1 << k.bit === kindFilter)) kindFilter = 0;
   const box = $('kind-filter');
   box.hidden = !counts.length;
+  const chips = $('kind-chips');
+  // 押したボタンを作り直しても、キーボードの位置を失わないように、同じ大枠のボタンに戻す
+  const focused = chips.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.mask : undefined;
   const chip = (mask: number, label: string, n: number) => {
     const b = el('button', 'kind-chip');
     b.type = 'button';
+    b.dataset.mask = String(mask);
     b.setAttribute('aria-pressed', String(mask === kindFilter));
     b.append(label, el('span', 'n', String(n)));
     b.addEventListener('click', () => setKind(mask));
     return b;
   };
-  $('kind-chips').replaceChildren(chip(0, t('すべて', 'All'), PROFILES.length), ...counts.map(([k, n]) => chip(1 << k.bit, kindLabel(k), n)));
+  chips.replaceChildren(chip(0, t('すべて', 'All'), PROFILES.length), ...counts.map(([k, n]) => chip(1 << k.bit, kindLabel(k), n)));
+  if (focused !== undefined) (chips.querySelector<HTMLElement>(`[data-mask="${focused}"]`) ?? chips.querySelector<HTMLElement>('button'))?.focus();
 }
 function setKind(mask: number) {
   if (mask === kindFilter) return;

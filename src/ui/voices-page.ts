@@ -44,9 +44,13 @@ function drawKindChips(): void {
   const counts = KINDS.map((k) => [k, CATALOG.filter((e) => e.kinds?.includes(k.id)).length] as const).filter(([, n]) => n > 0);
   if (kindMask && !counts.some(([k]) => 1 << k.bit === kindMask)) kindMask = 0;
   $('kind-filter').hidden = !counts.length;
+  const chips = $('kind-chips');
+  // 押したボタンを作り直しても、キーボードの位置を失わないように、同じ大枠のボタンに戻す
+  const focused = chips.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.mask : undefined;
   const chip = (mask: number, label: string, n: number) => {
     const b = el('button', 'kind-chip');
     b.type = 'button';
+    b.dataset.mask = String(mask);
     b.setAttribute('aria-pressed', String(mask === kindMask));
     b.append(label, el('span', 'n', String(n)));
     b.addEventListener('click', () => {
@@ -59,7 +63,8 @@ function drawKindChips(): void {
     });
     return b;
   };
-  $('kind-chips').replaceChildren(chip(0, t('すべて', 'All'), CATALOG.length), ...counts.map(([k, n]) => chip(1 << k.bit, kindLabel(k), n)));
+  chips.replaceChildren(chip(0, t('すべて', 'All'), CATALOG.length), ...counts.map(([k, n]) => chip(1 << k.bit, kindLabel(k), n)));
+  if (focused !== undefined) (chips.querySelector<HTMLElement>(`[data-mask="${focused}"]`) ?? chips.querySelector<HTMLElement>('button'))?.focus();
 }
 
 function draw(): void {
