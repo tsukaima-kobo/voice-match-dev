@@ -8,6 +8,7 @@
 // 大枠（VTuber・歌手など）は、シートの「大枠」の列（無ければ make の --kind）から。
 // 英語の名前は、シートの「英語名」「所属の英語名」の列（任意。公式の英語の書き方）から。
 // 同じ人の行がいくつかある時は、項目ごとに、空でない最初の値を使う（名前・所属・公式ページ・大枠・英語名のどれも）。
+// 所属: 所属区分が集めた時の分け方（地域・言語・名簿・未確認）や、録った時の所属の時は出さない。所属区分ID ごとに書き方を 1 つにそろえる（affiliation）。
 // 所属の英語名は、画面に出す所属（affiliation でそろえた物）ごとに 1 つにそろえる（groupEnByGroup）。
 // 書き出すのは名前（あれば英語名も）・所属・大枠・公式ページ・数字だけ（Release は公開なので、人物ID や窓の数は手元の記録だけに出す）。
 import { FEATURE_BY_KEY, FEATURE_KEYS, formatFeature, type Features } from '../src/voice/features.ts';
@@ -22,7 +23,7 @@ import { voiceKeys } from '../src/data/sources.ts';
 
 export interface Snapshot {
   summary?: { measureVersions?: string[] };
-  peoples: { personId: string; name: string; nameEn?: string | null; groupName?: string | null; currentAffiliation?: string | null; groupEn?: string | null; officialProfile?: string | null; kinds?: string | null }[];
+  peoples: { personId: string; name: string; nameEn?: string | null; groupId?: string | null; groupName?: string | null; currentAffiliation?: string | null; groupEn?: string | null; officialProfile?: string | null; kinds?: string | null }[];
   /** measureVersion: その行の測り方の版（シートから読んだ時。無い時は summary.measureVersions） */
   measurements: ({ personId: string; videoId: string; measureVersion?: string } & Record<string, unknown>)[];
 }
@@ -85,6 +86,7 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
   }
   const windows = sheetWindows(snap);
   const notes: string[] = [];
+  const labels = groupLabelsById(people.values());
   if (o.only) for (const id of o.only) if (!people.has(id)) notes.push(`${id}: データに無い人物ID です`);
   const picked: { id: string; name: string; nameEn: string; group: string; groupEn: string; exact: boolean; kinds: string[]; link: string; features: Features }[] = [];
   /** 使った窓の測り方の版（窓に版が無い時は、データ全体の版） */
@@ -109,16 +111,23 @@ export function buildOperatorVoices(snap: Snapshot, o: { measureVersion: string;
       notes.push(`${note} → 公式ページの URL が無いか、使えない形なので入れません`);
       continue;
     }
-    const group = affiliation(p.currentAffiliation, p.groupName);
+    const group = affiliation(p.currentAffiliation, p.groupName, p.groupId ? labels.get(p.groupId) : undefined);
     const parsed = parseKinds(p.kinds ?? '');
     const kinds = idsOf(parsed.mask || (o.defaultKinds ?? 0));
     const extra = [group && group !== (p.currentAffiliation ?? '').trim() ? `所属「${group}」` : '', parsed.unknown.length ? `大枠の読めない言葉「${parsed.unknown.join('・')}」` : '', kinds.length ? '' : '大枠なし'].filter(Boolean);
     notes.push(extra.length ? `${note}、${extra.join('、')}` : note);
     // exact: 所属を「現在所属」のまま出す人（「ホロライブ4期生」→「ホロライブ」のように、そろえた人ではない）
-    const cur = stripNote(p.currentAffiliation ?? '');
+    const cur = currentOf(p.currentAffiliation);
     for (const w of kept) used.add(w.version ?? oldestVersion(versions, o.measureVersion));
     picked.push({ id, name: p.name.trim(), nameEn: (p.nameEn ?? '').trim(), group, groupEn: group ? (p.groupEn ?? '').trim() : '', exact: !cur || cur === group, kinds, link, features: medianFeatures(kept) });
   }
+  // 所属区分のうち、所属として出さなかった物（集めた時の分け方・録った時の所属など）。シートを直す時の手がかり（手元の記録だけ）
+  const hidden = new Map<string, number>();
+  for (const v of picked) {
+    const k = (people.get(v.id)!.groupName ?? '').trim();
+    if (k && !v.group && !groupLabel(k)) hidden.set(k, (hidden.get(k) ?? 0) + 1);
+  }
+  if (hidden.size) notes.push(`所属として出さない所属区分（所属が空になる人）: ${[...hidden].sort((a, b) => b[1] - a[1]).map(([k, n]) => `「${k}」${n} 人`).join('・')}`);
   // 所属の英語名は、所属ごとに 1 つにそろえる（書いていない人にも、同じ所属なら同じ物が付く。サイトでも所属ごとに 1 つ）
   const groupEn = groupEnByGroup(picked.filter((v) => v.groupEn));
   for (const [group, { chosen, others }] of groupEn) if (others.length) notes.push(`所属「${group}」の英語名は「${chosen}」にそろえます（ほかに ${others.map((x) => `「${x}」`).join('')}）`);
@@ -153,7 +162,7 @@ export function sameNameGroups<T extends { name: string; nameEn?: string }>(peop
 }
 
 /** 人物一覧の、同じ人の行をまとめる時に見る項目 */
-const PERSON_FIELDS = ['name', 'nameEn', 'groupName', 'currentAffiliation', 'groupEn', 'officialProfile', 'kinds'] as const;
+const PERSON_FIELDS = ['name', 'nameEn', 'groupId', 'groupName', 'currentAffiliation', 'groupEn', 'officialProfile', 'kinds'] as const;
 
 /**
  * 所属の英語名を、所属ごとに 1 つ選ぶ。所属をそろえていない人（exact）の物があればその中から、無ければ全員の中から、
@@ -178,16 +187,71 @@ export function groupEnByGroup(candidates: readonly { group: string; groupEn: st
 /** かっこの中（調べた時のメモ）を除く */
 const stripNote = (s: string) => s.replace(/[（(][^（）()]*[）)]/g, '').trim();
 
+/** かっこの中（調べた時のメモ）だけ */
+const notesOf = (s: string) => (s.match(/[（(][^（）()]*[）)]/g) ?? []).join(' ');
+
+/**
+ * 所属ではない物: 集めた時の分け方（「国際VTuber」「台湾VTuber」などの地域、「インドネシア語・本人公式配信」などの言語と出典、
+ * 「VOTUAS公式名簿」などの名簿、「Affiliation unverified」「所属未確認」など）と、調べた時のメモ（「unverified; …」）。
+ */
+const NOT_AFFILIATION = /unverified|未確認|vtubers?$|本人公式配信|公式名簿|語圏|affiliation claim/i;
+
+/** 所属区分のメモが、今の所属と言えないと書いている（録った時の所属・確かめていない・前の所属） */
+const NOT_CURRENT_NOTE = /recording-time|unverified|未確認|旧所属|former|当時/i;
+
+/** 所属区分を、画面に出せる所属の名前にする（所属ではない物・今の所属と言えない物は空） */
+export function groupLabel(kind: string | null | undefined): string {
+  const s = kind ?? '';
+  if (NOT_CURRENT_NOTE.test(notesOf(s))) return '';
+  const k = stripNote(s);
+  return NOT_AFFILIATION.test(k) ? '' : k;
+}
+
+/** 個人で活動している人（「個人」「個人勢」「Independent」で始まる） */
+const INDEPENDENT = /^(個人|independent\b)/i;
+
+/** 「現在所属」からメモを除いた物（所属ではない物は空） */
+const currentOf = (current: string | null | undefined): string => {
+  const cur = stripNote(current ?? '');
+  if (INDEPENDENT.test(cur)) return '個人勢'; // 「個人勢Vtuber」のように VTuber で終わっても、個人で活動している人
+  return NOT_AFFILIATION.test(cur) ? '' : cur;
+};
+
+/**
+ * 所属区分ID ごとに、画面に出す名前を 1 つにそろえる（「NIJISANJI」と「にじさんじ」、「Independent」と「個人勢」のように、
+ * 同じ区分でも書き方が違う時）。その区分の人の groupLabel のうち、いちばん多い物（同じ数なら人物ID の順で先の人の物）。
+ */
+export function groupLabelsById(people: Iterable<{ personId: string; groupId?: string | null; groupName?: string | null }>): Map<string, string> {
+  const by = new Map<string, Map<string, number>>();
+  for (const p of [...people].sort((a, b) => (a.personId < b.personId ? -1 : a.personId > b.personId ? 1 : 0))) {
+    const id = (p.groupId ?? '').trim();
+    const label = groupLabel(p.groupName);
+    if (!id || !label) continue;
+    const n = by.get(id) ?? by.set(id, new Map()).get(id)!;
+    n.set(label, (n.get(label) ?? 0) + 1);
+  }
+  const out = new Map<string, string>();
+  for (const [id, n] of by) {
+    let best = '';
+    let bestN = 0;
+    for (const [label, k] of n) if (k > bestN) [best, bestN] = [label, k];
+    out.set(id, best);
+  }
+  return out;
+}
+
 /**
  * 画面に出す所属の名前。シートの「現在所属」には、調べた時のメモ（「ホロライブ（公式個人プロフィール掲載）」など）が入っているので、
- * かっこの中を除く。「所属区分」で始まる物は所属区分の名前に（「ホロライブ4期生」→「ホロライブ」）、個人で活動している人は「個人」にそろえる。
+ * かっこの中を除く。「所属区分」で始まる物は所属区分の名前に（「ホロライブ4期生」→「ホロライブ」）、個人で活動している人は「個人勢」にそろえる。
+ * 所属区分が所属ではない物（集めた時の分け方）や、今の所属と言えない物（録った時の所属など）の時は、現在所属が無ければ空（所属を出さない）。
+ * label: 所属区分ID でそろえた名前（groupLabelsById）。所属区分が出せる時だけ使う。
  */
-export function affiliation(current: string | null | undefined, kind: string | null | undefined): string {
-  const cur = stripNote(current ?? '');
-  const k = stripNote(kind ?? '');
-  if (!cur) return k;
+export function affiliation(current: string | null | undefined, kind: string | null | undefined, label?: string): string {
+  const cur = currentOf(current);
+  const own = groupLabel(kind);
+  const k = own ? label || own : '';
+  if (!cur) return INDEPENDENT.test(k) ? '個人勢' : k;
   if (k && cur.startsWith(k)) return k;
-  if (/^個人/.test(cur)) return '個人';
   return cur;
 }
 
@@ -215,7 +279,7 @@ export function sheetLabel(key: (typeof FEATURE_KEYS)[number]): string {
 
 /**
  * スプレッドシート（xlsx をほどいた表）を、収集の書き出しと同じ形にする。
- * 使うタブ: 人物一覧（人物ID・氏名・所属区分・現在所属・公式プロフィール、あれば大枠・英語名・所属の英語名）と 声の測定値（人物ID・出典動画ID・45 項目）。
+ * 使うタブ: 人物一覧（人物ID・氏名・所属区分・現在所属・公式プロフィール、あれば所属区分ID・大枠・英語名・所属の英語名）と 声の測定値（人物ID・出典動画ID・45 項目）。
  * 追加10分の測定値（窓が少ない人に足した 10 分。人物ID・追加動画ID・45 項目・測定バージョン）があれば、それも同じ人の窓に足す。
  * 見出しは「人物ID」がある行。45 項目の見出しが今のサイトと全部同じ時だけ使う（違えば止める）。
  * 行ごとの測り方の版は「測定バージョン」の列から読む。列が無い・空の行は、列を足す前に測った 3.1.0（SHEET_DEFAULT_VERSION）とする。
@@ -240,6 +304,7 @@ export function snapshotFromSheet(tables: ReadonlyMap<string, Cell[][]>, measure
   const peoples = table('人物一覧', ['人物ID', '氏名', '所属区分', '現在所属', '公式プロフィール']).map((get) => ({
     personId: str(get('人物ID'))!,
     name: str(get('氏名')) ?? '',
+    groupId: str(get('所属区分ID')),
     groupName: str(get('所属区分')),
     currentAffiliation: str(get('現在所属')),
     officialProfile: str(get('公式プロフィール')),

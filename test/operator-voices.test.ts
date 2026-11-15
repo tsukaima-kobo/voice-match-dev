@@ -227,10 +227,45 @@ describe('画面に出す所属の名前', () => {
     expect(affiliation('ホロライブ4期生（2026-11-03公式個人プロフィールおよび本人動画表記）', 'ホロライブ')).toBe('ホロライブ');
     expect(affiliation('.LIVE（アップランド公式所属一覧掲載）', '.LIVE（ドットライブ）')).toBe('.LIVE');
     expect(affiliation('すぺしゃりて（本人の公式個人profile掲載。元所属VEEと区別）', '元VEE')).toBe('すぺしゃりて');
-    expect(affiliation('個人勢Vtuber（2026-10-04本人公式の自己申告、10月よりとの記載）', '元VEE')).toBe('個人');
+    expect(affiliation('個人勢Vtuber（2026-10-04本人公式の自己申告、10月よりとの記載）', '元VEE')).toBe('個人勢');
     expect(affiliation('REJECT', '元VEE')).toBe('REJECT');
     expect(affiliation(null, 'にじさんじ')).toBe('にじさんじ');
     expect(affiliation('', '')).toBe('');
+  });
+
+  it('集めた時の分け方・調べた時のメモ・録った時の所属は、所属として出さない', async () => {
+    const { affiliation } = await import('../tools/operator-voices-lib.ts');
+    for (const k of ['国際VTuber', '台湾VTuber', 'Other VTubers', 'Affiliation unverified', '所属未確認', 'VOTUAS公式名簿', 'インドネシア語・本人公式配信', '南米南部・スペイン語圏'])
+      expect(affiliation(null, k)).toBe('');
+    for (const k of ['VReverie（旧所属）', 'Project:LIVIUM (recording-time affiliation)', 'DASORiYAL (official listing; recording-time affiliation unverified)'])
+      expect(affiliation(null, k)).toBe('');
+    expect(affiliation('unverified; storage group is not a current-affiliation claim', 'Other VTubers')).toBe('');
+    expect(affiliation('unverified_current_status; recording-time official agency identity preserved', 'Project:LIVIUM (recording-time affiliation)')).toBe('');
+    // 現在所属があれば、それを出す
+    expect(affiliation('すぺしゃりて', '国際VTuber')).toBe('すぺしゃりて');
+    // 所属の名前の中の言葉（&BLOOM VTuber Project・元VEE）は、そのまま
+    expect(affiliation(null, '&BLOOM VTuber Project')).toBe('&BLOOM VTuber Project');
+    expect(affiliation(null, '元VEE')).toBe('元VEE');
+    expect(affiliation(null, 'Independent')).toBe('個人勢');
+  });
+
+  it('所属区分ID ごとに、いちばん多い書き方にそろえる', () => {
+    const twelve = Array(12).fill(200);
+    const ppl = [
+      person('a', { groupId: 'nijisanji', groupName: 'にじさんじ' }),
+      person('b', { groupId: 'nijisanji', groupName: 'にじさんじ' }),
+      person('c', { groupId: 'nijisanji', groupName: 'NIJISANJI' }),
+      person('d', { groupId: 'independent', groupName: 'Independent / Ephemira' }),
+      person('e', { groupId: 'independent', groupName: '個人勢' }),
+      person('f', { groupId: 'intl', groupName: '国際VTuber' }),
+      person('g', { groupId: 'independent', groupName: 'Independent (recording-time sources)' }),
+    ];
+    const r = buildOperatorVoices(
+      { summary: { measureVersions: [MEASURE_VERSION] }, peoples: ppl, measurements: ppl.flatMap((p) => windows(p.personId, 'v1', twelve)) },
+      { measureVersion: MEASURE_VERSION, only: null },
+    );
+    expect(r.file.voices.map((v) => v.group ?? '')).toEqual(['にじさんじ', 'にじさんじ', 'にじさんじ', '個人勢', '個人勢', '', '']);
+    expect(r.notes.join('\n')).toMatch(/所属として出さない所属区分.*「国際VTuber」1 人/);
   });
 });
 
