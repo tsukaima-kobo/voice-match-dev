@@ -14,9 +14,21 @@ const root = join(import.meta.dirname, '..');
 const list = JSON.parse(readFileSync(join(root, 'data/catalog.json'), 'utf8')) as Catalog;
 const known = new Set(list.voices.map((v) => v.id));
 const dir = join(root, 'data/voices');
-const profiles: ProfileEntry[] = [];
+// 同じ ID のファイル（2 回書き出した物・「<ID> (1).json」など）は、1 人の窓にまとめる（同じ動画の同じ時刻の窓は 1 つ）
+const byId = new Map<string, VoiceFile>();
 for (const name of readdirSync(dir).filter((f) => f.endsWith('.json')).sort()) {
-  const file = JSON.parse(readFileSync(join(dir, name), 'utf8')) as VoiceFile;
+  const f = JSON.parse(readFileSync(join(dir, name), 'utf8')) as VoiceFile;
+  const had = byId.get(f.id);
+  if (!had) {
+    byId.set(f.id, { ...f, windows: [...f.windows] });
+    continue;
+  }
+  const seen = new Set(had.windows.map((w) => `${w.video}@${w.t0}`));
+  had.windows.push(...f.windows.filter((w) => !seen.has(`${w.video}@${w.t0}`)));
+  console.log(`${f.id}: ${name} も同じ ID なので、窓をまとめます`);
+}
+const profiles: ProfileEntry[] = [];
+for (const file of byId.values()) {
   if (!known.has(file.id)) {
     console.log(`${file.id}: data/catalog.json に無いので入れません`);
     continue;

@@ -1,6 +1,6 @@
 // 収集の拡張機能の記録（collector/src/store.ts）の試験。chrome.storage.local の代わりを置き、保存できない時の知らせ方を確かめる
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { addToFile, keyOf, loadFile, recordWindow, TROUBLE_TEXT, troubleOf } from '../collector/src/store.ts';
+import { addToFile, clearFile, keyOf, loadFile, recordWindow, TROUBLE_TEXT, troubleOf } from '../collector/src/store.ts';
 import type { measureVoice } from '../src/voice/measure.ts';
 import type { VoiceWindow } from '../src/data/types.ts';
 
@@ -89,8 +89,31 @@ describe('窓を記録する', () => {
     expect(r.kind === 'failed' && r.text).toContain('IO error');
   });
   it('いくつかのタブで同時に足しても、取りこぼさない', async () => {
-    const w = (t0: number) => ({ video: 'a', t0, t1: t0 + 30, measuredAt: '2026-11-08', version: '3.2.0', features: {}, voicedSeconds: 12, gapTonal: 0, snrDb: 30 }) as unknown as VoiceWindow;
     await Promise.all([0, 30, 60, 90].map((t0) => addToFile('v-0002', w(t0))));
     expect((mem.get(keyOf('v-0002')) as { windows: unknown[] }).windows.length).toBe(4);
+  });
+});
+
+const w = (t0: number) => ({ video: 'a', t0, t1: t0 + 30, measuredAt: '2026-11-08', version: '3.2.0', features: {}, voicedSeconds: 12, gapTonal: 0, snrDb: 30 }) as unknown as VoiceWindow;
+
+describe('記録を消す', () => {
+  it('書き出した後に足された窓（別のタブ・測っていた窓）は、書き出さないまま消さない', async () => {
+    await addToFile('v-0003', w(0));
+    await addToFile('v-0003', w(30));
+    const exported = await loadFile('v-0003');
+    // 書き出しと「記録を消す」の間に、同じ人を測っている別のタブが次の窓を記録した
+    await addToFile('v-0003', w(60));
+    const left = await clearFile('v-0003', exported.windows);
+    expect(left.windows.map((x) => x.t0)).toEqual([60]);
+    expect((await loadFile('v-0003')).windows.map((x) => x.t0)).toEqual([60]);
+    // 残りも書き出して消すと、記録ごと無くなる
+    expect((await clearFile('v-0003', left.windows)).windows).toEqual([]);
+    expect(mem.has(keyOf('v-0003'))).toBe(false);
+  });
+  it('書き出していない時は、全部消す', async () => {
+    await addToFile('v-0004', w(0));
+    await addToFile('v-0004', w(30));
+    expect((await clearFile('v-0004')).windows).toEqual([]);
+    expect(mem.has(keyOf('v-0004'))).toBe(false);
   });
 });

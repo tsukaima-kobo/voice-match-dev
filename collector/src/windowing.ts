@@ -1,5 +1,6 @@
 // 収集の拡張機能の、DOM を使わない部分（test/collector.test.ts で試す）。
 // 再生中の音を 30 秒ずつの窓にまとめ、途切れ（一時停止・シーク・広告・速度の変更・動画の切り替え・読み込みで止まった所）があれば、その窓は捨てる。
+// 測り始めた動画から別の動画に変わったら、その回は窓を出さない（moved）。
 // 窓の音は measure.ts で数字にしたら捨てる。残すのは数字・動画 ID・時刻だけ。
 import type { Measured } from '../../src/voice/measure.ts';
 import type { VoiceFile, VoiceWindow } from '../../src/data/types.ts';
@@ -44,13 +45,24 @@ export class Windower {
   private t0 = 0;
   /** 前のかたまりの動画の時刻 */
   private last = 0;
+  /** この回の動画（測り始めた時の再生ページの動画。無ければ、最初に届いた動画） */
   private video: string | null = null;
   readonly sampleRate: number;
   /** 最後に窓を捨てた理由（パネルに出す） */
   lastBreak: BreakReason | null = null;
+  /** この回の動画から、別の動画に変わった（自動再生など）。start() まで窓を出さない（別の人の声を、同じ ID で測らないため） */
+  moved = false;
 
   constructor(sampleRate: number) {
     this.sampleRate = sampleRate;
+  }
+
+  /** 測り始める: 途中までの窓を捨て、video を、この回の動画にする */
+  start(video: string | null): void {
+    this.reset(null);
+    this.video = video;
+    this.moved = false;
+    this.lastBreak = null;
   }
 
   /** たまっている秒数 */
@@ -71,12 +83,18 @@ export class Windower {
 
   push(samples: Float32Array, s: PlayState): Finished | null {
     const dur = samples.length / this.sampleRate;
+    if (this.moved) return null;
+    if (s.video && this.video !== null && s.video !== this.video) {
+      // 別の動画に変わった: 途中までの窓を捨て、この回はここまで
+      this.reset('other-video');
+      this.moved = true;
+      return null;
+    }
     const stop: BreakReason | null = !s.video ? 'no-video' : s.ad ? 'ad' : s.paused || s.seeking ? 'paused' : s.stalled ? 'stall' : s.rate !== 1 ? 'speed' : null;
     if (stop || !s.video) {
       this.reset(stop);
       return null;
     }
-    if (this.video !== null && s.video !== this.video) this.reset('other-video');
     this.video = s.video;
     if (this.got === 0) this.t0 = s.time - dur;
     else {

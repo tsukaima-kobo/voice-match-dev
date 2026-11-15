@@ -48,6 +48,29 @@ describe('窓にまとめる', () => {
   });
 });
 
+describe('動画が変わった時', () => {
+  it('測り始めた動画から別の動画に変わったら（自動再生など）、その回は窓を出さない。測り直すと、今の動画で出す', () => {
+    const w = new Windower(RATE);
+    w.start('abc123def45');
+    expect(feed(w, 100, 40).length).toBe(1);
+    // 動画が終わり、次の動画（別の人かもしれない）が自動再生された。運営は何も押していない
+    expect(feed(w, 0, 65, { video: 'zzzzzzzzzzz' }).length).toBe(0);
+    expect(w.moved).toBe(true);
+    w.start('zzzzzzzzzzz');
+    expect(w.moved).toBe(false);
+    expect(feed(w, 65, 31, { video: 'zzzzzzzzzzz' }).map((d) => d.video)).toEqual(['zzzzzzzzzzz']);
+  });
+  it('再生ページを離れて戻っても、同じ動画なら続ける', () => {
+    const w = new Windower(RATE);
+    w.start('abc123def45');
+    feed(w, 100, 10);
+    // ホームの小さなプレーヤーで流れている間は、測らない（窓は捨てる）
+    w.push(chunk(), playing(110.5, { video: null }));
+    expect(w.moved).toBe(false);
+    expect(feed(w, 110.5, 31).length).toBe(1);
+  });
+});
+
 describe('読み込みで止まった所', () => {
   it('音だけ進んで動画の時計が止まったら（無音が流れる）、再生位置が飛んだとは言わずに捨て、止まった所を窓に入れない', () => {
     const w = new Windower(RATE);

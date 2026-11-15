@@ -60,8 +60,23 @@ export async function addToFile(id: string, w: VoiceWindow): Promise<{ f: VoiceF
   });
 }
 
-export async function clearFile(id: string): Promise<void> {
-  await locked(id, () => chrome.storage.local.remove(keyOf(id)));
+/**
+ * 記録を消し、残った記録を返す。only を渡した時は、その窓（書き出した窓）だけを消す:
+ * 書き出した後に、ほかのタブや測っていた窓が足した物を、書き出さないまま消さないため。only が無い時は全部消す
+ */
+export async function clearFile(id: string, only?: readonly VoiceWindow[]): Promise<VoiceFile> {
+  return locked(id, async () => {
+    if (!only) {
+      await chrome.storage.local.remove(keyOf(id));
+      return { id, windows: [] };
+    }
+    const f = await loadFile(id);
+    const gone = new Set(only.map((w) => JSON.stringify(w)));
+    f.windows = f.windows.filter((w) => !gone.has(JSON.stringify(w)));
+    if (f.windows.length) await chrome.storage.local.set({ [keyOf(id)]: f });
+    else await chrome.storage.local.remove(keyOf(id));
+    return f;
+  });
 }
 
 export type Recorded =

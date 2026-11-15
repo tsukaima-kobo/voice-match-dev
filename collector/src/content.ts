@@ -3,10 +3,11 @@
 // 音はメモリーの中だけに置き、数字にしたら捨てる。どこにも送らない。残すのは数字・動画 ID・時刻だけ（chrome.storage.local）。
 // 「書き出し」で data/voices/<id>.json の形のファイルを保存し、運営がリポジトリへ入れる。
 // 再生は人が行う（この拡張は動画を開かない・再生しない・飛ばさない）。広告中・一時停止・シーク・読み込みで止まった所・速度 1 以外の間は測らない。
+// 測り始めた動画から別の動画に変わったら（自動再生など）、測るのをやめる（別の人の声を、同じ ID で記録しないため）。
 // 保存できない時（拡張機能が読み直された・保存する場所がいっぱい）は、板に出して測るのをやめる。
 // YouTube のページは Trusted Types を求めるので、innerHTML を使わず、要素を 1 つずつ作る。
 import catalog from '../../data/catalog.json';
-import type { Catalog, VoiceFile } from '../../src/data/types.ts';
+import type { Catalog, VoiceFile, VoiceWindow } from '../../src/data/types.ts';
 import { openCapture, type Capture } from './capture.ts';
 import { alive, clearFile, loadFile, recordWindow, TROUBLE_TEXT, troubleOf, troubleText, type Trouble } from './store.ts';
 import { chunkTime, videoIdOf, Windower, WINDOW_SECONDS, type BreakReason } from './windowing.ts';
@@ -47,6 +48,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEl
 
 const host = el('div', { id: 'voice-match-collector' });
 const shadow = host.attachShadow({ mode: 'closed' });
+// 板の中で打った文字が、YouTube のショートカット（数字で飛ぶ・k で止まる・i で小さい画面など）にならないように、外へ出さない
+for (const type of ['keydown', 'keypress', 'keyup']) host.addEventListener(type, (e) => e.stopPropagation());
 const css = new CSSStyleSheet();
 css.replaceSync(`
   :host { all: initial; }
@@ -107,6 +110,8 @@ let busy = false;
 let starting = false;
 /** 拡張機能が読み直された: このページでは、もう保存できない */
 let dead = false;
+/** このページで ID ごとに最後に書き出した窓（「記録を消す」は、書き出した窓だけを消す） */
+const exported = new Map<string, VoiceWindow[]>();
 
 const validId = (s: string) => /^[a-z0-9][a-z0-9-]{0,40}$/.test(s);
 const today = () => {
@@ -141,11 +146,15 @@ function stopFor(trouble: Trouble, text: string) {
     // 動画の音は消さない（受けるのだけやめる）
     graph?.cap.stop();
   }
-  if (trouble !== 'other' && running) {
-    running = false;
-    graph?.win.reset(null);
-    barFill.style.width = '0';
-  }
+  if (trouble !== 'other' && running) return halt(text);
+  status.textContent = text;
+  render();
+}
+/** 測るのをやめる（途中までの窓は捨てる） */
+function halt(text: string) {
+  running = false;
+  graph?.win.reset(null);
+  barFill.style.width = '0';
   status.textContent = text;
   render();
 }
@@ -179,6 +188,8 @@ function onChunk(gen: number, samples: Float32Array, end: number) {
   // 届くのが遅れたかたまりも、音の通りの時刻に（窓の時刻と、再生位置が飛んだかどうかを、かたまりごとに正しく）
   s.time = chunkTime(s.time, s.rate, graph.cap.ctx.currentTime, end);
   const done = graph.win.push(samples, s);
+  // 測り始めた動画から変わった（自動再生など）: 別の人の声を、この ID で記録しないよう止める
+  if (graph.win.moved) return halt('動画が変わったので止めました（自動再生などで、別の人の声を記録しないため）。同じ人の動画なら、もう一度「測る」を押してください。');
   const sec = graph.win.seconds();
   barFill.style.width = `${Math.min(100, (sec / WINDOW_SECONDS) * 100)}%`;
   warn.textContent = graph.win.lastBreak ? BREAK_TEXT[graph.win.lastBreak] : '';
@@ -255,15 +266,10 @@ idInput.addEventListener('input', async () => {
   render();
 });
 startBtn.addEventListener('click', async () => {
-  if (running) {
-    running = false;
-    graph?.win.reset(null);
-    status.textContent = '止まっています';
-    barFill.style.width = '0';
-    render();
-    return;
-  }
+  if (running) return halt('止まっています');
   if (starting || dead) return;
+  // この回の動画（ほかの動画に変わったら止める）
+  const at = videoIdOf(location.href);
   // 拡張機能が読み直された後の古いページ: 動画の音を取り込まない（取り込むと、ページを読み直すまで外せない）
   if (!alive()) return stopFor('gone', TROUBLE_TEXT.gone);
   const video = mainVideo();
@@ -285,7 +291,7 @@ startBtn.addEventListener('click', async () => {
     const id = currentId;
     const f = await loadFile(id);
     if (id === currentId) file = f;
-    g.win.reset(null);
+    g.win.start(at);
     running = true;
     status.textContent = `測っています（${WINDOW_SECONDS} 秒ごと）。動画を再生してください。`;
   } catch (e) {
@@ -308,25 +314,30 @@ exportBtn.addEventListener('click', async () => {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    exported.set(f.id, f.windows);
   } catch (e) {
     fail(e, '書き出せませんでした');
   }
 });
 clearBtn.addEventListener('click', async () => {
+  // 書き出した後なら、書き出した窓だけを消す（書き出した後に記録された窓は残す）
+  const id = currentId;
+  const only = exported.get(id);
   // 2 回押す: 1 回目は確かめ、2 回目で消す
   if (clearBtn.dataset.sure !== '1') {
     clearBtn.dataset.sure = '1';
-    clearBtn.textContent = 'もう一度押すと消えます';
+    clearBtn.textContent = only ? `もう一度押すと、書き出した ${only.length} 個を消します` : 'もう一度押すと全部消えます';
     setTimeout(() => {
       clearBtn.dataset.sure = '';
       clearBtn.textContent = '記録を消す';
     }, 4000);
     return;
   }
-  const id = currentId;
   try {
-    await clearFile(id);
-    if (id === currentId) file = { id, windows: [] };
+    const f = await clearFile(id, only);
+    exported.delete(id);
+    if (id === currentId) file = f;
+    status.textContent = f.windows.length ? `書き出した窓を消しました。書き出した後に記録された窓 ${f.windows.length} 個は残しています（書き出してから消してください）。` : '記録を消しました';
   } catch (e) {
     fail(e, '記録を消せませんでした');
   }
