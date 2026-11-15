@@ -249,6 +249,8 @@ interface Target {
   contour?: Contour;
   /** 利用者が聞かせたお手本の声（秒）。このサイトで測ったお手本は無し */
   voicedSeconds?: number;
+  /** 声だけを切り出したファイルに、無音を足して測った（雑音との差が分からないので、登録には使わない） */
+  padded?: boolean;
 }
 let target: Target | null = null;
 let refKind: 'mic' | 'tab' = 'mic';
@@ -282,7 +284,9 @@ function showRef(next: RefState, msg: Msg, bad = false, redraw = false): void {
   reg.box.hidden = !(next === 'ready' && target?.reg);
   const short = next === 'ready' && target?.voicedSeconds !== undefined && !target.reg;
   regShort.hidden = !short;
-  if (short) regShort.textContent = t(`この声をサイトに登録するには、声が ${REG_MIN_VOICED} 秒以上いります（今は ${target!.voicedSeconds!.toFixed(1)} 秒）。セリフをいくつか続けて聞かせると、登録もできます。`, `To add this voice to the site, ${REG_MIN_VOICED} s of voice is needed (now ${target!.voicedSeconds!.toFixed(1)} s). Play several lines in a row to be able to add it.`);
+  // 無音を足して測ったファイルは、声が足りていても登録できない（「声が足りない」と出さない）
+  if (short && target!.padded && target!.voicedSeconds! >= REG_MIN_VOICED) regShort.textContent = t('声だけを切り出したファイルなので、雑音の大きさが分からず、登録には使えません。声の前後の静かな所も入ったファイルにすると、登録もできます。', 'This file has only the voice cut out, so the noise level cannot be told and it cannot be used to add the voice. Use a file that also has the quiet parts before and after the voice to be able to add it.');
+  else if (short) regShort.textContent = t(`この声をサイトに登録するには、声が ${REG_MIN_VOICED} 秒以上いります（今は ${target!.voicedSeconds!.toFixed(1)} 秒）。セリフをいくつか続けて聞かせると、登録もできます。`, `To add this voice to the site, ${REG_MIN_VOICED} s of voice is needed (now ${target!.voicedSeconds!.toFixed(1)} s). Play several lines in a row to be able to add it.`);
   ref.done.textContent = t('聞かせ終えた', 'Done');
   ref.cancel.textContent = t('やめる', 'Stop');
   ref.change.textContent = t('お手本を変える', 'Change the model');
@@ -358,6 +362,8 @@ function targetFrom(m: Extract<Measured, { ok: true }>, padded: boolean): void {
     canReg ? { quality: { voicedSeconds: i.voicedSeconds, gapTonal: i.gapTonal, snrDb: i.loudDb - i.floorDb } } : undefined,
     line,
     i.voicedSeconds,
+    undefined,
+    padded,
   );
 }
 
@@ -485,10 +491,10 @@ async function refFromFile(f: File): Promise<void> {
 
 /** お手本のまとめの文（言葉を切り替えた時に出し直す） */
 let summaryMsg: Msg = () => '';
-function setTarget(features: Features, name: string, from: Msg, regInfo?: Target['reg'], contour?: Contour, voicedSeconds?: number, nameEn?: string): void {
+function setTarget(features: Features, name: string, from: Msg, regInfo?: Target['reg'], contour?: Contour, voicedSeconds?: number, nameEn?: string, padded = false): void {
   // 真似を録っている・計算している途中なら、止めて音を捨てる（マイクを開いたまま隠れないように）
   const stopped = mimStop();
-  target = { features, name, ...(nameEn ? { nameEn } : {}), ...(regInfo ? { reg: regInfo } : {}), ...(contour ? { contour } : {}), ...(voicedSeconds !== undefined ? { voicedSeconds } : {}) };
+  target = { features, name, ...(nameEn ? { nameEn } : {}), ...(regInfo ? { reg: regInfo } : {}), ...(contour ? { contour } : {}), ...(voicedSeconds !== undefined ? { voicedSeconds } : {}), ...(padded ? { padded } : {}) };
   resetRegister(name);
   best = 0;
   tries = 0;
@@ -572,6 +578,11 @@ reg.kinds.replaceChildren(
   }),
 );
 const kindBoxes = () => [...reg.kinds.querySelectorAll<HTMLInputElement>('input[type=checkbox]')];
+// 送る内容を作った後に欄を変えたら、前の送る内容とフォームのリンクを隠す（作り直すまで、前の名前などのまま送らないように）
+for (const type of ['input', 'change'])
+  reg.box.addEventListener(type, (e) => {
+    if (e.target !== reg.code) reg.out.hidden = true;
+  });
 /** 「コピー」のボタン（コピーした後は「コピーしました」。送る内容が変わったら戻す） */
 let copied = false;
 function drawCopy(): void {

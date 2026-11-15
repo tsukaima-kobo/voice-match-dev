@@ -14,7 +14,13 @@ interface ServiceKey {
  * 削除のお願いのタブを読めないまま空として進むと、消した人がまた出てしまうため。
  */
 export async function openSheet(keyJson: string, sheetId: string): Promise<{ read(range: string): Promise<string[][]> }> {
-  const key = JSON.parse(keyJson) as ServiceKey;
+  // JSON.parse の誤りの文は、読めなかった所の前後の文字（鍵の一部）を含むことがあるので、そのまま出さない（Actions の記録は公開される）
+  let key: ServiceKey;
+  try {
+    key = JSON.parse(keyJson) as ServiceKey;
+  } catch {
+    throw new Error('サービス アカウントの鍵（GOOGLE_SA_KEY）を JSON として読めませんでした。鍵の JSON の中身全部を、そのまま入れ直してください');
+  }
   const aud = key.token_uri ?? 'https://oauth2.googleapis.com/token';
   const now = Math.floor(Date.now() / 1000);
   const part = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');

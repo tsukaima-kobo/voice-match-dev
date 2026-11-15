@@ -1,8 +1,8 @@
 // 声の登録（アキネーター方式）の試験: 送る内容（壁 ①）、壁 ③、取り込み、CSV。数字は合成音から測る（録音なし）。
 import { describe, expect, it } from 'vitest';
 import { measureVoice, type Measured } from '../src/voice/measure.ts';
-import { FEATURE_KEYS, roundFeature, type Features } from '../src/voice/features.ts';
-import { defaultModel } from '../src/match/match.ts';
+import { FEATURE_BY_KEY, FEATURE_KEYS, roundFeature, type Features } from '../src/voice/features.ts';
+import { defaultModel, type MatchModel } from '../src/match/match.ts';
 import { MEASURE_COMPATIBLE, MEASURE_VERSION } from '../src/voice/measure.ts';
 import { checkLink, checkSubmission, CODE_PREFIX, decodeSubmission, encodeSubmission, makeSubmission, nameKey, OPTIONAL, REQUIRED } from '../src/submit/code.ts';
 import { consensus } from '../src/submit/consensus.ts';
@@ -34,14 +34,30 @@ describe('送る内容と壁 ①', () => {
     expect(decodeSubmission('hello')).toBeNull();
     expect(decodeSubmission('voice-match:{oops')).toBeNull();
     expect(decodeSubmission('voice-match:{"v":2}')).toBeNull();
+    expect(decodeSubmission('voice-match:')).toBeNull();
+    expect(decodeSubmission('voice-match:{"v":1} {')).toBeNull();
+  });
+  it('後ろに一言を書き足した物・2 回貼った物も読む（前は読めずに捨てていた）', () => {
+    const s = sub({ name: '括弧}{"の名前' });
+    const code = encodeSubmission(s);
+    expect(decodeSubmission(`${code}\nよろしくお願いします`)).toEqual(s);
+    expect(decodeSubmission(`${code}${code}`)).toEqual(s);
+    expect(decodeSubmission(`送ります: ${code} } ]`)).toEqual(s);
   });
   it('同意なし・よくない名前・よくないリンク・質の悪い録音は断る', () => {
     const kinds = (s: ReturnType<typeof sub>) => checkSubmission(s).map((p) => p.kind);
     expect(kinds(sub({ consent: false }))).toContain('consent');
     expect(kinds(sub({ kinds: 0 }))).toContain('kinds');
     expect(kinds(sub({ kinds: 1 << 12 }))).toContain('kinds');
+    // 16 ビットより上の印（ビットの計算で 0 や 1 になって通っていた）
+    for (const k of [2 ** 32, 2 ** 32 + 1, 2 ** 16, 2 ** 40 + 1]) expect(kinds(sub({ kinds: k })), String(k)).toContain('kinds');
     expect(kinds(sub({ name: '' }))).toContain('name');
     expect(kinds(sub({ name: 'https://spam.example' }))).toContain('name');
+    // 全角で書いた URL・所属の www. も断る
+    expect(kinds(sub({ name: 'ｈｔｔｐｓ：／／spam' }))).toContain('name');
+    expect(kinds(sub({ name: 'ｗｗｗ．spam．example' }))).toContain('name');
+    expect(kinds(sub({ group: 'www.spam.example' }))).toContain('group');
+    expect(kinds(sub({ group: 'ｈｔｔｐ：／／spam' }))).toContain('group');
     expect(kinds(sub({ link: 'http://example.com' }))).toContain('link');
     expect(kinds(sub({ quality: { ...quality, voicedSeconds: 5 } }))).toContain('quality');
     expect(kinds(sub({ quality: { ...quality, gapTonal: 0.6 } }))).toContain('quality');
@@ -80,6 +96,8 @@ describe('送る内容と壁 ①', () => {
   it('公式らしい https のリンクだけ受ける', () => {
     expect(checkLink('https://www.example.co.jp/talent/a')).toBeNull();
     for (const bad of ['ftp://example.com', 'https://user:pw@example.com', 'https://127.0.0.1/', 'https://bit.ly/abc', 'https://localhost/', 'not a url', '']) expect(checkLink(bad), bad).not.toBeNull();
+    // 最後に点の付いた住所で、短縮 URL・localhost・1 語だけの住所の見分けを抜けられない
+    for (const bad of ['https://bit.ly./abc', 'https://T.CO./x', 'https://localhost./', 'https://example./', 'https://www.example.com./a']) expect(checkLink(bad), bad).not.toBeNull();
   });
   it('少し違う書き方の名前を、同じ物にまとめる', () => {
     expect(nameKey('試験 の・キャラ！')).toBe(nameKey('試験のキャラ'));
@@ -95,8 +113,8 @@ describe('送る内容と壁 ①', () => {
     expect(nameKey('ルーナ')).toBe('るーな');
     expect(nameKey('桜')).not.toBe(nameKey('さくら'));
   });
-  // 幅の無い空白・つなぎの字・書く向きを変える字・異体字の印・ハングルの埋め字・ソフトハイフン・BOM・点字の空白・制御文字
-  const INVISIBLES = ['\u200b', '\u200c', '\u200d', '\u200e', '\u200f', '\u202a', '\u202e', '\u2060', '\u2064', '\u2066', '\u00ad', '\ufe0f', '\ufe00', '\u3164', '\uffa0', '\u115f', '\u1160', '\u034f', '\u180e', '\u2800', '\u0085', '\u{e0041}'];
+  // 幅の無い空白・つなぎの字・書く向きを変える字・異体字の印・ハングルの埋め字・ソフトハイフン・BOM・点字の空白・制御文字・行と段落を分ける字・対になっていないサロゲート（URL にできず、声の一覧が止まる）
+  const INVISIBLES = ['\u200b', '\u200c', '\u200d', '\u200e', '\u200f', '\u202a', '\u202e', '\u2060', '\u2064', '\u2066', '\u00ad', '\ufe0f', '\ufe00', '\u3164', '\uffa0', '\u115f', '\u1160', '\u034f', '\u180e', '\u2800', '\u0085', '\u{e0041}', '\u2028', '\u2029', '\ud800', '\udfff'];
   it('見えない文字の入った名前・所属は断る（ページでも取り込みでも同じ壁 ①）', () => {
     for (const c of INVISIBLES) {
       const code = c.codePointAt(0)!.toString(16);
@@ -237,6 +255,28 @@ describe('取り込み', () => {
     expect(r.voices).toHaveLength(1);
     expect(r.voices[0]).toMatchObject({ used: 3, group: '試験の作品', kinds: 0b1001, link: 'https://example.com/chara' });
     expect(consensusMembers(model, r.accepted)).toHaveLength(3);
+  });
+  it('名前の書き方・所属・大枠・リンクの多数決では、同じ音の写し（数字を少し変えた物）を 1 件と数える', () => {
+    // 距離の目盛りが分かるモデル（項目どうしの重なりの無い白色化と likeness。写しをまとめるのは、この時だけ）
+    const scaled: MatchModel = { ...model, whiten: model.keys.map((_, i) => model.keys.map((_, j) => (i === j ? 1 : 0))), likeness: { typical: 1.8, cuts: [1, 1.2, 1.4] } };
+    const at = (z: number): Features => Object.fromEntries(scaled.keys.map((k, i) => { const x = scaled.center[i]! + z * scaled.spread[i]!; return [k, roundFeature(k, FEATURE_BY_KEY[k].log ? Math.exp(x) : x)]; })) as Features;
+    const nudge = (f: Features, n: number): Features => ({ ...f, pitch: roundFeature('pitch', f.pitch! + n * 0.1) });
+    const one = (f: Features, link: string, group: string, kinds: number, day: string): [string, string, string] => [day, encodeSubmission(sub({ features: f, link, group, kinds })), 'OK'];
+    // 別々の 3 件が先に来て、1 つの音の写しが 4 件（2 日に分けて、1 日の上限の中）
+    const r = intake(
+      rows([
+        one(at(-0.4), 'https://example.com/chara', '試験の作品', 0b1, '2026/11/10 09:00:00'),
+        one(at(0), 'https://example.com/chara', '試験の作品', 0b1, '2026/11/10 09:01:00'),
+        one(at(0.4), 'https://example.com/chara', '試験の作品', 0b1, '2026/11/10 09:02:00'),
+        ...[1, 2, 3].map((n) => one(nudge(at(0.1), n), 'https://other.example.com/x', 'いたずら', 0b100, '2026/11/11 09:00:00')),
+        one(nudge(at(0.1), 4), 'https://other.example.com/x', 'いたずら', 0b100, '2026/11/12 09:00:00'),
+      ]),
+      { model: scaled, ngWords: [], blocked: [] },
+    );
+    expect(r.counts.accepted).toBe(7);
+    expect(r.voices).toHaveLength(1);
+    // 写しは 1 件なので、別々の 3 件の方が多い（前は写しの 4 件が勝っていた）。使った件数（used）は今までどおり写しも数える
+    expect(r.voices[0]).toMatchObject({ used: 7, link: 'https://example.com/chara', group: '試験の作品', kinds: 0b1 });
   });
   it('シートを読む: 見出しは飛ばし、列はそのまま', () => {
     const t = parseCsv('タイムスタンプ,送る内容,判定,理由\r\n"2026/11/01 1:00:00","voice-match:{""v"":1}",OK,"よい, とても"\n');

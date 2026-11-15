@@ -26,4 +26,18 @@ describe('スプレッドシートを読む', () => {
     const sheet = await openSheet(key, 'sheet-id');
     expect(await sheet.read('削除!A:A')).toEqual([]);
   });
+  it('鍵の JSON が壊れている時、誤りの文に鍵の一部を出さない（Actions の記録は公開される）', async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    // 貼り間違えた鍵（引用符の抜け・前後の余計な文字）。JSON.parse の誤りの文には、読めなかった所の前後が入る
+    for (const broken of [`{"client_email":"test@example.com","private_key": MIIEvQSECRETPART}`, `'${key}'`]) {
+      const err = await openSheet(broken, 'sheet-id').then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(err?.message).toMatch(/GOOGLE_SA_KEY/);
+      expect(err?.message).not.toMatch(/SECRET|MIIE|private|BEGIN|client_email/);
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

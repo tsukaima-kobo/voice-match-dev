@@ -120,13 +120,33 @@ export function makeSubmission(o: { name: string; group?: string; kinds: number;
 
 export const encodeSubmission = (s: Submission): string => CODE_PREFIX + JSON.stringify(s);
 
-/** 送る内容を読む（前後の文字は無視）。形が違えば null */
+/** 文字の頭の { と対になる } の次の位置（文字列の中の括弧は数えない）。対にならなければ -1 */
+function objectEnd(s: string): number {
+  if (s[0] !== '{') return -1;
+  let depth = 0;
+  let inString = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inString) {
+      if (c === '\\') i++;
+      else if (c === '"') inString = false;
+    } else if (c === '"') inString = true;
+    else if (c === '{' || c === '[') depth++;
+    else if ((c === '}' || c === ']') && --depth === 0) return i + 1;
+  }
+  return -1;
+}
+
+/** 送る内容を読む（前後の文字は無視。後ろに一言を書き足した物・2 回貼った物も、最初の 1 つを読む）。形が違えば null */
 export function decodeSubmission(text: string): Submission | null {
   const at = text.indexOf(CODE_PREFIX);
   if (at < 0) return null;
+  const rest = text.slice(at + CODE_PREFIX.length).trimStart();
+  const end = objectEnd(rest);
+  if (end < 0) return null;
   let raw: unknown;
   try {
-    raw = JSON.parse(text.slice(at + CODE_PREFIX.length).trim());
+    raw = JSON.parse(rest.slice(0, end));
   } catch {
     return null;
   }
@@ -152,11 +172,14 @@ export function decodeSubmission(text: string): Submission | null {
 }
 
 /**
- * 見えない文字: 制御文字・書式の文字（幅の無い空白・書く向きを変える文字など）・表示しない文字（異体字の印・ハングルの埋め字など）・点字の空白。
+ * 見えない文字: 制御文字・書式の文字（幅の無い空白・書く向きを変える文字など）・表示しない文字（異体字の印・ハングルの埋め字など）・点字の空白・
+ * 行と段落を分ける文字（U+2028・U+2029）・対になっていないサロゲート（壊れた文字。URL にできず、声の一覧でリンクを作る所で止まる）。
  * 名前に混ぜると、同じ名前に見えて別の名前になる（削除の一覧・禁止の言葉・同じ名前の見分けを抜けられる）。壁 ① で断り、nameKey では除く。
  */
-const INVISIBLE = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2800]/gu;
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u2800]/gu;
 export const hasInvisible = (text: string): boolean => text.search(INVISIBLE) >= 0;
+/** URL らしい文字（全角の「ｈｔｔｐｓ：」「ｗｗｗ．」も） */
+const hasUrl = (text: string): boolean => /https?:|www\./i.test(text.normalize('NFKC'));
 
 /**
  * 名前を比べるための形（見えない文字を除き、全角・半角や大文字・小文字、ひらがな・カタカナ、空白と記号の違いをそろえる）。
@@ -193,10 +216,11 @@ export function checkSubmission(s: Submission): Problem[] {
   if (!s.ok) out.push({ kind: 'consent', text: t('「公開されている声で、一般の人の声ではない」に印をつけてください。', 'Tick “this is a public voice, not a private person’s”.') });
   const name = s.n.trim();
   if (hasInvisible(s.n)) out.push({ kind: 'name', text: t('名前に見えない文字（幅の無い空白・向きを変える文字など）が入っています。消してから作り直してください。', 'The name contains invisible characters (such as zero-width spaces). Remove them and try again.') });
-  else if (!name || !nameKey(name) || [...name].length > LIMITS.name || /https?:|www\./i.test(name)) out.push({ kind: 'name', text: t(`名前は 1〜${LIMITS.name} 文字で、URL を入れないでください。`, `The name must be 1–${LIMITS.name} characters, without a URL.`) });
+  else if (!name || !nameKey(name) || [...name].length > LIMITS.name || hasUrl(name)) out.push({ kind: 'name', text: t(`名前は 1〜${LIMITS.name} 文字で、URL を入れないでください。`, `The name must be 1–${LIMITS.name} characters, without a URL.`) });
   if (s.g !== undefined && hasInvisible(s.g)) out.push({ kind: 'group', text: t('所属・作品名に見えない文字（幅の無い空白・向きを変える文字など）が入っています。消してから作り直してください。', 'The agency or title contains invisible characters (such as zero-width spaces). Remove them and try again.') });
-  else if (s.g !== undefined && ([...s.g].length > LIMITS.group || /https?:/i.test(s.g))) out.push({ kind: 'group', text: t(`所属・作品名は ${LIMITS.group} 文字までで、URL を入れないでください。`, `The agency or title must be up to ${LIMITS.group} characters, without a URL.`) });
-  if (!(typeof s.k === 'number' && s.k > 0 && (s.k & ~KIND_BITS_ALL) === 0)) out.push({ kind: 'kinds', text: t('大枠（VTuber・歌手など）を 1 つ以上選んでください。', 'Choose at least one category (VTuber, singer, etc.).') });
+  else if (s.g !== undefined && ([...s.g].length > LIMITS.group || hasUrl(s.g))) out.push({ kind: 'group', text: t(`所属・作品名は ${LIMITS.group} 文字までで、URL を入れないでください。`, `The agency or title must be up to ${LIMITS.group} characters, without a URL.`) });
+  // 印の束は 16 ビットの中だけ（2^32 などは、ビットの計算で 0 になって通ってしまう）
+  if (!(typeof s.k === 'number' && s.k > 0 && (s.k & KIND_BITS_ALL) === s.k)) out.push({ kind: 'kinds', text: t('大枠（VTuber・歌手など）を 1 つ以上選んでください。', 'Choose at least one category (VTuber, singer, etc.).') });
   const linkProblem = checkLink(s.l);
   if (linkProblem) out.push({ kind: 'link', text: linkProblem });
   if (!(s.q.vs >= LIMITS.minVoiced)) out.push({ kind: 'quality', text: t(`測れた声が ${LIMITS.minVoiced} 秒に足りません。`, `Less than ${LIMITS.minVoiced} s of voice was measured.`) });
@@ -229,7 +253,8 @@ export function checkLink(link: string): string | null {
   if (u.protocol !== 'https:') return t('URL は https:// で始まる物にしてください。', 'The URL must start with https://.');
   if (u.username || u.password) return t('URL にユーザー名やパスワードを入れないでください。', 'Do not put a user name or password in the URL.');
   const host = u.hostname.toLowerCase();
-  if (!host.includes('.') || /^[\d.]+$/.test(host) || host.includes(':') || host === 'localhost') return t('公式ページの URL にしてください。', 'Use the URL of an official page.');
+  // 最後に点の付いた住所（bit.ly. など）は、同じ所へ行くのに、短縮 URL や localhost の見分けを抜けるので断る
+  if (!host.includes('.') || host.endsWith('.') || /^[\d.]+$/.test(host) || host.includes(':') || host === 'localhost') return t('公式ページの URL にしてください。', 'Use the URL of an official page.');
   if (SHORTENERS.some((s) => host === s || host.endsWith(`.${s}`))) return t('短縮 URL は使えません。元の URL を入れてください。', 'Short links cannot be used. Enter the original URL.');
   return null;
 }

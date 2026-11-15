@@ -3,9 +3,10 @@
 // 壁 ① をもう一度（ページの確認は回り込めるため）、禁止の言葉・削除済みの名前・1 日の上限・同じ数字の重なりを除き、
 // 名前ごとに壁 ③（3 件以上そろったら中央値）で声にする。ID は名前（nameKey）から決まる（記録を持たずに、毎日同じ ID）。
 // 出す名前の書き方・所属・大枠・リンクは、壁 ③ でそろった登録だけから決める（外れた登録のいたずらで変わらないように）。
+// 決める時は、同じ音の写し（数字を少し変えた物）を 1 件と数える（1 つの音から何件も送って、多数決を取れないように）。
 // 声の測り方の版は、そろった登録の中でいちばん古い版（今の版と、比べてよい前の版 MEASURE_COMPATIBLE が混ざることがある）。
 import { CODE_PREFIX, checkSubmission, decodeSubmission, featuresOf, nameKey, type Submission } from '../src/submit/code.ts';
-import { consensus, consensusMembers } from '../src/submit/consensus.ts';
+import { consensus, consensusMembers, withoutCopies } from '../src/submit/consensus.ts';
 
 /** 壁 ③ で使われる登録（src/submit/consensus.ts と同じ物を使う。写しを持たない） */
 export { consensusMembers };
@@ -184,8 +185,10 @@ export function intake(rows: readonly Row[], o: { model: MatchModel; ngWords: re
     let id = userIdOf(key);
     for (let n = 2; used.has(id); n++) id = `${userIdOf(key)}-${n}`;
     used.add(id);
-    const group = mostCommon(members.map((a) => a.group ?? '').filter(Boolean));
-    voices.push({ id, key, name: mostCommon(members.map((a) => a.name))!, ...(group ? { group } : {}), kinds: majorityKinds(members.map((a) => a.kinds)), link: mostCommon(members.map((a) => a.link))!, used: c.used, version: oldestVersion(members.map((a) => a.version), MEASURE_VERSION), features: c.features });
+    // 名前の書き方などの多数決は、写しを 1 件として（consensus が中央値に使う登録と同じ。仮のモデルでは、まったく同じ数字だけを 1 件に）
+    const voters = o.model.likeness ? withoutCopies(o.model, members) : members;
+    const group = mostCommon(voters.map((a) => a.group ?? '').filter(Boolean));
+    voices.push({ id, key, name: mostCommon(voters.map((a) => a.name))!, ...(group ? { group } : {}), kinds: majorityKinds(voters.map((a) => a.kinds)), link: mostCommon(voters.map((a) => a.link))!, used: c.used, version: oldestVersion(members.map((a) => a.version), MEASURE_VERSION), features: c.features });
   }
   voices.sort((a, b) => (a.id < b.id ? -1 : 1));
   return { accepted, voices, counts };
