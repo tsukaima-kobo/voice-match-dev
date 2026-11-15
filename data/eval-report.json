@@ -1,69 +1,71 @@
 {
  "measureVersion": "3.1.0",
  "dataVersions": [
-  "3.1.0"
+  "3.1.0",
+  "3.2.0",
+  "3.3.0"
  ],
  "source": "sheet",
- "speakers": 348,
- "windows": 11406,
+ "speakers": 927,
+ "windows": 30146,
  "diagonal": {
-  "queries": 11340,
-  "top1": 0.4462962962962963,
-  "top5": 0.6504409171075838,
+  "queries": 29839,
+  "top1": 0.44602701162907604,
+  "top5": 0.61687724119441,
   "oneLine": {
-   "top1": 0.4013227513227513,
-   "top5": 0.617636684303351
+   "top1": 0.3880827105466001,
+   "top5": 0.5685512249070009
   }
  },
  "whiten": {
-  "queries": 11340,
-  "top1": 0.5473544973544974,
-  "top5": 0.73668430335097,
+  "queries": 29839,
+  "top1": 0.5548443312443446,
+  "top5": 0.7186567914474346,
   "oneLine": {
-   "top1": 0.5009700176366843,
-   "top5": 0.6991181657848324
+   "top1": 0.4941184356044103,
+   "top5": 0.6668118904789034
   }
  },
  "oneLineNote": "一言（oneLine）は、30 秒の窓から 1 回に声 3 秒・8 秒が要る項目を除いて比べた物。残りの項目も 30 秒から測った値なので、本当の一言より当たりやすい（甘い数字）",
  "chosen": "whiten",
  "likeness": {
-  "typical": 1.7796,
+  "typical": 1.835,
   "cuts": [
-   1.0194,
-   1.1898,
-   1.388
+   1.0281,
+   1.1956,
+   1.4062
   ],
   "kinds": {
    "line": {
-    "typical": 1.9415,
+    "typical": 1.9999,
     "cuts": [
-     1,
-     1.1993,
-     1.4266
+     0.9966,
+     1.1888,
+     1.4215
     ]
    },
    "few": {
-    "typical": 1.8648,
+    "typical": 1.9134,
     "cuts": [
-     1.0192,
-     1.2024,
-     1.4078
+     1.0215,
+     1.2006,
+     1.4156
     ]
    },
    "full": {
-    "typical": 1.7796,
+    "typical": 1.835,
     "cuts": [
-     1.0194,
-     1.1898,
-     1.388
+     1.0281,
+     1.1956,
+     1.4062
     ]
    },
    "many": {
-    "typical": 1.6183,
+    "typical": 1.6718,
     "cuts": [
-     0.8393,
-     0.9997,
-     1.1332
+     0.8643,
+     0.9954,
+     1.1809
     ]
    }
   }
@@ -71,183 +73,183 @@
  "items": [
   {
    "key": "pitch",
-   "icc": 0.941
+   "icc": 0.936
   },
   {
    "key": "pitchRange",
-   "icc": 0.607
+   "icc": 0.486
   },
   {
    "key": "pitchSkew",
-   "icc": 0.265
+   "icc": 0.286
   },
   {
    "key": "pitchMotion",
-   "icc": 0.43
+   "icc": 0.462
   },
   {
    "key": "f1",
-   "icc": 0.75
+   "icc": 0.725
   },
   {
    "key": "f2",
-   "icc": 0.586
+   "icc": 0.616
   },
   {
    "key": "f3",
-   "icc": 0.806
+   "icc": 0.803
   },
   {
    "key": "f4",
-   "icc": 0.912
+   "icc": 0.897
   },
   {
    "key": "formantSpacing",
-   "icc": 0.809
+   "icc": 0.796
   },
   {
    "key": "f1Range",
-   "icc": 0.639
+   "icc": 0.627
   },
   {
    "key": "f2Range",
-   "icc": 0.568
+   "icc": 0.596
   },
   {
    "key": "b1",
-   "icc": 0.629
+   "icc": 0.659
   },
   {
    "key": "b2",
-   "icc": 0.734
+   "icc": 0.749
   },
   {
    "key": "centroid",
-   "icc": 0.684
+   "icc": 0.714
   },
   {
    "key": "hammarberg",
-   "icc": 0.654
+   "icc": 0.68
   },
   {
    "key": "slopeLow",
-   "icc": 0.85
+   "icc": 0.837
   },
   {
    "key": "slopeMid",
-   "icc": 0.604
+   "icc": 0.622
   },
   {
    "key": "mfcc1",
-   "icc": 0.791
+   "icc": 0.806
   },
   {
    "key": "mfcc2",
-   "icc": 0.713
+   "icc": 0.736
   },
   {
    "key": "mfcc3",
-   "icc": 0.895
+   "icc": 0.885
   },
   {
    "key": "mfcc4",
-   "icc": 0.767
-  },
-  {
-   "key": "mfcc5",
-   "icc": 0.7
-  },
-  {
-   "key": "mfcc6",
-   "icc": 0.857
-  },
-  {
-   "key": "mfcc7",
-   "icc": 0.662
-  },
-  {
-   "key": "mfcc8",
-   "icc": 0.792
-  },
-  {
-   "key": "mfcc9",
-   "icc": 0.695
-  },
-  {
-   "key": "mfcc10",
    "icc": 0.782
   },
   {
+   "key": "mfcc5",
+   "icc": 0.73
+  },
+  {
+   "key": "mfcc6",
+   "icc": 0.846
+  },
+  {
+   "key": "mfcc7",
+   "icc": 0.682
+  },
+  {
+   "key": "mfcc8",
+   "icc": 0.811
+  },
+  {
+   "key": "mfcc9",
+   "icc": 0.725
+  },
+  {
+   "key": "mfcc10",
+   "icc": 0.788
+  },
+  {
    "key": "mfcc11",
-   "icc": 0.593
+   "icc": 0.629
   },
   {
    "key": "mfcc12",
-   "icc": 0.637
-  },
-  {
-   "key": "mfcc13",
-   "icc": 0.628
-  },
-  {
-   "key": "mfccDelta",
-   "icc": 0.568
-  },
-  {
-   "key": "hnr",
-   "icc": 0.727
-  },
-  {
-   "key": "cpp",
-   "icc": 0.625
-  },
-  {
-   "key": "h1h2",
    "icc": 0.633
   },
   {
+   "key": "mfcc13",
+   "icc": 0.671
+  },
+  {
+   "key": "mfccDelta",
+   "icc": 0.577
+  },
+  {
+   "key": "hnr",
+   "icc": 0.752
+  },
+  {
+   "key": "cpp",
+   "icc": 0.683
+  },
+  {
+   "key": "h1h2",
+   "icc": 0.68
+  },
+  {
    "key": "jitter",
-   "icc": 0.535
+   "icc": 0.569
   },
   {
    "key": "shimmer",
-   "icc": 0.649
+   "icc": 0.669
   },
   {
    "key": "rate",
-   "icc": 0.484
+   "icc": 0.534
   },
   {
    "key": "rateVar",
-   "icc": 0.076
+   "icc": 0.084
   },
   {
    "key": "pauseShare",
-   "icc": 0.402
+   "icc": 0.451
   },
   {
    "key": "pauseLen",
-   "icc": 0.185
+   "icc": 0.18
   },
   {
    "key": "runLen",
-   "icc": 0.16
+   "icc": 0.253
   },
   {
    "key": "rhythm",
-   "icc": 0.151
+   "icc": 0.148
   },
   {
    "key": "voicedShare",
-   "icc": 0.476
+   "icc": 0.536
   },
   {
    "key": "levelRange",
-   "icc": 0.522
+   "icc": 0.555
   },
   {
    "key": "tilt",
-   "icc": 0.738
+   "icc": 0.754
   }
  ]
 }
