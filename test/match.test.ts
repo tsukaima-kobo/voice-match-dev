@@ -4,6 +4,7 @@ import { FEATURE_KEYS, FEATURE_BY_KEY, forLength, ONE_LINE_SECONDS, type Feature
 import { defaultModel, rank, closeness, closenessWord, distances, farScale, type MatchModel } from '../src/match/match.ts';
 import { evaluate, fitModel, itemStats, LIKENESS_SHARE, likenessScale, medianFeatures, selectWindows, type Speaker } from '../tools/lib.ts';
 import type { VoiceWindow } from '../src/data/types.ts';
+import { modelProblem } from '../src/data/model-file.ts';
 import { gauss, rng } from './voice-synth.ts';
 
 const V = 'test';
@@ -248,5 +249,30 @@ describe('近さの言葉', () => {
     expect(closenessWord(m, 0.4)).toBe('とても似ている');
     expect(closenessWord(m, 1.0)).toBe('似ている');
     expect(closenessWord(m, 2)).toBe('似ている所がある');
+  });
+});
+
+describe('形の違うモデルは使わない（src/data/model-file.ts。ページで近い声を出す所が落ちないように）', () => {
+  const speakers = crowd(12, 0.1, 8);
+  const fitted = fitModel(speakers, V, { whiten: true });
+  const good: MatchModel = { ...fitted, likeness: likenessScale(speakers, fitted) };
+  const profiles = speakers.map((s) => ({ id: s.id, features: medianFeatures(s.windows) }));
+  const q = speakers[0]!.windows[0]!.features;
+  const n = good.keys.length;
+  it('作ったモデルは使える', () => {
+    expect(modelProblem(good, V)).toBeNull();
+    expect(modelProblem(fitModel(speakers, V, { whiten: false }), V)).toBeNull();
+  });
+  it('項目の名前・白色化の行列・人ごとの散らばり・目安の形が違えば理由を返す（そのまま使うと照合が投げる）', () => {
+    const cases: [MatchModel, RegExp, (m: MatchModel) => unknown][] = [
+      [{ ...good, keys: [...good.keys.slice(0, -1), 'oldFeature'] } as unknown as MatchModel, /無い項目.*oldFeature/, (m) => closeness(m, q, profiles[1]!.features)],
+      [{ ...good, whiten: good.whiten!.slice(0, n - 1).map((row) => row.slice(0, n - 1)) }, /whiten/, (m) => rank(m, q, profiles, 3)],
+      [{ ...good, people: { mean: good.people!.mean, cov: good.people!.cov.slice(0, n - 1) } }, /people/, (m) => rank(m, q, [{ id: 'x', features: { ...q, pitch: null } }, ...profiles], 3)],
+      [{ ...good, likeness: { ...good.likeness!, kinds: { ...good.likeness!.kinds, full: { typical: 1.8, cuts: 1.2 } } } } as unknown as MatchModel, /likeness/, (m) => closenessWord(m, 1, { scale: 1, kind: 'full' })],
+    ];
+    for (const [m, why, use] of cases) {
+      expect(modelProblem(m, V)).toMatch(why);
+      expect(() => use(m)).toThrow();
+    }
   });
 });
