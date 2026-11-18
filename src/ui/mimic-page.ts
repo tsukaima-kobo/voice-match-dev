@@ -1,14 +1,15 @@
-// 声真似練習場（mimic.html）: マイクでお手本を録る → 何回でも聞き直す → 順番に真似して話す → 近さの点数・直し方・点数表。
+// 声真似練習場（mimic.html）: マイクでお手本を録る → 何回でも聞き直す → 真似して話す → 近さの点数・直し方。
 // 2026-11-18 からゲームにした（運営「ゲーム感覚の場所に。お手本もマイクから直接取る方式のみ。マイクによって差が出ちゃうから」）。
 //   遊び方: 「声真似」（お手本の声を真似する）と「逆再生チャレンジ」（逆再生した言葉を真似し、録った声を逆にして元の言葉と比べる）。
-//   人: 何人でも（MAX_PLAYERS まで）順番に。点数表は、お手本ごとの最高点を足して合計にする。配信・コラボ向けに、キーボードでも遊べる。
+//   1 人で遊ぶ（2026-11-19、運営の答えで、同じ画面で交代する人・名前・次の人へ・点数表を外した。運営が頼んでいない物を足していた）。
+//   今のお手本での最高点と回数だけを持つ。配信向けに、キーボードでも遊べる。
 //   ノイズカット: なし・小（RNNoise）・大（Demucs。WebGPU のパソコンだけ）から 1 つ。src/voice/clean.ts。2 つ重ねると声が崩れるので、重ねない。
 //     お手本と真似の両方に、同じ物をかける（お手本を録った時の選び方を、そのお手本の間ずっと使う。変えた物は次のお手本から）。
 // お手本が 1 つのセリフ（話しはじめから終わりまで LINE_MAX_SECONDS 以内）なら「セリフ真似」: 抑揚・タイミング（mimic/line.ts）と
 // 声の質（mimic.ts）で比べ、2 本の線を重ねた図を出す。それより長いお手本は「声全体」: 声の数字だけで比べる。
 // 音（お手本と真似）は、このページを開いている間だけメモリーに置き、何回でも聞き直せる（運営「その音声を利用者のブラウザのキャッシュに
 // 持って、離れる時に消えるように」）。端末に書き込む所（localStorage・IndexedDB など）には置かない。ページを離れる時（pagehide）に
-// 0 で埋めて捨てる。どこにも送らない。点数表と名前もメモリーだけ。
+// 0 で埋めて捨てる。どこにも送らない。
 // お手本を録っている間は、ほかのタブやアプリで動画を流してマイクに聞かせられるよう、ページが隠れても止めない（音が来てから 35 秒で
 // 止まる。音が来ないまま 60 秒たった時も止める）。真似して話す時は、ページが隠れたらすぐ止める。
 // 声の登録は、声を登録するページ（register.html）に分けた（タブの音・音声ファイルも使えるように）。
@@ -55,8 +56,6 @@ const START_OVER_FLOOR = 6;
 const START_FLOOR_CHUNKS = 4;
 /** お手本を録る時、音が来ないまま、これだけたったら止める（秒。マイクを開いたままにしない） */
 const WAIT_MAX = 60;
-/** 挑戦する人の数の上限 */
-const MAX_PLAYERS = 8;
 /**
  * 声真似で測る、いちばん短い声（秒）と、取れた声の周期の数の下限。「はい」「えっ」のような一言（声は 0.2 秒ほど・周期 40 ほど）も測る。
  * 声の項目のうち一言で測れる物（features.ts の ONE_LINE_SECONDS の物）は、これより長ければ使う。3 秒・8 秒から測る項目は今までどおり
@@ -98,151 +97,18 @@ type Mode = 'mimic' | 'reverse';
 const modeInputs = [...document.querySelectorAll<HTMLInputElement>('input[name="mode"]')];
 let mode: Mode = 'mimic';
 
-/* ---- 挑戦する人と点数表（メモリーだけ） ---- */
-interface Player {
-  id: number;
-  name: string;
-  /** 今のお手本での最高点（まだ無ければ null） */
-  best: number | null;
-  /** 今のお手本で真似した回数 */
-  roundTries: number;
-  /** 前のお手本までの最高点の合計 */
-  total: number;
-  /** 真似した回数（全部） */
-  tries: number;
-  /** 最後に真似した声（聞き直す用。録ったままの向き） */
-  last: Clip | null;
-  /** last が逆再生チャレンジの声か（点数表の ▶ では、逆にして、比べた向きで鳴らす） */
-  lastReverse: boolean;
-}
-let nextPlayerId = 1;
-const newPlayer = (name: string): Player => ({ id: nextPlayerId++, name, best: null, roundTries: 0, total: 0, tries: 0, last: null, lastReverse: false });
-/** 名前を入れずに始めた時の 1 人目（言葉を切り替えたら、その言葉に） */
-let defaultNamed = true;
-const players: Player[] = [newPlayer(t('あなた', 'You'))];
-let turn = 0;
-const current = () => players[Math.min(turn, players.length - 1)]!;
-const playerList = $('players');
-const playerAdd = $<HTMLFormElement>('player-add');
-const playerName = $<HTMLInputElement>('player-name');
-
-/** お手本が変わった・遊び方を変えた時: 今のお手本での最高点を合計に入れる */
+/* ---- 今のお手本での記録（メモリーだけ。1 人で遊ぶ。名前・交代・点数表は持たない） ---- */
+/** 今のお手本での最高点（まだ無ければ null） */
+let best: number | null = null;
+/** 今のお手本で真似した回数 */
+let roundTries = 0;
+/** お手本が変わった・遊び方を変えた時: 記録を新しい回にし、前の真似の声を捨てる */
 function endRound(): void {
-  for (const p of players) {
-    p.total += p.best ?? 0;
-    p.best = null;
-    p.roundTries = 0;
-  }
+  best = null;
+  roundTries = 0;
+  if (shown?.clip) shown.clip.pcm.fill(0);
+  shown = null;
 }
-
-function drawPlayers(): void {
-  const busy = isBusy(refState) || isBusy(mimState);
-  playerList.replaceChildren(
-    ...players.map((p, i) => {
-      // 1 人の時は「の番」・番号・枠の色を出さない（対戦の相手がいるように見えた。人を足した時だけ、同じ画面で順番に回す）
-      const many = players.length > 1;
-      const li = el('li', many && i === turn ? 'player now' : 'player');
-      const pick = el('button', 'player-pick');
-      pick.type = 'button';
-      pick.disabled = busy;
-      if (many) pick.append(el('span', 'player-no', String(i + 1)));
-      pick.append(el('span', 'player-name', p.name));
-      if (many && i === turn) pick.append(el('span', 'player-turn', t('の番', '’s turn')));
-      if (many) {
-        pick.setAttribute('aria-pressed', String(i === turn));
-        pick.title = t(`${p.name}の番にする`, `Make it ${p.name}’s turn`);
-      }
-      pick.addEventListener('click', () => {
-        turn = i;
-        drawPlayers();
-        drawTurn();
-      });
-      li.append(pick);
-      if (players.length > 1) {
-        const del = el('button', 'player-del', '×');
-        del.type = 'button';
-        del.disabled = busy;
-        del.setAttribute('aria-label', t(`${p.name}を外す`, `Remove ${p.name}`));
-        del.addEventListener('click', () => {
-          players.splice(i, 1);
-          if (p.last) p.last.pcm.fill(0);
-          if (shown?.who === p) shown.clip = null;
-          if (turn > i || turn >= players.length) turn = Math.max(0, turn - 1);
-          drawPlayers();
-          drawTurn();
-          drawBoard();
-        });
-        li.append(del);
-      }
-      return li;
-    }),
-  );
-  const full = players.length >= MAX_PLAYERS;
-  playerName.disabled = full || busy;
-  $<HTMLButtonElement>('player-add-button').disabled = full || busy;
-}
-playerAdd.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const name = playerName.value.trim().slice(0, 20);
-  if (!name || players.length >= MAX_PLAYERS) return;
-  // 1 人目が名前の無いまま（あなた）で、まだ誰も真似していなければ、1 人目をこの名前にする
-  if (players.length === 1 && defaultNamed && players[0]!.tries === 0) {
-    players[0]!.name = name;
-    defaultNamed = false;
-  } else players.push(newPlayer(name));
-  playerName.value = '';
-  drawPlayers();
-  drawTurn();
-  drawBoard();
-});
-
-const turnBox = $('turn');
-function drawTurn(): void {
-  const p = current();
-  turnBox.hidden = players.length < 2;
-  turnBox.replaceChildren(el('span', 'turn-label', t('今の番', 'Now playing')), el('strong', 'turn-name', p.name), el('span', 'turn-count', t(`${turn + 1} 人目 / ${players.length} 人`, `${turn + 1} of ${players.length}`)));
-  nextBtn.hidden = players.length < 2;
-}
-
-/** 点数表（いつも出す。まだ真似していない人は、順位を「—」に） */
-function drawBoard(): void {
-  const any = players.some((p) => p.tries > 0);
-  $<HTMLButtonElement>('board-clear').disabled = !any;
-  const rows = players.map((p) => ({ p, sum: p.total + (p.best ?? 0) })).sort((a, b) => b.sum - a.sum || (b.p.best ?? -1) - (a.p.best ?? -1) || Number(b.p.tries > 0) - Number(a.p.tries > 0));
-  let rank = 0;
-  let prev = Number.NaN;
-  $('board-body').replaceChildren(
-    ...rows.map(({ p, sum }, i) => {
-      if (sum !== prev) rank = i + 1;
-      prev = sum;
-      const tr = el('tr', p === current() ? 'now' : undefined);
-      tr.append(el('td', 'rank', p.tries > 0 ? String(rank) : '—'), el('td', 'who', p.name), el('td', 'num', p.best === null ? '—' : String(p.best)), el('td', 'num', String(sum)), el('td', 'num', String(p.tries)));
-      const cell = el('td');
-      if (p.last) {
-        const b = el('button', 'board-play');
-        b.type = 'button';
-        b.dataset.play = `p${p.id}`;
-        cell.append(b);
-      }
-      tr.append(cell);
-      return tr;
-    }),
-  );
-  drawPlay();
-}
-$('board-clear').addEventListener('click', () => {
-  for (const p of players) {
-    p.best = null;
-    p.roundTries = 0;
-    p.total = 0;
-    p.tries = 0;
-    p.last?.pcm.fill(0);
-    p.last = null;
-  }
-  if (shown) shown.clip = null;
-  playback.stop();
-  drawBoard();
-});
 
 /* ---- ノイズカット（なし・小・大から 1 つ。2 つ重ねると声が崩れるので、重ねない） ---- */
 const cleanInputs = [...document.querySelectorAll<HTMLInputElement>('input[name="clean"]')];
@@ -319,7 +185,6 @@ function lockAll(): void {
   mics.lock(busy);
   for (const r of modeInputs) r.disabled = busy;
   for (const r of cleanInputs) r.disabled = busy || (r === cleanBig && !music?.ok);
-  drawPlayers();
   drawPlay();
 }
 
@@ -366,10 +231,6 @@ function clipOf(key: string): { clip: Clip; reverse: boolean } | null {
   if (key === 'model' && model) return { clip: model.clip, reverse: mode === 'reverse' };
   if (key === 'original' && model) return { clip: model.clip, reverse: false };
   if ((key === 'mine' || key === 'mine-rev') && shown?.clip) return { clip: shown.clip, reverse: key === 'mine-rev' };
-  if (key.startsWith('p')) {
-    const p = players.find((x) => `p${x.id}` === key);
-    if (p?.last) return { clip: p.last, reverse: p.lastReverse };
-  }
   return null;
 }
 function drawPlay(): void {
@@ -706,7 +567,7 @@ function summaryOf(md: Model): string {
   return head + t(`${md.target.contour ? 'セリフ真似' : '声全体'}・${md.from()}・声の高さ ${formatFeature('pitch', f.pitch)}`, `${md.target.contour ? 'line mimic' : 'whole voice'}, ${md.from()}, pitch ${formatFeature('pitch', f.pitch)}`);
 }
 
-/** 測ったお手本を置く（前のお手本の音は捨て、点数表は新しいお手本の回にする） */
+/** 測ったお手本を置く（前のお手本の音と前の真似の声は捨て、記録は新しいお手本の回にする） */
 function setModel(clip: Clip, m: Extract<Measured, { ok: true }>, choice: CleanChoice): void {
   const i = m.info;
   const line = i.contour && i.speechSeconds <= LINE_MAX_SECONDS ? i.contour : undefined;
@@ -719,11 +580,9 @@ function setModel(clip: Clip, m: Extract<Measured, { ok: true }>, choice: CleanC
     from: line ? M(`${i.speechSeconds.toFixed(1)} 秒`, `${i.speechSeconds.toFixed(1)} s`) : M(`声 ${i.voicedSeconds.toFixed(1)} 秒分`, `${i.voicedSeconds.toFixed(1)} s of voice`),
   };
   showResult(false);
-  shown = null;
   drawMimHints();
   showRef('ready', NONE);
   showMim('idle', NONE);
-  drawBoard();
   // スマホでは、上の見出しの分だけ下がっているので、遊ぶ枠を画面の上に合わせる
   scrollTo(game);
 }
@@ -766,19 +625,17 @@ ref.rec.addEventListener('click', () => void refListen());
 ref.done.addEventListener('click', refFinish);
 ref.cancel.addEventListener('click', refCancel);
 
-/* ---- 遊び方を変えた時: お手本はそのまま、点数は新しい回に ---- */
+/* ---- 遊び方を変えた時: お手本はそのまま、記録は新しい回に ---- */
 for (const r of modeInputs)
   r.addEventListener('change', () => {
     if (!r.checked) return;
     mode = r.value === 'reverse' ? 'reverse' : 'mimic';
     playback.stop();
-    if (model) endRound();
+    endRound();
     showResult(false);
-    shown = null;
     drawMimHints();
     showRef(refState, model ? NONE : refMsg, refBad);
     if (model) showMim('idle', NONE);
-    drawBoard();
   });
 
 /* ---- 2. 真似 ---- */
@@ -902,7 +759,7 @@ function showMim(next: MimState, msg: Msg, bad = false, redraw = false): void {
   const busy = isBusy(next);
   ref.rec.disabled = busy;
   topic.next.disabled = topic.read.disabled = busy;
-  nextBtn.disabled = againBtn.disabled = busy;
+  againBtn.disabled = busy;
   lockAll();
   drawStage();
 }
@@ -946,7 +803,6 @@ function mimFinish(): void {
   }
   const my = mimToken;
   const md = model;
-  const who = current();
   const rev = mode === 'reverse';
   showMim(md.clean.denoise || md.clean.music ? 'cleaning' : 'analysing', M('計算しています…', 'Working it out…'));
   void cleanAndMeasure(
@@ -976,7 +832,7 @@ function mimFinish(): void {
       showMim('failed', () => failText(m.reason, m.info.voicedSeconds, false), true);
       return;
     }
-    if (!render(md.target, wordFeatures(m.features, m.info.voicedSeconds), m.info.contour, who, clip)) {
+    if (!render(md.target, wordFeatures(m.features, m.info.voicedSeconds), m.info.contour, clip)) {
       clip.pcm.fill(0);
       showMim('failed', M('お手本と比べられる項目がありませんでした。お手本か声を録り直してください。', 'No item could be compared with the model. Record the model or your voice again.'), true);
       return;
@@ -1018,20 +874,8 @@ mim.start.addEventListener('click', () => void mimStart());
 mim.done.addEventListener('click', mimFinish);
 mim.cancel.addEventListener('click', mimCancel);
 
-/* ---- 次の人へ・もう一度 ---- */
-const nextBtn = $<HTMLButtonElement>('next-player');
+/* ---- もう一度 ---- */
 const againBtn = $<HTMLButtonElement>('again');
-function nextPlayer(): void {
-  if (players.length < 2 || isBusy(mimState) || isBusy(refState)) return;
-  turn = (turn + 1) % players.length;
-  playback.stop();
-  drawPlayers();
-  drawTurn();
-  drawBoard();
-  if (model) showMim('idle', NONE);
-  scrollTo(game);
-}
-nextBtn.addEventListener('click', nextPlayer);
 againBtn.addEventListener('click', () => {
   if (isBusy(mimState) || isBusy(refState)) return;
   scrollTo(game);
@@ -1053,7 +897,7 @@ document.addEventListener('visibilitychange', () => {
   // お手本を録っている時は止めない（ほかのタブやアプリで流してマイクに聞かせるため。音が来ないまま WAIT_MAX 秒で止まる）
   if (document.hidden && (mimState === 'listening' || mimState === 'asking')) mimCancel();
 });
-// ページを離れる時: 録るのを止め、録った音（お手本・真似）を全部 0 で埋めて捨てる。点数表と名前は数字と文字だけなので残す
+// ページを離れる時: 録るのを止め、録った音（お手本・真似）を全部 0 で埋めて捨てる
 // （戻るで戻った時に、聞き直すボタンが無音を鳴らさないよう、画面も最初に戻す）
 window.addEventListener('pagehide', () => {
   refStop();
@@ -1062,16 +906,10 @@ window.addEventListener('pagehide', () => {
   mimTake.drop();
   playback.close();
   dropModel();
-  for (const p of players) {
-    p.last?.pcm.fill(0);
-    p.last = null;
-  }
-  if (shown?.clip) shown.clip.pcm.fill(0);
-  shown = null;
+  endRound();
   showResult(false);
   showRef('idle', M('録った音は、ページを離れた時に捨てました。', 'Recorded sound was thrown away when you left the page.'));
   showMim('locked', M('先にお手本を録ってください。', 'Record the model first.'));
-  drawBoard();
 });
 
 function failText(reason: MeasureFail, voiced: number | undefined, isModel: boolean): string {
@@ -1129,41 +967,34 @@ function showScore(score: number): void {
   requestAnimationFrame(step);
 }
 /** 出している結果（言葉を切り替えた時に出し直すため）。clip は、この真似の声（聞き直す用） */
-let shown: { tg: Target; mine: Features; mineContour?: Contour; score: number; before: number | null; who: Player; tries: number; reverse: boolean; clip: Clip | null } | null = null;
-function render(tg: Target, mine: Features, mineContour: Contour | undefined, who: Player, clip: Clip): boolean {
+let shown: { tg: Target; mine: Features; mineContour?: Contour; score: number; before: number | null; tries: number; reverse: boolean; clip: Clip | null } | null = null;
+function render(tg: Target, mine: Features, mineContour: Contour | undefined, clip: Clip): boolean {
   const voice = mimicScore(tg.features, mine);
   const line = tg.contour && mineContour ? compareLines(tg.contour, mineContour) : null;
   if (!voice && !line) return false;
   const score = line ? lineScore(line, voice?.score ?? null) : voice!.score;
-  const before = who.best;
-  who.best = Math.max(who.best ?? 0, score);
-  who.roundTries++;
-  who.tries++;
-  // 聞き直す用に、この人の最後の声として持つ（前の声は捨てる）
-  if (who.last && who.last !== clip) who.last.pcm.fill(0);
-  who.last = clip;
-  who.lastReverse = mode === 'reverse';
-  shown = { tg, mine, ...(mineContour ? { mineContour } : {}), score, before, who, tries: who.roundTries, reverse: mode === 'reverse', clip };
+  const before = best;
+  best = Math.max(best ?? 0, score);
+  roundTries++;
+  // 聞き直す用に、最後の声として持つ（前の声は捨てる）
+  if (shown?.clip && shown.clip !== clip) shown.clip.pcm.fill(0);
+  shown = { tg, mine, ...(mineContour ? { mineContour } : {}), score, before, tries: roundTries, reverse: mode === 'reverse', clip };
   showScore(score);
   showResult(true);
   paint();
-  drawBoard();
   return true;
 }
 /** 結果の言葉と図（今の言葉で。点数の数えあがりはしない） */
 function paint(): void {
   if (!shown) return;
-  const { tg, mine, mineContour, score, before, who, tries, reverse } = shown;
+  const { tg, mine, mineContour, score, before, tries, reverse } = shown;
   const voice = mimicScore(tg.features, mine);
   const line = tg.contour && mineContour ? compareLines(tg.contour, mineContour) : null;
   const tgName = tg.name;
-  const many = players.length > 1;
-  const whoJa = many ? `${who.name}：` : '';
-  const whoEn = many ? `${who.name}: ` : '';
   const what = reverse ? t(`${tgName ? `「${tgName}」` : '元の言葉'}との近さ（逆再生チャレンジ）`, `closeness to ${tgName ? `“${tgName}”` : 'the original word'} (reverse challenge)`) : t(`${tgName ? `「${tgName}」` : 'お手本'}との近さ${line ? '（セリフ真似）' : ''}`, `closeness to ${tgName ? `“${tgName}”` : 'the model'}${line ? ' (line mimic)' : ''}`);
-  $('score-label').textContent = t(whoJa, whoEn) + what;
+  $('score-label').textContent = what;
   $('score-word').textContent = scoreWord(score);
-  $('best').textContent = tries === 1 ? '' : before !== null && score > before ? t(`最高点を更新しました（${tries} 回目）`, `New best! (try ${tries})`) : t(`このお手本での${many ? `${who.name}の` : ''}最高は ${who.best} 点です（${tries} 回目）`, `${many ? `${who.name}’s` : 'Your'} best with this model is ${who.best} (try ${tries})`);
+  $('best').textContent = tries === 1 ? '' : before !== null && score > before ? t(`最高点を更新しました（${tries} 回目）`, `New best! (try ${tries})`) : t(`このお手本での最高は ${best} 点です（${tries} 回目）`, `Your best with this model is ${best} (try ${tries})`);
   $('play-mine-rev').hidden = !reverse;
   // キーボードの M は、比べた向きの声（逆再生チャレンジでは、逆にした声）
   $('play-mine').dataset.key = reverse ? '' : 'M';
@@ -1218,7 +1049,7 @@ function paint(): void {
   decor(() =>
     mountShapes($('shapes'), $('shape-guide'), [
       { who: t('お手本', 'Model'), ...(tgName ? { sub: tgName } : {}), f: tg.features },
-      { who: many ? who.name : t('あなた', 'You'), sub: t(`${tries} 回目`, `Try ${tries}`), f: mine },
+      { who: t('あなた', 'You'), sub: t(`${tries} 回目`, `Try ${tries}`), f: mine },
     ]),
   );
 }
@@ -1249,7 +1080,6 @@ document.addEventListener('keydown', (e) => {
   } else if (key === 'p') togglePlay('model');
   else if (key === 'o' && mode === 'reverse') togglePlay('original');
   else if (key === 'm' && shown?.clip) togglePlay(mode === 'reverse' ? 'mine-rev' : 'mine');
-  else if (key === 'n') nextPlayer();
   else if (key === 'escape') {
     if (playback.playing) playback.stop();
     else if (refState === 'listening' || refState === 'asking') refCancel();
@@ -1259,17 +1089,12 @@ document.addEventListener('keydown', (e) => {
 
 showRef('idle', NONE);
 showMim('locked', M('先にお手本を録ってください。', 'Record the model first.'));
-drawTurn();
-drawBoard();
 
 onLang(() => {
-  if (defaultNamed && players.length === 1 && players[0]!.tries === 0) players[0]!.name = t('あなた', 'You');
   showRef(refState, refMsg, refBad, true);
   showMim(mimState, mimMsg, mimBad, true);
   showTopic();
   drawMimHints();
-  drawTurn();
-  drawBoard();
   drawClean();
   drawPlay();
   if (!$('result').hidden) paint();

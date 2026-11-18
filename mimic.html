@@ -43,16 +43,8 @@
             </div>
             <p class="clean-note" id="clean-note" hidden></p>
           </div>
-          <div class="players-bar">
-            <ol class="player-list" id="players" aria-label="挑戦する人（上から順番に）" data-en-aria-label="Players (in turn, from the top)"></ol>
-            <form class="player-add" id="player-add">
-              <input type="text" id="player-name" maxlength="20" autocomplete="off" placeholder="名前" data-en-placeholder="Name" aria-label="足す人の名前" data-en-aria-label="Name of the player to add" />
-              <button type="submit" id="player-add-button"><span lang="ja">＋ 交代で遊ぶ人を足す</span><span lang="en">+ Add a player to take turns</span></button>
-            </form>
-          </div>
 
           <div class="game-body">
-            <p class="turn" id="turn" hidden></p>
             <div class="orb-wrap">
               <div class="orb" id="orb" aria-hidden="true"></div>
               <p class="orb-label" aria-hidden="true"><span lang="ja">聞いています</span><span lang="en">Listening</span></p>
@@ -137,8 +129,7 @@
                   <button type="button" id="play-mine-rev" data-play="mine-rev" hidden><span lang="ja">▶ 逆にした自分の声</span><span lang="en">▶ My voice reversed</span></button>
                 </div>
                 <div class="actions">
-                  <button type="button" class="primary" id="next-player" data-key="N" hidden><span lang="ja">次の人へ</span><span lang="en">Next player</span></button>
-                  <button type="button" id="again" data-key="Space"><span lang="ja">もう一度</span><span lang="en">Try again</span></button>
+                  <button type="button" class="primary" id="again" data-key="Space"><span lang="ja">もう一度</span><span lang="en">Try again</span></button>
                 </div>
               </div>
               <button type="button" class="more-link" id="more-result"><span lang="ja">くわしい結果を見る ▼</span><span lang="en">See the details ▼</span></button>
@@ -147,16 +138,6 @@
           </div>
         </section>
 
-        <section class="card board" id="board" aria-labelledby="board-title">
-          <h2 id="board-title"><span lang="ja">点数表</span><span lang="en">Scoreboard</span></h2>
-          <div class="board-scroll">
-            <table>
-              <thead><tr><th scope="col"><span lang="ja">順位</span><span lang="en">Rank</span></th><th scope="col"><span lang="ja">名前</span><span lang="en">Name</span></th><th scope="col"><span lang="ja">このお手本</span><span lang="en">This model</span></th><th scope="col"><span lang="ja">合計</span><span lang="en">Total</span></th><th scope="col"><span lang="ja">回数</span><span lang="en">Tries</span></th><th scope="col"><span lang="ja">最後の声</span><span lang="en">Last take</span></th></tr></thead>
-              <tbody id="board-body"></tbody>
-            </table>
-          </div>
-          <div class="actions"><button type="button" id="board-clear"><span lang="ja">点数表を消す</span><span lang="en">Clear the scoreboard</span></button></div>
-        </section>
         </div>
 
         <section class="game-more" aria-label="くわしい結果・説明・設定" data-en-aria-label="Details, how to play and settings">
@@ -193,14 +174,12 @@
           <details class="more-item">
             <summary><span lang="ja">遊び方</span><span lang="en">How to play</span></summary>
             <div class="more-body prose">
-              <p><span lang="ja">マイクでお手本を録って、何回でも聞き直して、真似して点数を競います。お手本も真似も同じマイクで録るので、マイクの違いで点数が変わりません。配信やコラボで、8 人まで同じ画面で交代して遊べます（通信はしません。離れた人とは、配信や通話の音をマイクに聞かせて遊びます）。</span><span lang="en">Record a model with the mic, replay it as often as you like, then imitate it and compete for points. The model and the imitations go through the same mic, so the mic does not change the score. Up to 8 players can take turns on the same screen, on stream or in a collab (nothing goes over the network; players far away play through the stream or call audio into the mic).</span></p>
+              <p><span lang="ja">マイクでお手本を録って、何回でも聞き直して、真似して点数を出します。お手本も真似も同じマイクで録るので、マイクの違いで点数が変わりません。</span><span lang="en">Record a model with the mic, replay it as often as you like, then imitate it and get a score. The model and the imitations go through the same mic, so the mic does not change the score.</span></p>
               <dl class="rules">
                 <dt><span lang="ja">声真似</span><span lang="en">Mimic</span></dt>
                 <dd><span lang="ja">お手本の声を、マイクに聞かせて録ります（自分や相手が言う・スマホなどで流す）。セリフ 1 つ（「はい」「えっ」のような一言から）なら、同じセリフを真似して、抑揚・タイミング・声の質で点数を出します。長いお手本なら、お題をお手本の声で話して、声の数字だけで比べます。</span><span lang="en">Play the model’s voice into the mic (say it yourself, have someone say it, or play it from a phone). For a single line (even one word like “yes”), say the same line and get scored on intonation, timing and voice. For a longer model, talk about a prompt in the model’s voice and only the voice numbers are compared.</span></dd>
                 <dt><span lang="ja">逆再生チャレンジ</span><span lang="en">Reverse challenge</span></dt>
                 <dd><span lang="ja">逆再生にする言葉を録ります（名前や「こんにちは」くらいの短い言葉がおすすめ。一言でも遊べます）。逆再生を聞いて、聞こえたとおりに真似すると、録った声を逆にして、元の言葉と比べます。「元の言葉を聞く」が答えです。</span><span lang="en">Record a word to reverse (a name or a short word like “hello” works best; even one word works). Listen to it reversed and imitate what you hear; your take is reversed and compared with the original word. “Play the original word” is the answer.</span></dd>
-                <dt><span lang="ja">点数表</span><span lang="en">Scoreboard</span></dt>
-                <dd><span lang="ja">合計は、お手本ごとの最高点を足した数です。新しいお手本を録るか、遊び方を変えると、次の回になります。</span><span lang="en">The total adds up each player’s best score for every model. Recording a new model or switching the game starts a new round.</span></dd>
                 <dt><span lang="ja">お手本の名前</span><span lang="en">Name of the model</span></dt>
                 <dd><span lang="ja">メモです。結果の画像と「X に投稿」の文にも入ります。外に出るのは、あなたが投稿した時だけです。</span><span lang="en">A note. It also goes into the result image and the “Post on X” text, which leave this device only if you post them.</span></dd>
               </dl>
@@ -219,7 +198,7 @@
                 <dt><span lang="ja">お手本と真似に同じように</span><span lang="en">Same for the model and the imitations</span></dt>
                 <dd><span lang="ja">お手本を録った時のノイズカットを、そのお手本の間ずっと使います。変えた物は、次のお手本からです。音は端末の中できれいにし、どこにも送りません。</span><span lang="en">The noise cut chosen when the model was recorded is used for that whole model. Changes apply from the next model. The sound is cleaned on this device and never sent.</span></dd>
                 <dt><span lang="ja">配信向け</span><span lang="en">Stream view</span></dt>
-                <dd><span lang="ja">下の説明を隠して、点数と順番を大きくします（このタブを閉じるまで覚えます）。</span><span lang="en">Hides the explanations below and makes the score and turn bigger (remembered until this tab is closed).</span></dd>
+                <dd><span lang="ja">下の説明を隠して、点数と今することの 1 行を大きくします（このタブを閉じるまで覚えます）。</span><span lang="en">Hides the explanations below and makes the score and the line telling you what to do bigger (remembered until this tab is closed).</span></dd>
               </dl>
             </div>
           </details>
@@ -231,7 +210,6 @@
               <li><kbd>P</kbd> <span lang="ja">お手本を聞く（逆再生チャレンジでは、逆再生）</span><span lang="en">Play the model (reversed in the reverse challenge)</span></li>
               <li><kbd>O</kbd> <span lang="ja">元の言葉を聞く（逆再生チャレンジ）</span><span lang="en">Play the original word (reverse challenge)</span></li>
               <li><kbd>M</kbd> <span lang="ja">自分の声を聞く（逆再生チャレンジでは、逆にした声）</span><span lang="en">Play your voice (reversed in the reverse challenge)</span></li>
-              <li><kbd>N</kbd> <span lang="ja">次の人へ</span><span lang="en">Next player</span></li>
               <li><kbd>Esc</kbd> <span lang="ja">止める</span><span lang="en">Stop</span></li>
             </ul>
           </details>
