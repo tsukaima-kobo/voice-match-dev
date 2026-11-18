@@ -17,49 +17,212 @@
         <a class="logo" href="./"><i class="logo-orb" aria-hidden="true"></i>voice<span>-</span>match</a>
         <nav aria-label="ページ" data-en-aria-label="Pages"><a href="./"><span lang="ja">声をくらべる</span><span lang="en">Compare</span></a><a href="./mimic.html" aria-current="page"><span lang="ja">声真似練習場</span><span lang="en">Mimic studio</span></a><a href="./voices.html"><span lang="ja">声の一覧</span><span lang="en">Voices</span></a><a href="./about.html"><span lang="ja">しくみと約束</span><span lang="en">How it works</span></a></nav>
       </header>
-      <main>
-        <section class="hero hero-mimic">
-          <div class="hero-copy">
-            <p class="eyebrow"><span lang="ja">声真似練習場</span><span lang="en">Voice-mimic studio</span></p>
-            <h1><span lang="ja"><span class="grad">声真似</span>で遊ぶ</span><span lang="en">Play with <span class="grad">mimicry</span></span></h1>
-            <p class="lead"><span lang="ja">マイクでお手本を録って、何回でも聞き直して、真似して点数を競います。逆再生した言葉を真似する「逆再生チャレンジ」もあります。お手本も真似も同じマイクで録るので、マイクの違いで点数が変わりません。配信やコラボで、何人でも順番に遊べます。</span><span lang="en">Record a model with the mic, replay it as often as you like, then imitate it and compete for points. There is also a “reverse challenge” where you imitate a word played backwards. The model and the imitations go through the same mic, so the mic does not change the score. Any number of players can take turns, on stream or in a collab.</span></p>
-            <ul class="chips"><li><span lang="ja">マイクだけ</span><span lang="en">Mic only</span></li><li><span lang="ja">何回でも聞き直せる</span><span lang="en">Replay any time</span></li><li><span lang="ja">音はページを離れると消える・送らない</span><span lang="en">Sound is gone when you leave, never sent</span></li></ul>
+      <main class="game-page">
+        <div class="game-wrap">
+        <section class="card game" id="game" data-phase="ref" aria-labelledby="game-title">
+          <div class="game-bar">
+            <h1 class="game-title sr-only" id="game-title"><span lang="ja"><span class="grad">声真似</span>練習場</span><span lang="en"><span class="grad">Mimic</span> studio</span></h1>
+            <div class="seg" role="radiogroup" aria-label="遊び方" data-en-aria-label="Game">
+              <label><input type="radio" name="mode" value="mimic" checked /><span lang="ja">声真似</span><span lang="en">Mimic</span></label>
+              <label><input type="radio" name="mode" value="reverse" /><span lang="ja">逆再生チャレンジ</span><span lang="en">Reverse challenge</span></label>
+            </div>
+            <fieldset class="toggles">
+              <legend class="sr-only"><span lang="ja">音をきれいにする・表示</span><span lang="en">Clean-up and view</span></legend>
+              <label class="toggle"><input type="checkbox" id="clean-noise" /><span lang="ja">ノイズを減らす</span><span lang="en">Reduce noise</span></label>
+              <label class="toggle"><input type="checkbox" id="clean-music" /><span lang="ja">音楽を消す</span><span lang="en">Remove music</span></label>
+              <label class="toggle"><input type="checkbox" id="stream-view" /><span lang="ja">配信向け</span><span lang="en">Stream view</span></label>
+            </fieldset>
+            <p class="clean-note" id="clean-note" hidden></p>
           </div>
-          <div class="orb-wrap">
-            <div class="orb" id="orb" aria-hidden="true"></div>
-            <p class="orb-label" aria-hidden="true"><span lang="ja">聞いています</span><span lang="en">Listening</span></p>
+          <div class="players-bar">
+            <ol class="player-list" id="players" aria-label="挑戦する人（上から順番に）" data-en-aria-label="Players (in turn, from the top)"></ol>
+            <form class="player-add" id="player-add">
+              <input type="text" id="player-name" maxlength="20" autocomplete="off" placeholder="名前" data-en-placeholder="Name" aria-label="足す人の名前" data-en-aria-label="Name of the player to add" />
+              <button type="submit" id="player-add-button"><span lang="ja">＋ 人を足す</span><span lang="en">+ Add player</span></button>
+            </form>
+          </div>
+
+          <div class="game-body">
+            <p class="turn" id="turn" hidden></p>
+            <div class="orb-wrap">
+              <div class="orb" id="orb" aria-hidden="true"></div>
+              <p class="orb-label" aria-hidden="true"><span lang="ja">聞いています</span><span lang="en">Listening</span></p>
+            </div>
+            <p class="cue" id="cue" aria-live="polite"></p>
+
+            <section class="stage step" id="ref" data-state="idle" aria-label="お手本" data-en-aria-label="Model">
+              <div id="ref-pick" class="pick">
+                <input type="text" id="ref-name" maxlength="40" autocomplete="off" placeholder="お手本の名前（なくてもよい）" data-en-placeholder="Name of the model (optional)" aria-label="お手本の名前（結果の画像と「X に投稿」の文に入ります）" data-en-aria-label="Name of the model (goes into the result image and the “Post on X” text)" />
+              </div>
+              <div id="ref-live"></div>
+              <canvas class="wave" id="ref-wave" aria-hidden="true"></canvas>
+              <div class="meter" aria-hidden="true">
+                <div class="track"><div class="fill" id="ref-fill"></div></div>
+                <div class="sec" id="ref-sec"></div>
+              </div>
+              <div class="actions">
+                <button type="button" class="primary" id="ref-rec"></button>
+                <button type="button" class="primary" id="ref-done" data-key="Space" hidden></button>
+                <button type="button" id="ref-cancel" data-key="Esc" hidden></button>
+              </div>
+              <div class="playback" id="ref-play" role="group" aria-label="お手本を聞く" data-en-aria-label="Play the model" hidden>
+                <button type="button" id="play-model" data-play="model" data-key="P"></button>
+                <button type="button" id="play-original" data-play="original" data-key="O" hidden></button>
+              </div>
+              <p class="ref-summary" id="ref-summary" hidden></p>
+              <p class="status" id="ref-status" role="status" aria-live="polite"></p>
+            </section>
+
+            <section class="stage step" id="mim" data-state="locked" aria-label="真似する" data-en-aria-label="Imitate">
+              <div class="topic" id="topic-box" hidden>
+                <p class="topic-label" id="topic-label">お題</p>
+                <p class="topic-text" id="topic-text"></p>
+                <div class="topic-actions">
+                  <button type="button" id="topic-next">次のお題</button>
+                  <button type="button" id="topic-read">決まった文を読む</button>
+                </div>
+              </div>
+              <div id="mim-live"></div>
+              <canvas class="wave" id="mim-wave" aria-hidden="true"></canvas>
+              <div class="meter" aria-hidden="true">
+                <div class="track"><div class="fill" id="mim-fill"></div></div>
+                <div class="sec" id="mim-sec"></div>
+              </div>
+              <div class="actions">
+                <button type="button" class="primary" id="mim-start" data-key="Space" disabled>真似する</button>
+                <button type="button" class="primary" id="mim-done" data-key="Space" hidden>話し終えた</button>
+                <button type="button" id="mim-cancel" data-key="Esc" hidden>やめる</button>
+              </div>
+              <p class="status" id="mim-status" role="status" aria-live="polite"></p>
+            </section>
+
+            <section class="result" id="result" hidden aria-live="polite" aria-label="点数" data-en-aria-label="Score">
+              <div class="score-wrap">
+                <div class="score-card">
+                  <div class="gauge" id="gauge"><p class="score"><span id="score"></span><small lang="ja">点</small><small lang="en">pts</small></p></div>
+                  <div class="score-text">
+                    <p class="score-label" id="score-label"></p>
+                    <p class="score-word" id="score-word"></p>
+                    <p class="best" id="best"></p>
+                    <div class="subscores" id="subscores" hidden>
+                      <div class="sub" id="sub-into"><span><span lang="ja">抑揚</span><span lang="en">Intonation</span></span><i aria-hidden="true"></i><b></b></div>
+                      <div class="sub" id="sub-timing"><span><span lang="ja">タイミング</span><span lang="en">Timing</span></span><i aria-hidden="true"></i><b></b></div>
+                      <div class="sub" id="sub-voice"><span><span lang="ja">声の質</span><span lang="en">Voice</span></span><i aria-hidden="true"></i><b></b></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="result-actions">
+                <div class="playback" role="group" aria-label="自分の声を聞き直す" data-en-aria-label="Listen to your take">
+                  <button type="button" id="play-mine" data-play="mine"><span lang="ja">▶ 自分の声</span><span lang="en">▶ My voice</span></button>
+                  <button type="button" id="play-mine-rev" data-play="mine-rev" hidden><span lang="ja">▶ 逆にした自分の声</span><span lang="en">▶ My voice reversed</span></button>
+                </div>
+                <div class="actions">
+                  <button type="button" class="primary" id="next-player" data-key="N" hidden><span lang="ja">次の人へ</span><span lang="en">Next player</span></button>
+                  <button type="button" id="again" data-key="Space"><span lang="ja">もう一度</span><span lang="en">Try again</span></button>
+                </div>
+              </div>
+              <button type="button" class="more-link" id="more-result"><span lang="ja">くわしい結果を見る ▼</span><span lang="en">See the details ▼</span></button>
+            </section>
           </div>
         </section>
 
-        <section class="card game-setup" id="setup" aria-labelledby="setup-title">
-          <h2 id="setup-title"><span lang="ja">遊び方</span><span lang="en">How to play</span></h2>
-          <div class="modes" role="radiogroup" aria-label="遊び方" data-en-aria-label="Game">
-            <label class="mode"><input type="radio" name="mode" value="mimic" checked /><b><span lang="ja">声真似</span><span lang="en">Mimic</span></b><span class="mode-note"><span lang="ja">お手本の声を真似して、どれだけ近いかで点数</span><span lang="en">Imitate the model; scored by how close you get</span></span></label>
-            <label class="mode"><input type="radio" name="mode" value="reverse" /><b><span lang="ja">逆再生チャレンジ</span><span lang="en">Reverse challenge</span></b><span class="mode-note"><span lang="ja">逆再生した言葉を真似して、それを逆にすると元の言葉に聞こえるか</span><span lang="en">Imitate a word played backwards; reversed again, does it sound like the word?</span></span></label>
+        <section class="card board" id="board" aria-labelledby="board-title">
+          <h2 id="board-title"><span lang="ja">点数表</span><span lang="en">Scoreboard</span></h2>
+          <div class="board-scroll">
+            <table>
+              <thead><tr><th scope="col"><span lang="ja">順位</span><span lang="en">Rank</span></th><th scope="col"><span lang="ja">名前</span><span lang="en">Name</span></th><th scope="col"><span lang="ja">このお手本</span><span lang="en">This model</span></th><th scope="col"><span lang="ja">合計</span><span lang="en">Total</span></th><th scope="col"><span lang="ja">回数</span><span lang="en">Tries</span></th><th scope="col"><span lang="ja">最後の声</span><span lang="en">Last take</span></th></tr></thead>
+              <tbody id="board-body"></tbody>
+            </table>
           </div>
-          <div class="players-box">
-            <p class="setup-label"><span lang="ja">挑戦する人（上から順番に）</span><span lang="en">Players (in turn, from the top)</span></p>
-            <ol class="player-list" id="players"></ol>
-            <form class="player-add" id="player-add">
-              <input type="text" id="player-name" maxlength="20" autocomplete="off" placeholder="名前" data-en-placeholder="Name" aria-label="足す人の名前" data-en-aria-label="Name of the player to add" />
-              <button type="submit" id="player-add-button"><span lang="ja">人を足す</span><span lang="en">Add player</span></button>
-            </form>
-          </div>
-          <fieldset class="cleaning">
-            <legend><span lang="ja">音をきれいにする（お手本と真似の両方に、同じようにかけます）</span><span lang="en">Clean up the sound (applied the same way to the model and the imitations)</span></legend>
-            <label class="check"><input type="checkbox" id="clean-noise" /> <span><span lang="ja"><strong>ノイズを減らす</strong>（RNNoise。部屋の雑音・ファンの音などを減らします。スマホでも動きます）</span><span lang="en"><strong>Reduce noise</strong> (RNNoise; removes room noise, fans and so on; works on phones too)</span></span></label>
-            <label class="check"><input type="checkbox" id="clean-music" /> <span><span lang="ja"><strong>音楽を消す</strong>（Demucs。BGM や歌の伴奏を消して、声だけにします。WebGPU の使えるパソコンのブラウザーだけ）</span><span lang="en"><strong>Remove music</strong> (Demucs; removes BGM and backing tracks, leaving the voice; computer browsers with WebGPU only)</span></span></label>
-            <p class="hint" id="clean-note"></p>
-          </fieldset>
-          <div class="mic-pick" id="mic-pick" hidden>
-            <label for="mic-select"><span lang="ja">マイク</span><span lang="en">Mic</span></label>
-            <select id="mic-select"><option value="">いつものマイク（端末の設定）</option></select>
-            <button type="button" id="mic-find"><span lang="ja">ほかのマイクを選ぶ</span><span lang="en">Choose another mic</span></button>
-          </div>
-          <label class="check"><input type="checkbox" id="stream-view" /> <span><span lang="ja">配信向けの表示（説明を隠して、点数と順番を大きく）</span><span lang="en">Stream view (hides the explanations, makes the score and turn bigger)</span></span></label>
-          <details class="keys">
+          <div class="actions"><button type="button" id="board-clear"><span lang="ja">点数表を消す</span><span lang="en">Clear the scoreboard</span></button></div>
+        </section>
+        </div>
+
+        <section class="game-more" aria-label="くわしい結果・説明・設定" data-en-aria-label="Details, how to play and settings">
+          <details class="more-item" id="detail" hidden>
+            <summary><span lang="ja">くわしい結果（抑揚の重なり・声紋・直し方・項目・シェア）</span><span lang="en">Details (intonation overlay, voiceprints, tips, items, share)</span></summary>
+            <div class="more-body">
+              <figure class="line-box card" id="line-box" hidden>
+                <figcaption class="line-head">
+                  <span class="line-title"><span lang="ja">抑揚の重なり</span><span lang="en">Intonation overlay</span></span>
+                  <span class="legend"><span><i class="swatch ref" aria-hidden="true"></i><span lang="ja">お手本</span><span lang="en">Model</span></span><span><i class="swatch mine" aria-hidden="true"></i><span lang="ja">あなた（お手本の時間に合わせて）</span><span lang="en">You (aligned to the model’s timing)</span></span></span>
+                </figcaption>
+                <div class="line-frame">
+                  <span class="axis hi"><span lang="ja">高い</span><span lang="en">High</span></span><span class="axis lo"><span lang="ja">低い</span><span lang="en">Low</span></span>
+                  <div class="line-chart" id="line-chart"></div>
+                </div>
+                <p class="line-foot"><span><span lang="ja">0 秒</span><span lang="en">0 s</span></span><span><span lang="ja">下の山はお手本の声の大きさ</span><span lang="en">The hills below show the model’s loudness</span></span><span id="line-seconds"></span></p>
+              </figure>
+              <section class="shape-sec" aria-labelledby="shape-title">
+                <header class="section-head">
+                  <p class="kicker"><span lang="ja">声紋</span><span lang="en">Voiceprint</span></p>
+                  <h2 id="shape-title"><span lang="ja">お手本とあなたの<span class="grad">声紋</span></span><span lang="en">The model’s and your <span class="grad">voiceprints</span></span></h2>
+                  <p><span lang="ja">測った数字から描いた、声だけの模様です。模様が似るほど、声も似ています。下の名前を押すと、図のどこが何を表すかが分かります。</span><span lang="en">Patterns drawn from the numbers, one per voice. The more alike the patterns, the more alike the voices. Press a name below to see which part shows what.</span></p>
+                </header>
+                <div class="shape-row">
+                  <div class="shapes" id="shapes"></div>
+                  <div class="shape-guide" id="shape-guide"></div>
+                </div>
+              </section>
+              <section id="share" aria-label="シェア" data-en-aria-label="Share"></section>
+              <header class="section-head">
+                <p class="kicker"><span lang="ja">01 直し方</span><span lang="en">01 Tips</span></p>
+                <h2><span lang="ja">近づけるには</span><span lang="en">To get closer</span></h2>
+              </header>
+              <ol class="advice" id="advice"></ol>
+              <header class="section-head">
+                <p class="kicker"><span lang="ja">02 くらべる</span><span lang="en">02 Compare</span></p>
+                <h2><span lang="ja">お手本とあなた</span><span lang="en">The model and you</span></h2>
+              </header>
+              <p class="legend"><span><i class="dot ref" aria-hidden="true"></i><span lang="ja">お手本</span><span lang="en">Model</span></span><span><i class="dot" aria-hidden="true"></i><span lang="ja">あなた</span><span lang="en">You</span></span></p>
+              <div class="groups" id="compare"></div>
+              <p class="empty"><span lang="ja">声の質の点と直し方は、自分で変えやすい 12 項目（高さ・抑揚・響き・息・柔らかさ・力・速さ・間・強弱）で出します。短い声では、測れた項目だけで比べます（「—」の項目）。セリフ真似の点数は、抑揚 4・タイミング 2.5・声の質 3.5 の割合で合わせます。点数は今のところの目安で、本物の声で確かめたら目盛りを見直します。声から性別や年齢は判断しません。</span><span lang="en">The voice score and tips use 12 measures that are easy to change yourself (pitch, intonation, resonance, breath, softness, power, tempo, pauses and dynamics). For a short voice, only the measured items are compared (those shown as “—” are not). The line-mimic score weighs intonation 4, timing 2.5 and voice 3.5. Scores are a rough guide for now and will be tuned with real voices. Gender and age are never guessed from a voice.</span></p>
+            </div>
+          </details>
+
+          <details class="more-item">
+            <summary><span lang="ja">遊び方</span><span lang="en">How to play</span></summary>
+            <div class="more-body prose">
+              <p><span lang="ja">マイクでお手本を録って、何回でも聞き直して、真似して点数を競います。お手本も真似も同じマイクで録るので、マイクの違いで点数が変わりません。配信やコラボで、8 人まで順番に遊べます。</span><span lang="en">Record a model with the mic, replay it as often as you like, then imitate it and compete for points. The model and the imitations go through the same mic, so the mic does not change the score. Up to 8 players can take turns, on stream or in a collab.</span></p>
+              <dl class="rules">
+                <dt><span lang="ja">声真似</span><span lang="en">Mimic</span></dt>
+                <dd><span lang="ja">お手本の声を、マイクに聞かせて録ります（自分や相手が言う・スマホなどで流す）。セリフ 1 つ（「おはようございます」くらいから）なら、同じセリフを真似して、抑揚・タイミング・声の質で点数を出します。長いお手本なら、お題をお手本の声で話して、声の数字だけで比べます。</span><span lang="en">Play the model’s voice into the mic (say it yourself, have someone say it, or play it from a phone). For a single line (from a short phrase up), say the same line and get scored on intonation, timing and voice. For a longer model, talk about a prompt in the model’s voice and only the voice numbers are compared.</span></dd>
+                <dt><span lang="ja">逆再生チャレンジ</span><span lang="en">Reverse challenge</span></dt>
+                <dd><span lang="ja">逆再生にする言葉を録ります（「おはようございます」くらいの短い言葉がおすすめ）。逆再生を聞いて、聞こえたとおりに真似すると、録った声を逆にして、元の言葉と比べます。「元の言葉を聞く」が答えです。</span><span lang="en">Record a word to reverse (a short phrase like “good morning” works best). Listen to it reversed and imitate what you hear; your take is reversed and compared with the original word. “Play the original word” is the answer.</span></dd>
+                <dt><span lang="ja">点数表</span><span lang="en">Scoreboard</span></dt>
+                <dd><span lang="ja">合計は、お手本ごとの最高点を足した数です。新しいお手本を録るか、遊び方を変えると、次の回になります。</span><span lang="en">The total adds up each player’s best score for every model. Recording a new model or switching the game starts a new round.</span></dd>
+                <dt><span lang="ja">お手本の名前</span><span lang="en">Name of the model</span></dt>
+                <dd><span lang="ja">メモです。結果の画像と「X に投稿」の文にも入ります。外に出るのは、あなたが投稿した時だけです。</span><span lang="en">A note. It also goes into the result image and the “Post on X” text, which leave this device only if you post them.</span></dd>
+              </dl>
+              <ul class="chips"><li><span lang="ja">マイクだけ</span><span lang="en">Mic only</span></li><li><span lang="ja">何回でも聞き直せる</span><span lang="en">Replay any time</span></li><li><span lang="ja">音はページを離れると消える・送らない</span><span lang="en">Sound is gone when you leave, never sent</span></li></ul>
+            </div>
+          </details>
+
+          <details class="more-item">
+            <summary><span lang="ja">音をきれいにする・マイク・配信向けの表示</span><span lang="en">Clean-up, mic and stream view</span></summary>
+            <div class="more-body prose">
+              <dl class="rules">
+                <dt><span lang="ja">ノイズを減らす</span><span lang="en">Reduce noise</span></dt>
+                <dd><span lang="ja">RNNoise。部屋の雑音・ファンの音などを減らします。スマホでも動きます。</span><span lang="en">RNNoise. Removes room noise, fans and so on. Works on phones too.</span></dd>
+                <dt><span lang="ja">音楽を消す</span><span lang="en">Remove music</span></dt>
+                <dd><span lang="ja">Demucs。BGM や歌の伴奏を消して、声だけにします。WebGPU の使えるパソコンのブラウザー（Chrome・Edge など）だけで動きます。最初の 1 回だけ、AI（約 155 MB）をこのサイトから読みます。</span><span lang="en">Demucs. Removes BGM and backing tracks, leaving the voice. Works only in computer browsers with WebGPU (Chrome, Edge and others). The AI (about 155 MB) is read from this site the first time only.</span></dd>
+                <dt><span lang="ja">お手本と真似に同じように</span><span lang="en">Same for the model and the imitations</span></dt>
+                <dd><span lang="ja">お手本を録った時の選び方を、そのお手本の間ずっと使います。変えた物は、次のお手本からです。音は端末の中できれいにし、どこにも送りません。</span><span lang="en">The choice made when the model was recorded is used for that whole model. Changes apply from the next model. The sound is cleaned on this device and never sent.</span></dd>
+                <dt><span lang="ja">配信向け</span><span lang="en">Stream view</span></dt>
+                <dd><span lang="ja">下の説明を隠して、点数と順番を大きくします（このタブを閉じるまで覚えます）。</span><span lang="en">Hides the explanations below and makes the score and turn bigger (remembered until this tab is closed).</span></dd>
+              </dl>
+              <div class="mic-pick" id="mic-pick" hidden>
+                <label for="mic-select"><span lang="ja">マイク</span><span lang="en">Mic</span></label>
+                <select id="mic-select"><option value="">いつものマイク（端末の設定）</option></select>
+                <button type="button" id="mic-find"><span lang="ja">ほかのマイクを選ぶ</span><span lang="en">Choose another mic</span></button>
+              </div>
+            </div>
+          </details>
+
+          <details class="more-item keys">
             <summary><span lang="ja">キーボードで遊ぶ</span><span lang="en">Keyboard controls</span></summary>
-            <ul>
+            <ul class="more-body">
               <li><kbd>Space</kbd> <span lang="ja">録る・録り終える（お手本も真似も）</span><span lang="en">Start or finish recording (model and imitation)</span></li>
               <li><kbd>P</kbd> <span lang="ja">お手本を聞く（逆再生チャレンジでは、逆再生）</span><span lang="en">Play the model (reversed in the reverse challenge)</span></li>
               <li><kbd>O</kbd> <span lang="ja">元の言葉を聞く（逆再生チャレンジ）</span><span lang="en">Play the original word (reverse challenge)</span></li>
@@ -68,142 +231,9 @@
               <li><kbd>Esc</kbd> <span lang="ja">止める</span><span lang="en">Stop</span></li>
             </ul>
           </details>
-        </section>
 
-        <div class="steps">
-
-        <section class="stage step" id="ref" data-state="idle" aria-labelledby="ref-title">
-          <div class="step-head"><span class="step-no" aria-hidden="true">1</span><h2 id="ref-title"></h2></div>
-          <div id="ref-pick" class="pick">
-            <p class="hint" id="ref-hint"></p>
-            <div class="field">
-              <label for="ref-name"><span lang="ja">お手本の名前（メモ。結果の画像と「X に投稿」の文にも入ります。外に出るのは、あなたが投稿した時だけです）</span><span lang="en">Name of the model (a note; it also goes into the result image and the “Post on X” text, which leave this device only if you post them)</span></label>
-              <input type="text" id="ref-name" maxlength="40" autocomplete="off" placeholder="例: 好きなキャラ" data-en-placeholder="e.g. a favourite character" />
-            </div>
-          </div>
-          <div id="ref-live"></div>
-          <canvas class="wave" id="ref-wave" aria-hidden="true"></canvas>
-          <div class="meter" aria-hidden="true">
-            <div class="track"><div class="fill" id="ref-fill"></div></div>
-            <div class="sec" id="ref-sec"></div>
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" id="ref-rec"></button>
-            <button type="button" class="primary" id="ref-done" hidden></button>
-            <button type="button" id="ref-cancel" hidden></button>
-          </div>
-          <div class="playback" id="ref-play" role="group" aria-label="お手本を聞く" data-en-aria-label="Play the model" hidden>
-            <button type="button" id="play-model" data-play="model"></button>
-            <button type="button" id="play-original" data-play="original" hidden></button>
-          </div>
-          <p class="ref-summary" id="ref-summary" hidden></p>
-          <p class="status" id="ref-status" role="status" aria-live="polite"></p>
+          <p class="empty"><span lang="ja">声をサイトに登録したい時は、<a href="./register.html">声を登録する</a>のページへ（タブの音や音声ファイルからも測れます）。</span><span lang="en">To add a voice to the site, go to <a href="./register.html">Add a voice</a> (it can also measure a tab or a sound file).</span></p>
         </section>
-
-        <section class="stage step" id="mim" data-state="locked" aria-labelledby="mim-title">
-          <div class="step-head"><span class="step-no" aria-hidden="true">2</span><h2 id="mim-title"><span lang="ja">真似する</span><span lang="en">Imitate</span></h2></div>
-          <p class="turn" id="turn"></p>
-          <p class="line-hint" id="line-hint" hidden></p>
-          <div class="topic" id="topic-box" hidden>
-            <p class="hint"><span lang="ja">お手本と同じセリフでも、下のお題をお手本の声で話してもかまいません（最大 35 秒）。</span><span lang="en">Say the same line as the model, or talk about the prompt below in the model’s voice (up to 35 s).</span></p>
-            <p class="topic-label" id="topic-label">お題</p>
-            <p class="topic-text" id="topic-text"></p>
-            <div class="topic-actions">
-              <button type="button" id="topic-next">次のお題</button>
-              <button type="button" id="topic-read">決まった文を読む</button>
-            </div>
-          </div>
-          <div id="mim-live"></div>
-          <canvas class="wave" id="mim-wave" aria-hidden="true"></canvas>
-          <div class="meter" aria-hidden="true">
-            <div class="track"><div class="fill" id="mim-fill"></div></div>
-            <div class="sec" id="mim-sec"></div>
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" id="mim-start" disabled>真似する</button>
-            <button type="button" class="primary" id="mim-done" hidden>話し終えた</button>
-            <button type="button" id="mim-cancel" hidden>やめる</button>
-          </div>
-          <p class="status" id="mim-status" role="status" aria-live="polite"></p>
-        </section>
-        </div>
-
-        <section class="result" id="result" hidden aria-live="polite">
-          <div class="score-wrap">
-            <div class="score-card">
-              <div class="gauge" id="gauge"><p class="score"><span id="score"></span><small lang="ja">点</small><small lang="en">pts</small></p></div>
-              <div class="score-text">
-                <p class="score-label" id="score-label"></p>
-                <p class="score-word" id="score-word"></p>
-                <p class="best" id="best"></p>
-                <div class="subscores" id="subscores" hidden>
-                  <div class="sub" id="sub-into"><span><span lang="ja">抑揚</span><span lang="en">Intonation</span></span><i aria-hidden="true"></i><b></b></div>
-                  <div class="sub" id="sub-timing"><span><span lang="ja">タイミング</span><span lang="en">Timing</span></span><i aria-hidden="true"></i><b></b></div>
-                  <div class="sub" id="sub-voice"><span><span lang="ja">声の質</span><span lang="en">Voice</span></span><i aria-hidden="true"></i><b></b></div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="result-actions card">
-            <div class="playback" role="group" aria-label="聞き直す" data-en-aria-label="Listen again">
-              <button type="button" id="play-mine" data-play="mine"><span lang="ja">▶ 自分の声</span><span lang="en">▶ My voice</span></button>
-              <button type="button" id="play-mine-rev" data-play="mine-rev" hidden><span lang="ja">▶ 逆にした自分の声</span><span lang="en">▶ My voice reversed</span></button>
-              <button type="button" id="play-model2" data-play="model"><span lang="ja">▶ お手本</span><span lang="en">▶ Model</span></button>
-            </div>
-            <div class="actions">
-              <button type="button" class="primary" id="next-player" hidden><span lang="ja">次の人へ</span><span lang="en">Next player</span></button>
-              <button type="button" id="again"><span lang="ja">もう一度</span><span lang="en">Try again</span></button>
-            </div>
-          </div>
-          <figure class="line-box card" id="line-box" hidden>
-            <figcaption class="line-head">
-              <span class="line-title"><span lang="ja">抑揚の重なり</span><span lang="en">Intonation overlay</span></span>
-              <span class="legend"><span><i class="swatch ref" aria-hidden="true"></i><span lang="ja">お手本</span><span lang="en">Model</span></span><span><i class="swatch mine" aria-hidden="true"></i><span lang="ja">あなた（お手本の時間に合わせて）</span><span lang="en">You (aligned to the model’s timing)</span></span></span>
-            </figcaption>
-            <div class="line-frame">
-              <span class="axis hi"><span lang="ja">高い</span><span lang="en">High</span></span><span class="axis lo"><span lang="ja">低い</span><span lang="en">Low</span></span>
-              <div class="line-chart" id="line-chart"></div>
-            </div>
-            <p class="line-foot"><span><span lang="ja">0 秒</span><span lang="en">0 s</span></span><span><span lang="ja">下の山はお手本の声の大きさ</span><span lang="en">The hills below show the model’s loudness</span></span><span id="line-seconds"></span></p>
-          </figure>
-          <section class="shape-sec" aria-labelledby="shape-title">
-            <header class="section-head">
-              <p class="kicker"><span lang="ja">声紋</span><span lang="en">Voiceprint</span></p>
-              <h2 id="shape-title"><span lang="ja">お手本とあなたの<span class="grad">声紋</span></span><span lang="en">The model’s and your <span class="grad">voiceprints</span></span></h2>
-              <p><span lang="ja">測った数字から描いた、声だけの模様です。模様が似るほど、声も似ています。下の名前を押すと、図のどこが何を表すかが分かります。</span><span lang="en">Patterns drawn from the numbers, one per voice. The more alike the patterns, the more alike the voices. Press a name below to see which part shows what.</span></p>
-            </header>
-            <div class="shape-row">
-              <div class="shapes" id="shapes"></div>
-              <div class="shape-guide" id="shape-guide"></div>
-            </div>
-          </section>
-          <section id="share" aria-label="シェア" data-en-aria-label="Share"></section>
-          <header class="section-head">
-            <p class="kicker"><span lang="ja">01 直し方</span><span lang="en">01 Tips</span></p>
-            <h2><span lang="ja">近づけるには</span><span lang="en">To get closer</span></h2>
-          </header>
-          <ol class="advice" id="advice"></ol>
-          <header class="section-head">
-            <p class="kicker"><span lang="ja">02 くらべる</span><span lang="en">02 Compare</span></p>
-            <h2><span lang="ja">お手本とあなた</span><span lang="en">The model and you</span></h2>
-          </header>
-          <p class="legend"><span><i class="dot ref" aria-hidden="true"></i><span lang="ja">お手本</span><span lang="en">Model</span></span><span><i class="dot" aria-hidden="true"></i><span lang="ja">あなた</span><span lang="en">You</span></span></p>
-          <div class="groups" id="compare"></div>
-          <p class="empty"><span lang="ja">声の質の点と直し方は、自分で変えやすい 12 項目（高さ・抑揚・響き・息・柔らかさ・力・速さ・間・強弱）で出します。短い声では、測れた項目だけで比べます（「—」の項目）。セリフ真似の点数は、抑揚 4・タイミング 2.5・声の質 3.5 の割合で合わせます。点数は今のところの目安で、本物の声で確かめたら目盛りを見直します。声から性別や年齢は判断しません。</span><span lang="en">The voice score and tips use 12 measures that are easy to change yourself (pitch, intonation, resonance, breath, softness, power, tempo, pauses and dynamics). For a short voice, only the measured items are compared (those shown as “—” are not). The line-mimic score weighs intonation 4, timing 2.5 and voice 3.5. Scores are a rough guide for now and will be tuned with real voices. Gender and age are never guessed from a voice.</span></p>
-        </section>
-
-        <section class="card board" id="board" aria-labelledby="board-title" hidden>
-          <h2 id="board-title"><span lang="ja">点数表</span><span lang="en">Scoreboard</span></h2>
-          <div class="board-scroll">
-            <table>
-              <thead><tr><th scope="col"><span lang="ja">順位</span><span lang="en">Rank</span></th><th scope="col"><span lang="ja">名前</span><span lang="en">Name</span></th><th scope="col"><span lang="ja">このお手本</span><span lang="en">This model</span></th><th scope="col"><span lang="ja">合計</span><span lang="en">Total</span></th><th scope="col"><span lang="ja">回数</span><span lang="en">Tries</span></th><th scope="col"><span lang="ja">最後の声</span><span lang="en">Last take</span></th></tr></thead>
-              <tbody id="board-body"></tbody>
-            </table>
-          </div>
-          <p class="hint"><span lang="ja">合計は、お手本ごとの最高点を足した数です。点数表も、このページを開いている間だけです。</span><span lang="en">The total adds up each player’s best score for every model. The scoreboard also lasts only while this page is open.</span></p>
-          <div class="actions"><button type="button" id="board-clear"><span lang="ja">点数表を消す</span><span lang="en">Clear the scoreboard</span></button></div>
-        </section>
-        <p class="empty"><span lang="ja">声をサイトに登録したい時は、<a href="./register.html">声を登録する</a>のページへ（タブの音や音声ファイルからも測れます）。</span><span lang="en">To add a voice to the site, go to <a href="./register.html">Add a voice</a> (it can also measure a tab or a sound file).</span></p>
       </main>
       <footer class="site-foot">
         <div>
