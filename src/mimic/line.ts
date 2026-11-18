@@ -18,8 +18,8 @@ export const DRIFT_WIDTH = 0.08;
 /** 直し方を出す、出だし・真ん中・語尾の平均のずれ（半音）と、長さの比 */
 export const TIP_SEMITONES = 1.5;
 export const TIP_LENGTH = 1.2;
-/** 比べるのに要る、両方に声がある所の数 */
-export const MIN_PAIRS = 10;
+/** 比べるのに要る、両方に声がある所の数（0.12 秒分。「はい」のような一言は、声のある所が 10 ほどしか無い） */
+export const MIN_PAIRS = 6;
 
 export interface LineTip {
   text: string;

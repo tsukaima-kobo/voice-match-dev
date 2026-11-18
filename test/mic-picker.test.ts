@@ -52,7 +52,23 @@ describe('micPicker', () => {
     ];
     const { picker, select } = await mount();
     expect(picker.get()).toBe('mic-b');
-    expect(select.options.map((o) => o.text)).toEqual(['いつものマイク（端末の設定）', 'A', 'B']);
+    // 「既定」の物が無いブラウザー（Safari・Firefox）は、一覧の最初の物が端末の設定のマイク
+    expect(select.options.map((o) => o.text)).toEqual(['A（端末の設定）', 'A', 'B']);
+  });
+  it('Chrome の「既定 - 名前」の物から、いつものマイクの名前を出す', async () => {
+    devices = [
+      { kind: 'audioinput', deviceId: 'default', label: '既定 - USB マイク' },
+      { kind: 'audioinput', deviceId: 'communications', label: '通信 - 内蔵マイク' },
+      { kind: 'audioinput', deviceId: 'mic-a', label: '内蔵マイク' },
+      { kind: 'audioinput', deviceId: 'mic-b', label: 'USB マイク' },
+    ];
+    const { select } = await mount();
+    expect(select.options.map((o) => o.text)).toEqual(['USB マイク（端末の設定）', '内蔵マイク', 'USB マイク']);
+  });
+  it('名前が見えない間は、名前を出さない', async () => {
+    devices = [{ kind: 'audioinput', deviceId: '', label: '' }];
+    const { select } = await mount();
+    expect(select.options[0]!.text).toBe('いつものマイク（端末の設定）');
   });
   it('一覧が見えて、もう無ければ、端末の設定に戻す', async () => {
     devices = [{ kind: 'audioinput', deviceId: 'mic-a', label: 'A' }];

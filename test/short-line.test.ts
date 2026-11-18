@@ -30,6 +30,22 @@ describe('一言から測る', () => {
     const m = measureVoice(line(0.25, 180), R, { minVoicedSeconds: ONE_LINE_SECONDS });
     expect(m.ok).toBe(false);
   });
+  it('「はい」のような一言（声 0.2 秒）は、既定では断り、声真似の下限（声 0.15 秒・周期 20）なら測る', () => {
+    const x = line(0.2, 200);
+    expect(measureVoice(x.slice(), R, { minVoicedSeconds: ONE_LINE_SECONDS }).ok).toBe(false);
+    expect(measureVoice(x.slice(), R, { minVoicedSeconds: 0.15 }).ok).toBe(false);
+    const m = measureVoice(x.slice(), R, { minVoicedSeconds: 0.15, minCycles: 20 });
+    if (!m.ok) throw new Error(m.reason);
+    expect(m.features.pitch).toBeGreaterThan(195);
+    expect(m.features.pitch).toBeLessThan(205);
+  });
+  it('周期の下限を下げても、既定で測れる音の数字は変わらない（足りるかを見るだけ）', () => {
+    for (const [s, f0] of [[1, 180], [0.6, 120], [2, 300]] as const) {
+      const a = measureVoice(line(s, f0), R, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true });
+      const b = measureVoice(line(s, f0), R, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true, minCycles: 20 });
+      expect(b).toEqual(a);
+    }
+  });
   it('短い回では、もっと長い回が要る項目を除く', () => {
     const f = forLength(ok(line(1, 180)).features, 1);
     expect(f.pitch).not.toBeNull();

@@ -426,6 +426,10 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 .toggle:has(input:checked)::before { background: var(--a1); border-color: var(--a1); box-shadow: 0 0 8px var(--a1); }
 .toggle:has(input:disabled) { opacity: 0.45; cursor: default; }
 .clean-note { flex-basis: 100%; font-size: 0.8em; color: var(--muted); text-align: right; }
+/* 使うマイク: 上の帯の 2 行目に、小さく（どのマイクで録るかが、いつも見えるように） */
+.game-bar .game-mic { flex: 1 1 100%; justify-content: flex-end; font-size: 0.8em; gap: 6px 8px; }
+.game-bar .game-mic select { flex: 0 1 24em; padding: 0.38em 2.2em 0.38em 0.85em; }
+.game-bar .game-mic button { padding: 0.36em 0.9em; }
 .players-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .player-list { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .player { display: flex; align-items: center; min-width: 0; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface-2); }
@@ -502,6 +506,10 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 @media (max-width: 599px) {
   .game-bar, .players-bar { gap: 6px; }
   .game-bar .toggles { margin-left: 0; }
+  .game-bar .game-mic { justify-content: flex-start; flex-wrap: nowrap; }
+  .game-bar .game-mic label { white-space: nowrap; }
+  .game-bar .game-mic select { flex: 1 1 auto; width: 0; }
+  .game-bar .game-mic button { white-space: nowrap; flex: none; }
   .toggle { font-size: 0.78em; padding: 0.32em 0.8em; }
   .toggle:has(#stream-view) { display: none; }
   .seg label { font-size: 0.86em; padding: 0.38em 0.9em; }

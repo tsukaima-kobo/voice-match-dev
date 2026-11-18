@@ -1,14 +1,15 @@
-// マイクを選ぶ所。最初は「いつものマイク（端末の設定）」だけ。名前の一覧は、マイクを一度許可した後に出る
+// マイクを選ぶ所。最初は「いつものマイク（端末の設定）」だけ。名前の一覧は、マイクを一度許可した後に出る（その後は「名前（端末の設定）」）
 // （「ほかのマイクを選ぶ」を押すと、一覧を出すためだけに許可を求め、すぐ止める。音は受けない）。
 // 選んだ物は、このタブを閉じるまで覚える（sessionStorage。どのページでも共通）。マイクの抜き差しで一覧を作り直す。
 // 名前の一覧がまだ見えない時（Safari・Firefox で、このページでまだ許可していない時）も、覚えたマイクを使う
 // （「前に選んだマイク」と出す。もう無い時は、録りはじめた時に MicGoneError になり、ページが端末の設定に戻す）。
 // 1 つのページに選ぶ所が 2 つある時は、どちらで選んでも同じ物にそろえる。
-import { listMics, micChoiceSupported, type MicChoice } from '../voice/listen.ts';
+import { defaultMicName, listMics, micChoiceSupported, type MicChoice } from '../voice/listen.ts';
 import { onLang, t } from '../i18n.ts';
 
 const KEY = 'voice-match-mic';
-const defaultLabel = () => t('いつものマイク（端末の設定）', 'Default microphone (device setting)');
+/** 端末の設定のマイク。名前が分かれば「名前（端末の設定）」（スマホの狭い枠で後ろが切れても、名前は見えるように） */
+const defaultLabel = (name = '') => (name ? t(`${name}（端末の設定）`, `${name} (device default)`) : t('いつものマイク（端末の設定）', 'Default microphone (device setting)'));
 const savedLabel = () => t('前に選んだマイク', 'The microphone you chose before');
 
 export interface MicPicker {
@@ -42,6 +43,7 @@ const save = (id: string): void => {
 export function micPicker(parts: { box: HTMLElement; select: HTMLSelectElement; find: HTMLButtonElement }[], onError?: (msg: () => string) => void): MicPicker {
   let chosen = load();
   let mics: MicChoice[] = [];
+  let defName = '';
   const supported = micChoiceSupported();
   for (const p of parts) p.box.hidden = !supported;
 
@@ -50,7 +52,7 @@ export function micPicker(parts: { box: HTMLElement; select: HTMLSelectElement; 
     // 一覧が見えない間は、覚えたマイクを名前なしで出す
     const unseen = !!chosen && !mics.length;
     for (const p of parts) {
-      const opts = [new Option(defaultLabel(), ''), ...(unseen ? [new Option(savedLabel(), chosen)] : []), ...mics.map((m) => new Option(m.label, m.id))];
+      const opts = [new Option(defaultLabel(defName), ''), ...(unseen ? [new Option(savedLabel(), chosen)] : []), ...mics.map((m) => new Option(m.label, m.id))];
       p.select.replaceChildren(...opts);
       p.select.value = chosen;
       p.find.hidden = mics.length > 0;
@@ -60,6 +62,7 @@ export function micPicker(parts: { box: HTMLElement; select: HTMLSelectElement; 
     if (!supported) return;
     try {
       mics = await listMics(ask);
+      defName = await defaultMicName();
     } catch (e) {
       if (ask) onError?.(() => t('マイクの一覧を出せませんでした。ブラウザーの設定で、このページにマイクを許可してください。', 'The list of microphones could not be shown. Allow the microphone for this page in your browser settings.'));
       void e;

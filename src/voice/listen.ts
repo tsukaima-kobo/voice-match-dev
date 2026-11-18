@@ -98,6 +98,17 @@ export async function listMics(ask = false): Promise<MicChoice[]> {
   return out;
 }
 
+/**
+ * 端末の設定のマイク（「いつものマイク」）の名前。Chrome は「既定 - 名前」の物、ほかのブラウザーは一覧の最初の物。
+ * 名前が見えない時（許可の前）は空
+ */
+export async function defaultMicName(): Promise<string> {
+  if (!micChoiceSupported()) return '';
+  const all = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput' && d.label);
+  const d = all.find((x) => x.deviceId === 'default') ?? all.find((x) => x.deviceId !== 'communications');
+  return d ? d.label.replace(/^(既定|デフォルト|Default)\s*-\s*/i, '') : '';
+}
+
 /** ほかのタブの音を取れるブラウザーか（パソコンの Chrome・Edge など。スマホは取れない） */
 export function tabAudioSupported(): boolean {
   const md = navigator.mediaDevices as MediaDevices | undefined;

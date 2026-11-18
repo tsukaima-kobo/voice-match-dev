@@ -45,10 +45,33 @@ const MIM_DONE_AFTER = 1;
 const ANALYSE_MS = 1500;
 /** お手本を録る時、これより小さい音は「まだ始まっていない」として数えない（RMS） */
 const START_RMS = 0.003;
+/**
+ * ただし、マイクの音が全体に小さい時（入力レベルが低い・離れたマイク）は、それまでの静かな所（いちばん小さかった塊）より
+ * START_OVER_FLOOR 倍（約 16 dB）大きければ始める（START_MIN_RMS より小さい音では始めない）。静かな所を START_FLOOR_CHUNKS 個見てから
+ */
+const START_MIN_RMS = 0.0002;
+const START_OVER_FLOOR = 6;
+const START_FLOOR_CHUNKS = 4;
 /** お手本を録る時、音が来ないまま、これだけたったら止める（秒。マイクを開いたままにしない） */
 const WAIT_MAX = 60;
 /** 挑戦する人の数の上限 */
 const MAX_PLAYERS = 8;
+/**
+ * 声真似で測る、いちばん短い声（秒）と、取れた声の周期の数の下限。「はい」「えっ」のような一言（声は 0.2 秒ほど・周期 40 ほど）も測る。
+ * 声の項目のうち一言で測れる物（features.ts の ONE_LINE_SECONDS の物）は、これより長ければ使う。3 秒・8 秒から測る項目は今までどおり
+ */
+const WORD_SECONDS = 0.15;
+const WORD_CYCLES = 20;
+/** 声真似で使う項目（一言で測れる物は、声が WORD_SECONDS 以上あれば使う）。0.4 秒より長い声では forLength と同じ */
+const wordFeatures = (f: Features, voiced: number): Features => forLength(f, Math.max(voiced, ONE_LINE_SECONDS));
+/**
+ * 小さいだけの音（measure.ts の quiet）は、雑音の床より LIFT_SNR_DB（measure.ts の MIN_SNR_DB と同じ）以上大きければ、
+ * いちばん大きい所を LIFT_TO_DB まで上げて測り直す。点数に使う項目は、音の大きさで変わらない（雑音との差は、上げても同じ）
+ */
+const LIFT_SNR_DB = 15;
+const LIFT_TO_DB = -30;
+/** 最後に録った時のマイクの名前（音が小さい・聞こえない時に出す） */
+let micUsed = '';
 
 const $ = <E extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as E;
 mountLang({ ja: '声真似練習場｜voice-match', en: 'Voice-mimic studio | voice-match' });
@@ -376,6 +399,9 @@ class Take {
   private got = 0;
   /** 音が来るのを待っている間に届いた音（サンプル数。数えるだけで、音は持たない） */
   private waited = 0;
+  /** 待っている間の、いちばん小さかった塊の大きさ（RMS。全く 0 の塊は数えない）と、見た塊の数 */
+  private floor = Infinity;
+  private floorChunks = 0;
   private raf = 0;
   private rate = 0;
   private live = false;
@@ -396,11 +422,19 @@ class Take {
   }
   readonly onChunk = (x: Float32Array): void => {
     if (!this.live) return;
-    if (this.waitForSound && this.got === 0 && rms(x) < START_RMS) {
-      // 音が来ないまま WAIT_MAX 秒たったら止める（ページが隠れていても、届いた音の長さで数える）
-      this.waited += x.length;
-      if (this.waited / this.rate >= WAIT_MAX) this.onQuiet();
-      return;
+    if (this.waitForSound && this.got === 0) {
+      const r = rms(x);
+      const overFloor = this.floorChunks >= START_FLOOR_CHUNKS && r >= START_MIN_RMS && r >= this.floor * START_OVER_FLOOR;
+      if (r < START_RMS && !overFloor) {
+        if (r > 1e-7) {
+          this.floor = Math.min(this.floor, r);
+          this.floorChunks++;
+        }
+        // 音が来ないまま WAIT_MAX 秒たったら止める（ページが隠れていても、届いた音の長さで数える）
+        this.waited += x.length;
+        if (this.waited / this.rate >= WAIT_MAX) this.onQuiet();
+        return;
+      }
     }
     this.chunks.push(x);
     this.got += x.length;
@@ -420,6 +454,8 @@ class Take {
     this.mic = mic;
     this.rate = mic.rate;
     this.waited = 0;
+    this.floor = Infinity;
+    this.floorChunks = 0;
     this.live = true;
     if (this.waitForSound)
       this.quietTimer = window.setTimeout(() => {
@@ -492,8 +528,21 @@ async function cleanAndMeasure(raw: Clip, choice: CleanChoice, reverse: boolean,
     }
   }
   analysing();
-  const x = reverse ? reversed(clip.pcm) : clip.pcm.slice();
-  const [m] = await Promise.all([measureAsync(x, clip.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour }), live.analysing(ANALYSE_MS)]);
+  const opts = { minVoicedSeconds: WORD_SECONDS, minCycles: WORD_CYCLES, contour };
+  const copy = () => (reverse ? reversed(clip.pcm) : clip.pcm.slice());
+  let [m] = await Promise.all([measureAsync(copy(), clip.rate, opts), live.analysing(ANALYSE_MS)]);
+  const { loudDb, floorDb } = m.info;
+  if (!m.ok && m.reason === 'quiet' && loudDb !== undefined && floorDb !== undefined && loudDb - floorDb >= LIFT_SNR_DB) {
+    const x = copy();
+    let peak = 0;
+    for (let i = 0; i < x.length; i++) peak = Math.max(peak, Math.abs(x[i]!));
+    // 上げすぎて割れないように、いちばん大きい点は 0.9 まで
+    const g = Math.min(10 ** ((LIFT_TO_DB - loudDb) / 20), 0.9 / Math.max(peak, 1e-9));
+    if (g > 1) {
+      for (let i = 0; i < x.length; i++) x[i]! *= g;
+      m = await measureAsync(x, clip.rate, opts);
+    } else x.fill(0);
+  }
   return { clip, m };
 }
 
@@ -585,6 +634,7 @@ async function refListen(): Promise<void> {
     refTake.begin(m);
     void mics.refresh();
     const label = m.label ?? '';
+    micUsed = label;
     showRef('listening', () => t(`音が聞こえたら数えはじめます（最大 ${LISTEN_MAX} 秒）。`, `Counting starts when sound is heard (up to ${LISTEN_MAX} s).`) + (label ? t(`マイク: ${label}`, ` Microphone: ${label}`) : ''));
   } catch (e) {
     if (my !== refToken) return;
@@ -653,7 +703,7 @@ function setModel(clip: Clip, m: Extract<Measured, { ok: true }>, choice: CleanC
   endRound();
   model = {
     clip,
-    target: { features: forLength(m.features, i.voicedSeconds), name: ref.name.value.trim(), ...(line ? { contour: line } : {}) },
+    target: { features: wordFeatures(m.features, i.voicedSeconds), name: ref.name.value.trim(), ...(line ? { contour: line } : {}) },
     clean: choice,
     from: line ? M(`${i.speechSeconds.toFixed(1)} 秒`, `${i.speechSeconds.toFixed(1)} s`) : M(`声 ${i.voicedSeconds.toFixed(1)} 秒分`, `${i.voicedSeconds.toFixed(1)} s of voice`),
   };
@@ -844,6 +894,7 @@ async function mimStart(): Promise<void> {
     mimTake.begin(m);
     void mics.refresh();
     const label = m.label ?? '';
+    micUsed = label;
     showMim('listening', () => {
       const on = label ? t(`マイク: ${label}`, ` Microphone: ${label}`) : '';
       const long = mode !== 'reverse' && !model?.target.contour;
@@ -897,7 +948,7 @@ function mimFinish(): void {
       showMim('failed', () => failText(m.reason, m.info.voicedSeconds, false), true);
       return;
     }
-    if (!render(md.target, forLength(m.features, m.info.voicedSeconds), m.info.contour, who, clip)) {
+    if (!render(md.target, wordFeatures(m.features, m.info.voicedSeconds), m.info.contour, who, clip)) {
       clip.pcm.fill(0);
       showMim('failed', M('お手本と比べられる項目がありませんでした。お手本か声を録り直してください。', 'No item could be compared with the model. Record the model or your voice again.'), true);
       return;
@@ -996,12 +1047,14 @@ window.addEventListener('pagehide', () => {
 });
 
 function failText(reason: MeasureFail, voiced: number | undefined, isModel: boolean): string {
-  const v = (voiced ?? 0).toFixed(1);
+  const v = (voiced ?? 0).toFixed(2);
+  const mic = micUsed ? t(`（使ったマイク: ${micUsed}）`, ` (mic used: ${micUsed})`) : '';
   switch (reason) {
     case 'silent':
-      return isModel ? t('お手本の音が聞こえませんでした。マイクが消音になっていないか、使うマイクが合っているか確かめてください。', 'The model could not be heard. Check that the microphone is not muted and that the right one is chosen.') : t('声が聞こえませんでした。マイクが消音になっていないか、使うマイクが合っているか確かめてください。', 'No voice was heard. Check that the microphone is not muted and that the right one is chosen.');
+      return (isModel ? t('お手本の音が聞こえませんでした', 'The model could not be heard') : t('声が聞こえませんでした', 'No voice was heard')) + mic + t('。消音になっていないか、上の「使うマイク」が合っているか確かめてください。', '. Check that the mic is not muted and that “Mic in use” at the top is the right one.');
     case 'quiet':
-      return isModel ? t('お手本の音が小さくて測れませんでした。マイクの近くで、大きめに聞かせてください。', 'The model was too quiet to measure. Play it louder, closer to the microphone.') : t('声が小さくて測れませんでした。マイクに少し近づいて話してください。', 'The voice was too quiet to measure. Move a little closer to the microphone.');
+      // 雑音より十分大きい音は上げて測り直すので、ここに来るのは、小さい上に雑音との差も少ない音
+      return (isModel ? t('お手本の音が小さくて、まわりの雑音と分けられませんでした', 'The model was too quiet to tell apart from the background noise') : t('声が小さくて、まわりの雑音と分けられませんでした', 'The voice was too quiet to tell apart from the background noise')) + mic + t('。上の「使うマイク」が、音を聞かせているマイクか確かめてください。合っていれば、流す音量か、端末のマイクの音量（入力レベル）を上げてください。', '. Check that “Mic in use” at the top is the mic you are playing into. If it is, turn up the playback volume or the device’s mic input level.');
     case 'noisy':
       // ほかの音のほか、静かな所でも、息の多い声・ささやき声でこうなる。ほかの音が多いとは言い切らない
       return isModel
@@ -1011,8 +1064,8 @@ function failText(reason: MeasureFail, voiced: number | undefined, isModel: bool
       return isModel ? t('お手本の音が大きすぎて、割れていました。少し離れるか、音量を下げてください。', 'The model was so loud that it distorted. Move back a little or turn the volume down.') : t('声が大きすぎて、音が割れていました。マイクから少し離れてください。', 'The voice was so loud that it distorted. Move a little away from the microphone.');
     case 'short':
       return isModel
-        ? t(`お手本の声を ${v} 秒分しか測れませんでした。「おはようございます」くらいの長さで、はっきり聞かせてください。`, `Only ${v} s of the model’s voice was measured. Give at least a short phrase, like “good morning everyone”, clearly.`)
-        : t(`声を ${v} 秒分しか測れませんでした。「おはようございます」くらいの長さで、ささやかずに言ってください。`, `Only ${v} s of voice was measured. Say at least a short phrase, like “good morning everyone”, without whispering.`);
+        ? t(`お手本の声を ${v} 秒分しか測れませんでした。「はい」のような一言でも測れます。声がはっきり入るように、もう一度聞かせてください。`, `Only ${v} s of the model’s voice was measured. Even one word like “yes” works. Play it again so the voice comes through clearly.`)
+        : t(`声を ${v} 秒分しか測れませんでした。「はい」のような一言でも測れます。ささやかずに、声を出してもう一度言ってください。`, `Only ${v} s of voice was measured. Even one word like “yes” works. Say it again out loud, without whispering.`);
     default:
       return t('うまく数字にできませんでした。もう一度試してください。', 'It could not be measured. Please try again.');
   }

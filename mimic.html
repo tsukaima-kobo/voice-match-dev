@@ -32,6 +32,11 @@
               <label class="toggle"><input type="checkbox" id="clean-music" /><span lang="ja">音楽を消す</span><span lang="en">Remove music</span></label>
               <label class="toggle"><input type="checkbox" id="stream-view" /><span lang="ja">配信向け</span><span lang="en">Stream view</span></label>
             </fieldset>
+            <div class="mic-pick game-mic" id="mic-pick" hidden>
+              <label for="mic-select"><span lang="ja">使うマイク</span><span lang="en">Mic in use</span></label>
+              <select id="mic-select"><option value="">いつものマイク（端末の設定）</option></select>
+              <button type="button" id="mic-find" title="マイクの一覧を出します（そのためにマイクの許可を求めます）" data-en-title="Shows the list of microphones (asks for mic permission to do so)"><span lang="ja">ほかのマイク</span><span lang="en">Other mics</span></button>
+            </div>
             <p class="clean-note" id="clean-note" hidden></p>
           </div>
           <div class="players-bar">
@@ -187,9 +192,9 @@
               <p><span lang="ja">マイクでお手本を録って、何回でも聞き直して、真似して点数を競います。お手本も真似も同じマイクで録るので、マイクの違いで点数が変わりません。配信やコラボで、8 人まで同じ画面で交代して遊べます（通信はしません。離れた人とは、配信や通話の音をマイクに聞かせて遊びます）。</span><span lang="en">Record a model with the mic, replay it as often as you like, then imitate it and compete for points. The model and the imitations go through the same mic, so the mic does not change the score. Up to 8 players can take turns on the same screen, on stream or in a collab (nothing goes over the network; players far away play through the stream or call audio into the mic).</span></p>
               <dl class="rules">
                 <dt><span lang="ja">声真似</span><span lang="en">Mimic</span></dt>
-                <dd><span lang="ja">お手本の声を、マイクに聞かせて録ります（自分や相手が言う・スマホなどで流す）。セリフ 1 つ（「おはようございます」くらいから）なら、同じセリフを真似して、抑揚・タイミング・声の質で点数を出します。長いお手本なら、お題をお手本の声で話して、声の数字だけで比べます。</span><span lang="en">Play the model’s voice into the mic (say it yourself, have someone say it, or play it from a phone). For a single line (from a short phrase up), say the same line and get scored on intonation, timing and voice. For a longer model, talk about a prompt in the model’s voice and only the voice numbers are compared.</span></dd>
+                <dd><span lang="ja">お手本の声を、マイクに聞かせて録ります（自分や相手が言う・スマホなどで流す）。セリフ 1 つ（「はい」「えっ」のような一言から）なら、同じセリフを真似して、抑揚・タイミング・声の質で点数を出します。長いお手本なら、お題をお手本の声で話して、声の数字だけで比べます。</span><span lang="en">Play the model’s voice into the mic (say it yourself, have someone say it, or play it from a phone). For a single line (even one word like “yes”), say the same line and get scored on intonation, timing and voice. For a longer model, talk about a prompt in the model’s voice and only the voice numbers are compared.</span></dd>
                 <dt><span lang="ja">逆再生チャレンジ</span><span lang="en">Reverse challenge</span></dt>
-                <dd><span lang="ja">逆再生にする言葉を録ります（「おはようございます」くらいの短い言葉がおすすめ）。逆再生を聞いて、聞こえたとおりに真似すると、録った声を逆にして、元の言葉と比べます。「元の言葉を聞く」が答えです。</span><span lang="en">Record a word to reverse (a short phrase like “good morning” works best). Listen to it reversed and imitate what you hear; your take is reversed and compared with the original word. “Play the original word” is the answer.</span></dd>
+                <dd><span lang="ja">逆再生にする言葉を録ります（名前や「こんにちは」くらいの短い言葉がおすすめ。一言でも遊べます）。逆再生を聞いて、聞こえたとおりに真似すると、録った声を逆にして、元の言葉と比べます。「元の言葉を聞く」が答えです。</span><span lang="en">Record a word to reverse (a name or a short word like “hello” works best; even one word works). Listen to it reversed and imitate what you hear; your take is reversed and compared with the original word. “Play the original word” is the answer.</span></dd>
                 <dt><span lang="ja">点数表</span><span lang="en">Scoreboard</span></dt>
                 <dd><span lang="ja">合計は、お手本ごとの最高点を足した数です。新しいお手本を録るか、遊び方を変えると、次の回になります。</span><span lang="en">The total adds up each player’s best score for every model. Recording a new model or switching the game starts a new round.</span></dd>
                 <dt><span lang="ja">お手本の名前</span><span lang="en">Name of the model</span></dt>
@@ -200,9 +205,11 @@
           </details>
 
           <details class="more-item">
-            <summary><span lang="ja">音をきれいにする・マイク・配信向けの表示</span><span lang="en">Clean-up, mic and stream view</span></summary>
+            <summary><span lang="ja">マイク・音をきれいにする・配信向けの表示</span><span lang="en">Mic, clean-up and stream view</span></summary>
             <div class="more-body prose">
               <dl class="rules">
+                <dt><span lang="ja">マイク</span><span lang="en">Mic</span></dt>
+                <dd><span lang="ja">上の「使うマイク」で選びます。「（端末の設定）」の付いた物が、端末で選んでいるマイクです（名前は、マイクを一度許可すると出ます）。ブラウザーが音を変える機能（エコーを消す・雑音を抑える・音量を自動で合わせる）は、全部切っています。音が小さい時は、雑音より十分大きければ、大きくしてから測ります（点数に使う数字は、音の大きさで変わりません）。</span><span lang="en">Choose it with “Mic in use” at the top. The one marked “(device default)” is the mic chosen on the device (names appear once the mic has been allowed). The browser’s sound processing (echo cancellation, noise suppression, automatic volume) is all turned off. A quiet recording is turned up before measuring, as long as it is well above the background noise (the numbers used for the score do not depend on loudness).</span></dd>
                 <dt><span lang="ja">ノイズを減らす</span><span lang="en">Reduce noise</span></dt>
                 <dd><span lang="ja">RNNoise。部屋の雑音・ファンの音などを減らします。スマホでも動きます。</span><span lang="en">RNNoise. Removes room noise, fans and so on. Works on phones too.</span></dd>
                 <dt><span lang="ja">音楽を消す</span><span lang="en">Remove music</span></dt>
@@ -212,11 +219,6 @@
                 <dt><span lang="ja">配信向け</span><span lang="en">Stream view</span></dt>
                 <dd><span lang="ja">下の説明を隠して、点数と順番を大きくします（このタブを閉じるまで覚えます）。</span><span lang="en">Hides the explanations below and makes the score and turn bigger (remembered until this tab is closed).</span></dd>
               </dl>
-              <div class="mic-pick" id="mic-pick" hidden>
-                <label for="mic-select"><span lang="ja">マイク</span><span lang="en">Mic</span></label>
-                <select id="mic-select"><option value="">いつものマイク（端末の設定）</option></select>
-                <button type="button" id="mic-find"><span lang="ja">ほかのマイクを選ぶ</span><span lang="en">Choose another mic</span></button>
-              </div>
             </div>
           </details>
 

@@ -30,8 +30,8 @@ export const TOLERANCE: Record<ScoredKey, number> = {
 export const CLIP = 5;
 /** 点数の目盛り: 100·exp(−S / SCORE_SCALE) */
 export const SCORE_SCALE = 30;
-/** 比べられる項目がこれより少なければ点数を出さない */
-export const MIN_ITEMS = 6;
+/** 比べられる項目がこれより少なければ点数を出さない（「はい」のような一言は、高さ・音色の重心・息・声の力の 4 つだけ測れる） */
+export const MIN_ITEMS = 4;
 
 /** 項目を上げる時・下げる時の言葉（数字が大きくなる向きが up） */
 const ADVICE_JA: Record<ScoredKey, { up: string; down: string }> = {

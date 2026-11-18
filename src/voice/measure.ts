@@ -148,7 +148,15 @@ export interface MeasureOptions {
    * 声の高さ（と、それを使う項目）に使わない。マイクの声と、運営が測った声（声を抜き出した音）には使わない（数字が変わるため）
    */
   bgm?: boolean;
+  /**
+   * 要る、取れた声の周期の数の下限（既定は MIN_CYCLES）。となりの周期どうしの差の数は、この 2/3。声真似の「はい」のような一言は、
+   * 周期が 40 ほどしか無いので、声真似だけが下げる。足りるかを見るだけで、測る数字は変わらない
+   */
+  minCycles?: number;
 }
+
+/** 測るのに要る、取れた声の周期の数の既定の下限 */
+export const MIN_CYCLES = 60;
 
 export type Measured = { ok: true; features: Features; info: MeasureInfo } | { ok: false; reason: MeasureFail; info: Partial<MeasureInfo> };
 
@@ -1598,7 +1606,9 @@ function measure(pcm: ArrayLike<number>, sampleRate: number, opts: MeasureOption
   const info1 = { ...info0, cycles: nCycles, formantFrames: F1.length, gapTonal };
   // 低い声は 1 周期が長く、同じ長さの声でも周期が少ない。周期の数で足りない時だけ、FAIR_HZ の声と同じ長さで足りるとする
   // （足りる数の時は、前と同じに測る）
-  const few = nCycles < 60 || dT.length < 40 || matches.length < 40;
+  const needCycles = opts.minCycles ?? MIN_CYCLES,
+    needPairs = Math.round((needCycles * 2) / 3);
+  const few = nCycles < needCycles || dT.length < needPairs || matches.length < needPairs;
   let scale = 1,
     doubt = false;
   if (few && f0Hz < FAIR_HZ) {
@@ -1616,7 +1626,7 @@ function measure(pcm: ArrayLike<number>, sampleRate: number, opts: MeasureOption
     if (sure >= 0.5 * n) scale = f0Hz / FAIR_HZ;
     else doubt = true;
   }
-  if (!(nCycles >= 60 * scale && dT.length >= 40 * scale && matches.length >= 40 * scale)) {
+  if (!(nCycles >= needCycles * scale && dT.length >= needPairs * scale && matches.length >= needPairs * scale)) {
     // 取れた周期がほぼはっきりしていて、話した所の多くに声があれば、声が短かっただけ（高さが確かでない時は、前と同じ noisy）
     const short = !doubt && tried > 0 && nClear >= 0.5 * tried && voicedShare >= 0.25;
     return fail(short ? 'short' : 'noisy', info1);
