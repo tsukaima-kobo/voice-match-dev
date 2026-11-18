@@ -15,7 +15,7 @@
     <div class="page">
       <header class="site">
         <a class="logo" href="./"><i class="logo-orb" aria-hidden="true"></i>voice<span>-</span>match</a>
-        <nav aria-label="ページ" data-en-aria-label="Pages"><a href="./"><span lang="ja">声をくらべる</span><span lang="en">Compare</span></a><a href="./mimic.html"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a><a href="./voices.html"><span lang="ja">声の一覧</span><span lang="en">Voices</span></a><a href="./about.html" aria-current="page"><span lang="ja">しくみと約束</span><span lang="en">How it works</span></a></nav>
+        <nav aria-label="ページ" data-en-aria-label="Pages"><a href="./"><span lang="ja">声をくらべる</span><span lang="en">Compare</span></a><a href="./mimic.html"><span lang="ja">声真似練習場</span><span lang="en">Mimic studio</span></a><a href="./voices.html"><span lang="ja">声の一覧</span><span lang="en">Voices</span></a><a href="./about.html" aria-current="page"><span lang="ja">しくみと約束</span><span lang="en">How it works</span></a></nav>
       </header>
       <main>
         <section class="doc-hero">
@@ -27,7 +27,7 @@
         <nav class="toc" aria-label="このページの中" data-en-aria-label="On this page">
           <a href="#promise"><span lang="ja">約束</span><span lang="en">Promises</span></a>
           <a href="#match"><span lang="ja">近い声のさがし方</span><span lang="en">Finding close voices</span></a>
-          <a href="#mimic"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a>
+          <a href="#mimic"><span lang="ja">声真似練習場</span><span lang="en">Mimic studio</span></a>
           <a href="#items"><span lang="ja">測る項目</span><span lang="en">What is measured</span></a>
           <a href="#voices"><span lang="ja">このサイトで測った声</span><span lang="en">Voices measured by this site</span></a>
           <a href="#register"><span lang="ja">声の登録</span><span lang="en">Adding voices</span></a>
@@ -38,9 +38,9 @@
         <section id="promise" class="card reveal wide">
           <h2><span class="no">01</span><span lang="ja">約束</span><span lang="en">Promises</span></h2>
           <ul class="promises">
-            <li><span lang="ja"><strong>音を送らない・残さない</strong>お手本の音も、あなたの声も、この端末の中だけで数字にして、すぐに捨てます。どこにも送らず、保存もしません。お手本の数字も、ページを閉じると消えます。</span><span lang="en"><strong>Sound is never sent or kept</strong>Both the model’s sound and your voice are turned into numbers on this device only, then thrown away at once. Nothing is sent anywhere or stored. The model’s numbers are gone when you close the page.</span></li>
+            <li><span lang="ja"><strong>音を送らない・残さない</strong>あなたの声は、この端末の中だけで数字にします。どこにも送らず、端末に保存もしません。声真似練習場では、録った音（お手本と真似）を何回でも聞き直せるよう、ページを開いている間だけ端末のメモリーに置き、ページを離れる・閉じる・読み直すと消します。</span><span lang="en"><strong>Sound is never sent or kept</strong>Your voice is turned into numbers on this device only. Nothing is sent anywhere or stored on the device. On the voice-mimic studio, recorded sound (the model and the imitations) is kept in the device’s memory only while the page is open, so you can replay it, and it is gone when you leave, close or reload the page.</span></li>
             <li><span lang="ja"><strong>使うのは押した時だけ</strong>マイクやほかのタブの音は、ボタンを押した時だけ使い、終わったらすぐ止めます。「ほかのマイクを選ぶ」を押した時は、マイクの名前の一覧を出すためだけに許可を求め、すぐ止めます（音は受けません）。選んだマイクは、そのタブを閉じるまで覚えます。ほかのタブの音は、ブラウザーの共有の画面であなたが選んだタブの音だけを使い、映像は使いません。選んだ言葉（JP / EN）は、この端末に覚えます。「じっくり測る」で「声のページの相手に入れる」を押した時だけ、あなたの声の数字（音ではありません）をこの端末のブラウザーに覚え、「外す」で消します。「数字を書き出す」を押した時だけ、数字のファイルを作ります。</span><span lang="en"><strong>Used only when you press</strong>The microphone or another tab’s sound is used only after you press a button, and stops as soon as it is done. “Choose another mic” asks for permission only to list the microphones’ names, then stops at once (no sound is taken). The chosen microphone is remembered until you close the tab. For another tab, only the sound of the tab you pick in the browser’s sharing screen is used, never the picture. Your choice of language (JP / EN) is remembered on this device. Only when you press “Add to the comparison page” on the in-depth page does this browser keep your voice’s numbers (never the sound), until you press “Remove”; only “Save the numbers” makes a file of them.</span></li>
-            <li><span lang="ja"><strong>外に何も読みに行かない</strong>このサイトは、外のサーバーに何も読みに行きません（フォント・解析の道具も使いません）。「X に投稿」を押した時だけ、X の投稿の画面を新しいタブで開きます（このサイトから X に何かを送ることはありません。画像を載せるかどうかも、あなたが決めます）。</span><span lang="en"><strong>Nothing is loaded from outside</strong>This site loads nothing from other servers (no web fonts, no analytics). “Post on X” only opens X’s post window in a new tab (this site sends nothing to X; whether to attach the image is up to you).</span></li>
+            <li><span lang="ja"><strong>外に何も読みに行かない</strong>このサイトは、外のサーバーに何も読みに行きません（フォント・解析の道具も使いません）。声真似練習場で「音をきれいにする」を使う時だけ、AI の部品を<strong>このサイトから</strong>読みます（「音楽を消す」は最初の 1 回だけ約 155 MB。音を送るのではありません）。「X に投稿」を押した時だけ、X の投稿の画面を新しいタブで開きます（このサイトから X に何かを送ることはありません。画像を載せるかどうかも、あなたが決めます）。</span><span lang="en"><strong>Nothing is loaded from outside</strong>This site loads nothing from other servers (no web fonts, no analytics). Only when you use “Clean up the sound” on the voice-mimic studio does it read the AI parts <strong>from this site</strong> (about 155 MB the first time for “Remove music”; no sound is sent). “Post on X” only opens X’s post window in a new tab (this site sends nothing to X; whether to attach the image is up to you).</span></li>
             <li><span lang="ja"><strong>性別や年齢を判断しない</strong>声から性別や年齢を判断しません。測るのは、声の音の性質だけです。</span><span lang="en"><strong>No guessing of gender or age</strong>Gender and age are never guessed from a voice. Only the qualities of the sound are measured.</span></li>
           </ul>
         </section>
@@ -58,13 +58,15 @@
         </section>
 
         <section id="mimic" class="card reveal">
-          <h2><span class="no">03</span><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></h2>
+          <h2><span class="no">03</span><span lang="ja">声真似練習場</span><span lang="en">Voice-mimic studio</span></h2>
           <ul>
-            <li><span lang="ja">お手本は、このサイトで測った声から選ぶか、マイクで聞かせる・ほかのタブの音を取る（パソコンの Chrome・Edge）・音声ファイルを選ぶ、のどれかです。</span><span lang="en">The model is chosen from voices measured by this site, played to the microphone, captured from another tab (Chrome or Edge on a computer), or taken from a sound file.</span></li>
-            <li><span lang="ja"><strong>セリフ真似</strong>: お手本がセリフ 1 つ（話しはじめから終わりまで 12 秒以内）なら、同じセリフを真似した声と、抑揚（高さの上がり下がりの形）・タイミング・声の質で比べ、2 本の線を重ねた図を出します。点数は、抑揚 4・タイミング 2.5・声の質 3.5 の割合で合わせます。</span><span lang="en"><strong>Line mimic</strong>: when the model is a single line (12 s or less from start to end), your imitation of the same line is compared for intonation (the shape of the rises and falls), timing and voice quality, and the two pitch lines are drawn one over the other. The score weighs intonation 4, timing 2.5 and voice 3.5.</span></li>
-            <li><span lang="ja"><strong>声全体</strong>: それより長いお手本と、このサイトで測ったお手本は、声の数字だけで比べます。</span><span lang="en"><strong>Whole voice</strong>: longer models, and models measured by this site, are compared by the voice numbers only.</span></li>
+            <li><span lang="ja">お手本も真似も、同じマイクで録ります（マイクの違いで点数が変わらないように）。お手本は、自分や相手が言っても、スマホなどで流してマイクに聞かせてもかまいません。</span><span lang="en">The model and the imitations are recorded with the same microphone (so the mic does not change the score). The model can be said by you or someone else, or played from a phone into the mic.</span></li>
+            <li><span lang="ja">録った音は、ページを開いている間だけ端末のメモリーに置き、何回でも聞き直せます。ページを離れる・閉じる・読み直すと消えます。どこにも送りません。点数表と名前も、ページを開いている間だけです。</span><span lang="en">Recorded sound is kept in the device’s memory only while the page is open, so you can replay it as often as you like. It is gone when you leave, close or reload the page, and is never sent. The scoreboard and names also last only while the page is open.</span></li>
+            <li><span lang="ja"><strong>声真似</strong>: お手本がセリフ 1 つ（話しはじめから終わりまで 12 秒以内）なら、同じセリフを真似した声と、抑揚（高さの上がり下がりの形）・タイミング・声の質で比べ、2 本の線を重ねた図を出します。点数は、抑揚 4・タイミング 2.5・声の質 3.5 の割合で合わせます。それより長いお手本は、声の数字だけで比べます。</span><span lang="en"><strong>Mimic</strong>: when the model is a single line (12 s or less from start to end), your imitation of the same line is compared for intonation (the shape of the rises and falls), timing and voice quality, and the two pitch lines are drawn one over the other. The score weighs intonation 4, timing 2.5 and voice 3.5. Longer models are compared by the voice numbers only.</span></li>
+            <li><span lang="ja"><strong>逆再生チャレンジ</strong>: 録った言葉を逆再生して聞き、聞こえたとおりに真似します。真似した声を逆にして、元の言葉と同じように比べます。</span><span lang="en"><strong>Reverse challenge</strong>: listen to the recorded word played backwards and imitate what you hear. Your take is reversed and compared with the original word in the same way.</span></li>
+            <li><span lang="ja">何人でも順番に遊べ、点数表はお手本ごとの最高点を足して合計にします。キーボードでも遊べ、配信向けの表示もあります。</span><span lang="en">Any number of players can take turns; the scoreboard adds up each player’s best score for every model. It can be played from the keyboard, and there is a stream view.</span></li>
+            <li><span lang="ja"><strong>音をきれいにする</strong>（選んだ時だけ。お手本と真似の両方に同じようにかけます）: 「ノイズを減らす」は RNNoise、「音楽を消す」は Demucs（htdemucs）を、この端末の中で動かします。「音楽を消す」は WebGPU の使えるパソコンのブラウザーだけで、最初の 1 回だけ AI の部品（約 155 MB）をこのサイトから読みます。部品のライセンスは<a href="./licenses/third-party.txt">こちら</a>（RNNoise・rnnoise-wasm・ONNX Runtime Web・Demucs など）。</span><span lang="en"><strong>Clean up the sound</strong> (only when chosen; applied the same way to the model and the imitations): “Reduce noise” runs RNNoise and “Remove music” runs Demucs (htdemucs) on this device. “Remove music” works only in computer browsers with WebGPU and reads the AI parts (about 155 MB) from this site the first time. The parts’ licenses are <a href="./licenses/third-party.txt">here</a> (RNNoise, rnnoise-wasm, ONNX Runtime Web, Demucs and others).</span></li>
             <li><span lang="ja">真似して話すと、近さの点数（0〜100）と、近づけるための直し方を最大 3 つ出します。</span><span lang="en">After you imitate, a closeness score (0–100) and up to three tips to get closer are shown.</span></li>
-            <li><span lang="ja">セリフの高さと大きさの動き（数字の並び）も、ページを閉じると消えます。</span><span lang="en">The line’s pitch and loudness over time (a row of numbers) are also gone when you close the page.</span></li>
           </ul>
         </section>
 
@@ -92,7 +94,7 @@
 
         <section id="register" class="card reveal">
           <h2><span class="no">06</span><span lang="ja">声の登録（だれでも・ログインなし）</span><span lang="en">Adding voices (anyone, no login)</span></h2>
-          <p><span lang="ja">探している声が無い時は、声真似の点数のページでその声をお手本として測り、登録できます。送るのは数字・名前・所属や作品名・大枠・公式ページのリンクだけで、音や、送った人の名前・メールは送りません。</span><span lang="en">If the voice you want is missing, measure it as a model on the mimic score page and add it. Only the numbers, the name, the agency or title, the category, and a link to an official page are sent — never the sound, nor the sender’s name or email.</span></p>
+          <p><span lang="ja">探している声が無い時は、<a href="./register.html">声を登録する</a>のページで、その声を測って登録できます（マイク・ほかのタブの音・音声ファイルで）。送るのは数字・名前・所属や作品名・大枠・公式ページのリンクだけで、音や、送った人の名前・メールは送りません。</span><span lang="en">If the voice you want is missing, measure it and add it on the <a href="./register.html">Add a voice</a> page (from the mic, another tab or a sound file). Only the numbers, the name, the agency or title, the category, and a link to an official page are sent — never the sound, nor the sender’s name or email.</span></p>
           <ul>
             <li><span lang="ja"><strong>確かめ 1</strong>: 数字が人の声としてありうるか、測れた声が足りているか、リンクが公式ページの形か。ページの中と、受け取った後の 2 回確かめます。</span><span lang="en"><strong>Check 1</strong>: whether the numbers are possible for a human voice, whether enough voice was measured, and whether the link looks like an official page — checked twice, on the page and after receipt.</span></li>
             <li><span lang="ja"><strong>確かめ 2</strong>: 毎日決まった時間に、AI が名前とリンクを見て、公開されているキャラや人物の声か、一般の人の声でないか、不適切でないかを確かめます。</span><span lang="en"><strong>Check 2</strong>: once a day, an AI looks at the name and link to check that it is a public character or person, not a private individual, and nothing inappropriate.</span></li>
@@ -127,7 +129,7 @@
           <p class="foot-logo">voice<span>-</span>match</p>
           <p><span lang="ja">音は保存も送信もしません。声から性別や年齢を判断しません。</span><span lang="en">Sound is never stored or sent. Gender and age are never guessed from a voice.</span></p>
         </div>
-        <p class="foot-links"><a href="./"><span lang="ja">声をくらべる</span><span lang="en">Compare</span></a><a href="./mimic.html"><span lang="ja">声真似の点数</span><span lang="en">Mimic score</span></a><a href="./voices.html"><span lang="ja">声の一覧</span><span lang="en">Voices</span></a><a href="./measure.html"><span lang="ja">じっくり測る</span><span lang="en">Measure in depth</span></a></p>
+        <p class="foot-links"><a href="./"><span lang="ja">声をくらべる</span><span lang="en">Compare</span></a><a href="./mimic.html"><span lang="ja">声真似練習場</span><span lang="en">Mimic studio</span></a><a href="./voices.html"><span lang="ja">声の一覧</span><span lang="en">Voices</span></a><a href="./measure.html"><span lang="ja">じっくり測る</span><span lang="en">Measure in depth</span></a></p>
       </footer>
     </div>
     <script type="module" src="/src/ui/about-page.ts"></script>

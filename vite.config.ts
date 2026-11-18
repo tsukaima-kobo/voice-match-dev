@@ -11,11 +11,42 @@ import type { Catalog, OperatorVoices, ProfileList } from './src/data/types.ts';
 import { siteFor } from './src/site-config.ts';
 
 const CSP = ["default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:", "connect-src 'none'", "font-src 'self'", "object-src 'none'", "base-uri 'none'", "form-action 'none'"].join('; ');
+// 声真似練習場（mimic.html）だけ: 音をきれいにする AI の部品を、このサイトの models/ から読む（connect-src 'self'）・WASM を動かす
+// （'wasm-unsafe-eval'。WASM を組み立てるだけで、文字の eval は許さない）。外のサイトへは、ここでも読みに行かない・送らない。
+const CSP_MIMIC = CSP.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'none'", "connect-src 'self'");
 
 const csp = (): Plugin => ({
   name: 'voice-match-csp',
   apply: 'build',
-  transformIndexHtml: (html) => html.replace('<meta charset="utf-8" />', `<meta charset="utf-8" />\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`),
+  transformIndexHtml: (html, ctx) => {
+    const page = ctx.filename.split('/').pop();
+    return html.replace('<meta charset="utf-8" />', `<meta charset="utf-8" />\n    <meta http-equiv="Content-Security-Policy" content="${page === 'mimic.html' ? CSP_MIMIC : CSP}" />`);
+  },
+});
+
+// onnxruntime-web（声真似練習場の「音楽を消す」）の WebGPU 用の WASM（約 28.7 MB）を、ビルドがそのまま dist に写さないようにする
+// （Cloudflare Pages は 1 つのファイルが 25 MiB まで）。WASM は tools/models.ts が 2 つに分けて public/models/ に置き、
+// src/voice/music.worker.ts が読んでつないで wasmBinary に渡すので、この住所は使わない。
+const ORT_WASM_URL = 'new URL("ort-wasm-simd-threaded.asyncify.wasm",import.meta.url)';
+const ortWasmUrl = (): Plugin => ({
+  name: 'voice-match-ort-wasm-url',
+  enforce: 'pre',
+  transform(code, id) {
+    if (!/onnxruntime-web[\\/]dist[\\/]/.test(id) || !code.includes(ORT_WASM_URL)) return null;
+    return { code: code.replaceAll(ORT_WASM_URL, 'new URL("ort-wasm-simd-threaded.asyncify.wasm",self.location.href)'), map: null };
+  },
+});
+
+// 作ったサイトに、Cloudflare Pages に置けない大きさ（25 MiB より大きい）のファイルがあれば止める
+const sizeCheck = (): Plugin => ({
+  name: 'voice-match-size-check',
+  apply: 'build',
+  generateBundle(_, bundle) {
+    for (const [name, f] of Object.entries(bundle)) {
+      const size = f.type === 'asset' ? (typeof f.source === 'string' ? Buffer.byteLength(f.source) : f.source.length) : Buffer.byteLength(f.code);
+      if (size > 24 * 1024 * 1024) this.error(`${name} が ${(size / 1048576).toFixed(1)} MiB あり、Cloudflare Pages に置けません（1 つ 25 MiB まで）`);
+    }
+  },
 });
 
 // SNS で共有された時の見た目（OGP・X のカード）。住所は絶対の物が要るので、公開の住所（src/site-config.ts の siteFor）から作る。
@@ -26,7 +57,8 @@ const SITE_URL = TARGET.url.replace(/\/?$/, '/');
 console.log(`サイト: ${TARGET.production ? '本番' : '検証用（検索に出さない）'}・${SITE_URL}（VITE_REPO=${process.env.VITE_REPO || 'なし'}）`);
 const OG: Record<string, { title: string; description: string }> = {
   'index.html': { title: 'voice-match｜あなたの声は誰に近い？', description: '一言話すと、声を 45 項目で測って、近い声と、あなただけの声紋を出します。登録不要・音は送らない。Say a phrase and see whose voice is closest to yours, plus your own voiceprint.' },
-  'mimic.html': { title: '声真似の点数｜voice-match', description: 'お手本のセリフを真似すると、抑揚・タイミング・声の質で点数と直し方を出します。Imitate a line and get a score with tips.' },
+  'mimic.html': { title: '声真似練習場｜voice-match', description: 'マイクでお手本を録って、何回でも聞き直して、真似して点数を競う。逆再生チャレンジも。配信・コラボ向け。Record a model, imitate it and compete for points, reversed-speech challenge included.' },
+  'register.html': { title: '声を登録する｜voice-match', description: 'アニメ・ゲームのキャラや配信者など、公開されている声を、ログインなしで登録できます。音は送りません。Add a public voice with no login; no sound is sent.' },
   'voices.html': { title: '声の一覧｜voice-match', description: 'このサイトで比べる相手になる声の一覧。名前・所属で探して、大枠（VTuber・歌手など）で絞れます。The voices on voice-match, searchable by name or agency.' },
   'about.html': { title: 'しくみと約束｜voice-match', description: '声をどう測り、どう比べるか。音を送らない・残さない約束。How voice-match measures voices, and our promises.' },
   'measure.html': { title: '声をじっくり測る｜voice-match', description: '決まった文を 20 分ほど読むと、サイトの声と同じ作り方であなたの声の代表値を作ります。音は残しません。Read set texts for about 20 minutes and get your voice’s representative values.' },
@@ -116,7 +148,8 @@ const voicePack = (): Plugin => ({
 
 export default defineConfig({
   base: './',
-  plugins: [csp(), ogp(), modelCheck(), voicePack()],
+  plugins: [csp(), ogp(), modelCheck(), voicePack(), sizeCheck()],
+  worker: { plugins: () => [ortWasmUrl(), sizeCheck()] },
   build: {
     outDir: 'dist',
     rollupOptions: {
@@ -124,6 +157,7 @@ export default defineConfig({
         index: fileURLToPath(new URL('./index.html', import.meta.url)),
         about: fileURLToPath(new URL('./about.html', import.meta.url)),
         mimic: fileURLToPath(new URL('./mimic.html', import.meta.url)),
+        register: fileURLToPath(new URL('./register.html', import.meta.url)),
         measure: fileURLToPath(new URL('./measure.html', import.meta.url)),
         voices: fileURLToPath(new URL('./voices.html', import.meta.url)),
       },

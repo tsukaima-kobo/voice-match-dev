@@ -100,6 +100,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node tools/github-stars.ts
+      - name: 声真似練習場の「音楽を消す」AI の部品（前に取った物があれば使う）
+        uses: actions/cache@v4
+        with:
+          path: public/models
+          key: models-${{ hashFiles('tools/models.ts', 'package-lock.json') }}
+      - name: 「音楽を消す」AI の部品を、版を固定して取り、ハッシュで確かめて 25 MiB より小さく分ける（tools/models.ts）
+        run: node tools/models.ts
       - run: npm run build
         env:
           VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}

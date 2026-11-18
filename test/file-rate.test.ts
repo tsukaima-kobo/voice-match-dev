@@ -1,4 +1,4 @@
-// 声真似の点数のページで、音声ファイルを 24 kHz で読むことの確かめ（src/ui/mimic-page.ts の FILE_RATE）。
+// 声を登録するページで、音声ファイルを 24 kHz で読むことの確かめ（src/ui/register-page.ts の FILE_RATE）。
 // 同じ音を 48 kHz のままと、24 kHz に直してから（ブラウザーが読む時の代わりに measure.ts の resample）測り、数字がほぼ同じか。
 // measure.ts は、どちらからも 16 kHz の 0.45（7.2 kHz）で切って直すので、使う帯域は同じ。
 import { describe, expect, it } from 'vitest';

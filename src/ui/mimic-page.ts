@@ -1,74 +1,54 @@
-// 声真似の点数のページ（mimic.html）: お手本を選ぶか聞かせる → 数字にする → 真似して話す → 近さの点数と直し方。
-// お手本が 1 つのセリフ（話しはじめから終わりまで LINE_MAX_SECONDS 以内）なら「セリフ真似」: 高さと大きさの動き（Contour）も持ち、
-// 同じセリフを真似した声と、抑揚・タイミング（mimic/line.ts）と声の質（mimic.ts）で比べ、2 本の線を重ねた図を出す。
-// それより長いお手本と、このサイトで測ったお手本は「声全体」: 声の数字だけで比べる。どちらも一言（声 0.4 秒）から。
-// 声のページ（index.html）の結果から `?target=<名前>` で来た時は、その声をお手本にする。
-// 音（お手本も利用者の声も）はメモリーの中だけ。数字にしたらすぐ捨てる。どこにも送らない、端末にも残さない。
-// お手本の数字もメモリーの中だけで、ページを閉じれば消える（localStorage なども使わない）。
-// お手本を聞かせている間は、ほかのタブやアプリで動画を流せるよう、ページが隠れても止めない（音が来てから 35 秒で止まる。
-// 音が来ないまま 60 秒たった時も止める）。真似して話す時は、ページが隠れたらすぐ止める。
-// マイクが外れた・タブの共有が止まった時は、聞かせ終えられる長さがあればそこまでで測り、無ければ止めて伝える。
-// お手本は、マイク・ほかのタブの音・音声ファイル、またはこのサイトで事前に測ったお手本の代表値（声のデータ。src/data/load.ts が裏で読む）。
+// 声真似練習場（mimic.html）: マイクでお手本を録る → 何回でも聞き直す → 順番に真似して話す → 近さの点数・直し方・点数表。
+// 2026-11-18 からゲームにした（運営「ゲーム感覚の場所に。お手本もマイクから直接取る方式のみ。マイクによって差が出ちゃうから」）。
+//   遊び方: 「声真似」（お手本の声を真似する）と「逆再生チャレンジ」（逆再生した言葉を真似し、録った声を逆にして元の言葉と比べる）。
+//   人: 何人でも（MAX_PLAYERS まで）順番に。点数表は、お手本ごとの最高点を足して合計にする。配信・コラボ向けに、キーボードでも遊べる。
+//   音をきれいにする: ノイズを減らす（RNNoise）・音楽を消す（Demucs。WebGPU のパソコンだけ）。src/voice/clean.ts。
+//     お手本と真似の両方に、同じ物をかける（お手本を録った時の選び方を、そのお手本の間ずっと使う。変えた物は次のお手本から）。
+// お手本が 1 つのセリフ（話しはじめから終わりまで LINE_MAX_SECONDS 以内）なら「セリフ真似」: 抑揚・タイミング（mimic/line.ts）と
+// 声の質（mimic.ts）で比べ、2 本の線を重ねた図を出す。それより長いお手本は「声全体」: 声の数字だけで比べる。
+// 音（お手本と真似）は、このページを開いている間だけメモリーに置き、何回でも聞き直せる（運営「その音声を利用者のブラウザのキャッシュに
+// 持って、離れる時に消えるように」）。端末に書き込む所（localStorage・IndexedDB など）には置かない。ページを離れる時（pagehide）に
+// 0 で埋めて捨てる。どこにも送らない。点数表と名前もメモリーだけ。
+// お手本を録っている間は、ほかのタブやアプリで動画を流してマイクに聞かせられるよう、ページが隠れても止めない（音が来てから 35 秒で
+// 止まる。音が来ないまま 60 秒たった時も止める）。真似して話す時は、ページが隠れたらすぐ止める。
+// 声の登録は、声を登録するページ（register.html）に分けた（タブの音・音声ファイルも使えるように）。
 // 声から性別や年齢を判断しない。お題のランダムはお題の選び方だけ。
-import { micErrorText, openMic, openTabAudio, tabAudioSupported, tabErrorText, type Mic } from '../voice/listen.ts';
-import type { MeasureFail } from '../voice/measure.ts';
-import { LONG_MAX_SECONDS, measureLong } from '../voice/combine.ts';
+import { micErrorText, openMic, type Mic } from '../voice/listen.ts';
+import type { MeasureFail, Measured } from '../voice/measure.ts';
 import { createWave, type Wave } from '../voice/wave.ts';
 import { createOrb, type OrbMode } from './orb.ts';
 import { micPicker } from './mic-picker.ts';
 import { createLiveAnalysis, type LiveAnalysis } from './live-analysis.ts';
 import { measureAsync } from '../voice/measure-async.ts';
-import { FEATURE_BY_KEY, forLength, formatFeature, LONG_SECONDS, ONE_LINE_SECONDS, type Features } from '../voice/features.ts';
-import type { Contour, Measured } from '../voice/measure.ts';
+import { FEATURE_BY_KEY, forLength, formatFeature, ONE_LINE_SECONDS, type Features } from '../voice/features.ts';
+import type { Contour } from '../voice/measure.ts';
 import { compareLines, LINE_MAX_SECONDS, lineScore } from '../mimic/line.ts';
 import { drawLineChart } from './line-chart.ts';
 import { mountShapes } from './voiceprint.ts';
 import { el, itemRow, renderGroups } from './items.ts';
 import { adviceFor, differences, mimicScore, scoreWord } from '../mimic/mimic.ts';
-import { ENTRY_BY_ID, PROFILES, voicesReady } from '../data/load.ts';
 import { nextPromptIndex, nextReadingIndex, promptText, readingText } from '../prompts/prompts.ts';
-import { lang, mountLang, onLang, t, type Lang } from '../i18n.ts';
+import { mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
-import { checkSubmission, encodeSubmission, makeSubmission } from '../submit/code.ts';
-import { SUBMIT_FORM } from '../submit/config.ts';
-import { KINDS } from '../data/kinds.ts';
-import { groupOf, nameOf } from '../data/names.ts';
+import { cleanAudio, musicSupport, type CleanChoice, type CleanStage, type MusicSupport } from '../voice/clean.ts';
+import { createPlayback, reversed, type Clip } from './playback.ts';
 
-/** 聞く長さの最大（秒） */
+/** 録る長さの最大（秒） */
 const LISTEN_MAX = 35;
-/** 「聞かせ終えた」「話し終えた」を押せるまで（秒） */
+/** 「録り終えた」「話し終えた」を押せるまで（秒） */
 const REF_DONE_AFTER = 1;
 const MIM_DONE_AFTER = 1;
 /** 計算中の演出の長さ（ミリ秒）。その間に Worker が測る */
 const ANALYSE_MS = 1500;
-/** お手本をマイク・タブから測っている時だけ、解析パネルの計算中の演出を出す（ファイルの時は出さない） */
-let refAnalysingMic = false;
-/** 声の登録に要る声（秒。壁 ① と同じ） */
-const REG_MIN_VOICED = LONG_SECONDS;
-/** 雑音の床が分からない短いファイル（声だけを切り出した物）は、前後に無音を足して測り直す（その時は登録しない） */
-const PAD_FILE_MAX_SECONDS = 15;
-/**
- * お手本の音声ファイルの大きさの上限。ファイルは、読むと全部がメモリーに乗る。mp3・m4a などは読むと 10 倍以上の大きさになる
- * （128 kbps の 10 MB で 10 分ほど・120 MB ほど）ので小さく、wav・flac などはあまり変わらないので大きく（CD の音で 3 分ほど）
- */
-const FILE_MAX_BYTES = 10 * 1024 * 1024;
-const RAW_FILE_MAX_BYTES = 32 * 1024 * 1024;
-/** 読んでも大きさがあまり変わらない形（wav・aiff・flac） */
-const isRawAudio = (f: File) => /\.(wav|wave|aiff?|aifc|flac)$/i.test(f.name) || /wav|aiff|flac/i.test(f.type);
-/**
- * 音声ファイルは、この速さで読む（48 kHz の半分のメモリー。スマホで落ちないように）。measure.ts の 16 kHz への直し方は、
- * 24 kHz からでも 48 kHz からでも、同じ 7.2 kHz（16 kHz の 0.45）で切る低域通過を通すので、マイク（多くは 48 kHz）・サイトの声
- * （48 kHz で測る）と同じ帯域で測れる（ブラウザーが 24 kHz に直す時に消えるのは 12 kHz より上だけ）。16 kHz で読ませないのは、
- * ブラウザーの直し方が違って、声の澄み具合などが少しずれるため（古い Safari は 22.05 kHz より低い速さで読めない）
- */
-const FILE_RATE = 24000;
-/** お手本を聞かせる時、これより小さい音は「まだ始まっていない」として数えない（RMS） */
+/** お手本を録る時、これより小さい音は「まだ始まっていない」として数えない（RMS） */
 const START_RMS = 0.003;
-/** お手本を聞かせる時、音が来ないまま、これだけたったら止める（秒。マイク・タブの音を開いたままにしない） */
+/** お手本を録る時、音が来ないまま、これだけたったら止める（秒。マイクを開いたままにしない） */
 const WAIT_MAX = 60;
+/** 挑戦する人の数の上限 */
+const MAX_PLAYERS = 8;
 
 const $ = <E extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as E;
-mountLang({ ja: '声真似の点数｜voice-match', en: 'Voice-mimic score | voice-match' });
+mountLang({ ja: '声真似練習場｜voice-match', en: 'Voice-mimic studio | voice-match' });
 mountGithubLink();
 mountFooter();
 /** 結果のシェア（X など） */
@@ -78,26 +58,295 @@ type Msg = () => string;
 const M = (ja: string, en: string): Msg => () => t(ja, en);
 /** 声の玉（お手本と真似の両方で使う。見た目だけ） */
 const orb = createOrb($('orb'));
-const ORB_MODE: Record<string, OrbMode> = { listening: 'listening', analysing: 'analysing', ready: 'done', done: 'done' };
-/** マイクを選ぶ所（お手本と真似の 2 か所。どちらで選んでも同じ） */
-const mics = micPicker(
-  ['ref', 'mim'].map((k) => ({ box: $(`${k}-mic-pick`), select: $<HTMLSelectElement>(`${k}-mic-select`), find: $<HTMLButtonElement>(`${k}-mic-find`) })),
-  // マイクの一覧が出せなかった時: 今出している方の知らせに出す（言葉を切り替えても出したままにする）
-  (msg) => {
-    if (mimState === 'locked') {
-      refMsg = msg;
-      refBad = true;
-    } else {
-      mimMsg = msg;
-      mimBad = true;
-    }
-    const st = mimState === 'locked' ? ref.status : mim.status;
-    st.textContent = msg();
-    st.classList.add('bad');
-  },
-);
-const isBusy = (st: string) => st === 'asking' || st === 'listening' || st === 'analysing';
-const lockMics = () => mics.lock(isBusy(refState) || isBusy(mimState));
+const ORB_MODE: Record<string, OrbMode> = { listening: 'listening', cleaning: 'analysing', analysing: 'analysing', ready: 'done', done: 'done' };
+const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const scrollTo = (e: HTMLElement) => e.scrollIntoView({ behavior: still() ? 'auto' : 'smooth', block: 'start' });
+
+/* ---- 遊び方 ---- */
+type Mode = 'mimic' | 'reverse';
+const modeInputs = [...document.querySelectorAll<HTMLInputElement>('input[name="mode"]')];
+let mode: Mode = 'mimic';
+
+/* ---- 挑戦する人と点数表（メモリーだけ） ---- */
+interface Player {
+  id: number;
+  name: string;
+  /** 今のお手本での最高点（まだ無ければ null） */
+  best: number | null;
+  /** 今のお手本で真似した回数 */
+  roundTries: number;
+  /** 前のお手本までの最高点の合計 */
+  total: number;
+  /** 真似した回数（全部） */
+  tries: number;
+  /** 最後に真似した声（聞き直す用。録ったままの向き） */
+  last: Clip | null;
+  /** last が逆再生チャレンジの声か（点数表の ▶ では、逆にして、比べた向きで鳴らす） */
+  lastReverse: boolean;
+}
+let nextPlayerId = 1;
+const newPlayer = (name: string): Player => ({ id: nextPlayerId++, name, best: null, roundTries: 0, total: 0, tries: 0, last: null, lastReverse: false });
+/** 名前を入れずに始めた時の 1 人目（言葉を切り替えたら、その言葉に） */
+let defaultNamed = true;
+const players: Player[] = [newPlayer(t('あなた', 'You'))];
+let turn = 0;
+const current = () => players[Math.min(turn, players.length - 1)]!;
+const playerList = $('players');
+const playerAdd = $<HTMLFormElement>('player-add');
+const playerName = $<HTMLInputElement>('player-name');
+
+/** お手本が変わった・遊び方を変えた時: 今のお手本での最高点を合計に入れる */
+function endRound(): void {
+  for (const p of players) {
+    p.total += p.best ?? 0;
+    p.best = null;
+    p.roundTries = 0;
+  }
+}
+
+function drawPlayers(): void {
+  const busy = isBusy(refState) || isBusy(mimState);
+  playerList.replaceChildren(
+    ...players.map((p, i) => {
+      const li = el('li', i === turn ? 'player now' : 'player');
+      const pick = el('button', 'player-pick');
+      pick.type = 'button';
+      pick.disabled = busy;
+      pick.append(el('span', 'player-no', String(i + 1)), el('span', 'player-name', p.name));
+      if (i === turn) pick.append(el('span', 'player-turn', t('の番', '’s turn')));
+      pick.setAttribute('aria-pressed', String(i === turn));
+      pick.title = t(`${p.name}の番にする`, `Make it ${p.name}’s turn`);
+      pick.addEventListener('click', () => {
+        turn = i;
+        drawPlayers();
+        drawTurn();
+      });
+      li.append(pick);
+      if (players.length > 1) {
+        const del = el('button', 'player-del', '×');
+        del.type = 'button';
+        del.disabled = busy;
+        del.setAttribute('aria-label', t(`${p.name}を外す`, `Remove ${p.name}`));
+        del.addEventListener('click', () => {
+          players.splice(i, 1);
+          if (p.last) p.last.pcm.fill(0);
+          if (shown?.who === p) shown.clip = null;
+          if (turn > i || turn >= players.length) turn = Math.max(0, turn - 1);
+          drawPlayers();
+          drawTurn();
+          drawBoard();
+        });
+        li.append(del);
+      }
+      return li;
+    }),
+  );
+  const full = players.length >= MAX_PLAYERS;
+  playerName.disabled = full || busy;
+  $<HTMLButtonElement>('player-add-button').disabled = full || busy;
+}
+playerAdd.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = playerName.value.trim().slice(0, 20);
+  if (!name || players.length >= MAX_PLAYERS) return;
+  // 1 人目が名前の無いまま（あなた）で、まだ誰も真似していなければ、1 人目をこの名前にする
+  if (players.length === 1 && defaultNamed && players[0]!.tries === 0) {
+    players[0]!.name = name;
+    defaultNamed = false;
+  } else players.push(newPlayer(name));
+  playerName.value = '';
+  drawPlayers();
+  drawTurn();
+  drawBoard();
+});
+
+const turnBox = $('turn');
+function drawTurn(): void {
+  const p = current();
+  turnBox.hidden = players.length < 2;
+  turnBox.replaceChildren(el('span', 'turn-label', t('今の番', 'Now playing')), el('strong', 'turn-name', p.name), el('span', 'turn-count', t(`${turn + 1} 人目 / ${players.length} 人`, `${turn + 1} of ${players.length}`)));
+  nextBtn.hidden = players.length < 2;
+}
+
+const board = $('board');
+function drawBoard(): void {
+  const any = players.some((p) => p.tries > 0);
+  board.hidden = !any;
+  if (!any) return;
+  const rows = players.map((p) => ({ p, sum: p.total + (p.best ?? 0) })).sort((a, b) => b.sum - a.sum || (b.p.best ?? -1) - (a.p.best ?? -1));
+  let rank = 0;
+  let prev = Number.NaN;
+  $('board-body').replaceChildren(
+    ...rows.map(({ p, sum }, i) => {
+      if (sum !== prev) rank = i + 1;
+      prev = sum;
+      const tr = el('tr', p === current() ? 'now' : undefined);
+      tr.append(el('td', 'rank', String(rank)), el('td', 'who', p.name), el('td', 'num', p.best === null ? '—' : String(p.best)), el('td', 'num', String(sum)), el('td', 'num', String(p.tries)));
+      const cell = el('td');
+      if (p.last) {
+        const b = el('button', 'board-play');
+        b.type = 'button';
+        b.dataset.play = `p${p.id}`;
+        cell.append(b);
+      }
+      tr.append(cell);
+      return tr;
+    }),
+  );
+  drawPlay();
+}
+$('board-clear').addEventListener('click', () => {
+  for (const p of players) {
+    p.best = null;
+    p.roundTries = 0;
+    p.total = 0;
+    p.tries = 0;
+    p.last?.pcm.fill(0);
+    p.last = null;
+  }
+  if (shown) shown.clip = null;
+  playback.stop();
+  drawBoard();
+});
+
+/* ---- 音をきれいにする ---- */
+const cleanNoise = $<HTMLInputElement>('clean-noise');
+const cleanMusic = $<HTMLInputElement>('clean-music');
+const cleanNote = $('clean-note');
+let music: MusicSupport | null = null;
+const choiceNow = (): CleanChoice => ({ denoise: cleanNoise.checked, music: cleanMusic.checked && !!music?.ok });
+const choiceText = (c: CleanChoice) => [c.music ? t('音楽を消す', 'remove music') : '', c.denoise ? t('ノイズを減らす', 'reduce noise') : ''].filter(Boolean).join(t('・', ', ')) || t('なし', 'none');
+function drawClean(): void {
+  const notes: string[] = [];
+  if (music && !music.ok) notes.push(music.why === 'gpu' ? t('このブラウザーでは「音楽を消す」を使えません（WebGPU と、その 16 ビットの計算が要ります。パソコンの Chrome・Edge などで使えます）。', '“Remove music” is not available in this browser (it needs WebGPU with 16-bit maths; Chrome or Edge on a computer works).') : t('このサイトには、まだ「音楽を消す」の AI が置かれていません。', 'The AI for “Remove music” is not on this site yet.'));
+  else if (music?.ok && cleanMusic.checked) notes.push(t(`「音楽を消す」は、最初の 1 回だけ AI（約 ${Math.round(music.bytes / 1e6)} MB）をこのサイトから読みます（2 回目からはブラウザーのキャッシュから）。音を送るのではありません。`, `“Remove music” reads the AI (about ${Math.round(music.bytes / 1e6)} MB) from this site the first time only (then from the browser cache). No sound is sent.`));
+  if (model) {
+    const now = choiceNow();
+    const same = now.denoise === model.clean.denoise && now.music === model.clean.music;
+    notes.push(t(`今のお手本: ${choiceText(model.clean)}${same ? '' : '（変えた物は、次のお手本から）'}`, `Current model: ${choiceText(model.clean)}${same ? '' : ' (changes apply from the next model)'}`));
+  }
+  cleanNote.textContent = notes.join(' ');
+  cleanNote.hidden = !notes.length;
+}
+cleanMusic.disabled = true;
+void musicSupport().then((s) => {
+  music = s;
+  cleanMusic.disabled = !s.ok || isBusy(refState) || isBusy(mimState);
+  if (!s.ok) cleanMusic.checked = false;
+  drawClean();
+});
+for (const c of [cleanNoise, cleanMusic]) c.addEventListener('change', drawClean);
+
+/** 音をきれいにしている間の文（言葉を切り替えても出したままにする） */
+function cleanMsg(stage: CleanStage, done: number, total: number): Msg {
+  switch (stage) {
+    case 'download':
+      return M(`音楽を消す AI を読んでいます… ${Math.floor((done / total) * 100)}%（最初の 1 回だけ）`, `Loading the music-removal AI… ${Math.floor((done / total) * 100)}% (first time only)`);
+    case 'prepare':
+      return M(`音楽を消す AI を用意しています… ${done} / ${total}`, `Getting the music-removal AI ready… ${done} / ${total}`);
+    case 'separate':
+      return M(`音楽を消しています… ${done} / ${total}`, `Removing music… ${done} / ${total}`);
+    default:
+      return M('ノイズを減らしています…', 'Reducing noise…');
+  }
+}
+
+/* ---- マイク ---- */
+const mics = micPicker([{ box: $('mic-pick'), select: $<HTMLSelectElement>('mic-select'), find: $<HTMLButtonElement>('mic-find') }], (msg) => {
+  const st = mimState === 'locked' ? ref.status : mim.status;
+  if (mimState === 'locked') {
+    refMsg = msg;
+    refBad = true;
+  } else {
+    mimMsg = msg;
+    mimBad = true;
+  }
+  st.textContent = msg();
+  st.classList.add('bad');
+});
+const isBusy = (st: string) => st === 'asking' || st === 'listening' || st === 'cleaning' || st === 'analysing';
+function lockAll(): void {
+  const busy = isBusy(refState) || isBusy(mimState);
+  mics.lock(busy);
+  for (const r of modeInputs) r.disabled = busy;
+  cleanNoise.disabled = busy;
+  cleanMusic.disabled = busy || !music?.ok;
+  drawPlayers();
+  drawPlay();
+}
+
+/* ---- 配信向けの表示（このタブを閉じるまで覚える） ---- */
+const STREAM_KEY = 'voice-match-stream-view';
+const streamView = $<HTMLInputElement>('stream-view');
+try {
+  streamView.checked = sessionStorage.getItem(STREAM_KEY) === '1';
+} catch {
+  /* 覚えられない */
+}
+const applyStream = () => document.body.classList.toggle('stream-view', streamView.checked);
+streamView.addEventListener('change', () => {
+  applyStream();
+  try {
+    if (streamView.checked) sessionStorage.setItem(STREAM_KEY, '1');
+    else sessionStorage.removeItem(STREAM_KEY);
+  } catch {
+    /* 覚えられない */
+  }
+});
+applyStream();
+
+/* ---- 聞き直す ---- */
+const playback = createPlayback(() => drawPlay());
+/** 聞き直すボタン（data-play の key ごと）の文字 */
+function playLabel(key: string): string {
+  const rev = mode === 'reverse';
+  switch (key) {
+    case 'model':
+      return rev ? t('▶ 逆再生を聞く', '▶ Play reversed') : t('▶ お手本を聞く', '▶ Play the model');
+    case 'original':
+      return t('▶ 元の言葉を聞く（答え）', '▶ Play the original word (answer)');
+    case 'mine':
+      return rev ? t('▶ 自分の声（そのまま）', '▶ My voice (as recorded)') : t('▶ 自分の声', '▶ My voice');
+    case 'mine-rev':
+      return t('▶ 逆にした自分の声', '▶ My voice reversed');
+    default:
+      return '▶';
+  }
+}
+/** 鳴らす物（key から） */
+function clipOf(key: string): { clip: Clip; reverse: boolean } | null {
+  if (key === 'model' && model) return { clip: model.clip, reverse: mode === 'reverse' };
+  if (key === 'original' && model) return { clip: model.clip, reverse: false };
+  if ((key === 'mine' || key === 'mine-rev') && shown?.clip) return { clip: shown.clip, reverse: key === 'mine-rev' };
+  if (key.startsWith('p')) {
+    const p = players.find((x) => `p${x.id}` === key);
+    if (p?.last) return { clip: p.last, reverse: p.lastReverse };
+  }
+  return null;
+}
+function drawPlay(): void {
+  // 録っている間は鳴らさない（マイクに入るため）
+  const recording = refState === 'asking' || refState === 'listening' || mimState === 'asking' || mimState === 'listening';
+  for (const b of document.querySelectorAll<HTMLButtonElement>('button[data-play]')) {
+    const key = b.dataset.play!;
+    const on = playback.playing === key;
+    b.textContent = on ? t('■ 止める', '■ Stop') : playLabel(key);
+    b.classList.toggle('playing', on);
+    b.disabled = recording || !clipOf(key);
+  }
+}
+function togglePlay(key: string): void {
+  if (playback.playing === key) {
+    playback.stop();
+    return;
+  }
+  const c = clipOf(key);
+  if (c) playback.play(key, c.clip, c.reverse);
+}
+document.addEventListener('click', (e) => {
+  const b = (e.target as Element | null)?.closest<HTMLButtonElement>('button[data-play]');
+  if (b && !b.disabled) togglePlay(b.dataset.play!);
+});
 
 /* ---- 録る（お手本と真似で共通） ---- */
 interface TakeUi {
@@ -141,6 +390,8 @@ class Take {
     }
     this.chunks.push(x);
     this.got += x.length;
+    // 押せるようにするのは描く繰り返しでもするが、描けない時（画面が止まっている時など）のため、ここでも
+    if (this.ui.done.disabled && this.got / this.rate >= this.doneAfter) this.ui.done.disabled = false;
     this.ui.wave.push(x, this.rate);
     this.ui.live.push(x, this.rate);
     orb.push(x, this.rate);
@@ -172,7 +423,7 @@ class Take {
     if (this.live) this.raf = requestAnimationFrame(this.tick);
   };
   /** 止めて、録った音を 1 つにして渡す（中はすぐ空にする） */
-  take(): { pcm: Float32Array; rate: number } | null {
+  take(): Clip | null {
     const rate = this.rate;
     this.stop();
     if (!rate || !this.got) {
@@ -197,6 +448,7 @@ class Take {
     this.ui.wave.draw(false);
   }
   drop(): void {
+    for (const c of this.chunks) c.fill(0);
     this.chunks = [];
     this.got = 0;
     this.waited = 0;
@@ -212,120 +464,127 @@ function rms(x: Float32Array): number {
   return Math.sqrt(s / Math.max(1, x.length));
 }
 
+/** 録った音をきれいにして（選んだ物だけ）、測る。測るのは写し（measureAsync は渡した音を 0 で埋める）。逆再生チャレンジの真似は逆にして測る */
+async function cleanAndMeasure(raw: Clip, choice: CleanChoice, reverse: boolean, contour: boolean, onStage: (m: Msg) => void, live: LiveAnalysis, analysing: () => void): Promise<{ clip: Clip; m: Measured } | { error: 'clean' }> {
+  let clip = raw;
+  if (choice.denoise || choice.music) {
+    try {
+      clip = await cleanAudio(raw.pcm, raw.rate, choice, (stage, done, total) => onStage(cleanMsg(stage, done, total)));
+    } catch {
+      return { error: 'clean' };
+    } finally {
+      // 元の音は、きれいにした後（できなかった時も）すぐ捨てる
+      raw.pcm.fill(0);
+    }
+  }
+  analysing();
+  const x = reverse ? reversed(clip.pcm) : clip.pcm.slice();
+  const [m] = await Promise.all([measureAsync(x, clip.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour }), live.analysing(ANALYSE_MS)]);
+  return { clip, m };
+}
+
 /* ---- 1. お手本 ---- */
 const ref = {
   stage: $('ref'),
+  title: $('ref-title'),
+  hint: $('ref-hint'),
   pick: $('ref-pick'),
-  mic: $<HTMLButtonElement>('ref-mic'),
-  tab: $<HTMLButtonElement>('ref-tab'),
-  tabNote: $('ref-tab-note'),
-  fileButton: $<HTMLButtonElement>('ref-file-button'),
-  file: $<HTMLInputElement>('ref-file'),
-  catalogBox: $('ref-catalog-box'),
-  catalog: $<HTMLInputElement>('ref-catalog'),
   name: $<HTMLInputElement>('ref-name'),
+  rec: $<HTMLButtonElement>('ref-rec'),
   done: $<HTMLButtonElement>('ref-done'),
   cancel: $<HTMLButtonElement>('ref-cancel'),
-  change: $<HTMLButtonElement>('ref-change'),
+  play: $('ref-play'),
+  original: $<HTMLButtonElement>('play-original'),
   summary: $('ref-summary'),
   status: $('ref-status'),
-  fill: $('ref-fill'),
-  sec: $('ref-sec'),
 };
 const refLive = createLiveAnalysis($('ref-live'));
-const refTake = new Take({ wave: createWave($<HTMLCanvasElement>('ref-wave')), live: refLive, fill: ref.fill, sec: ref.sec, done: ref.done }, REF_DONE_AFTER, true, () => refFinish(), () => refQuiet());
+const refTake = new Take({ wave: createWave($<HTMLCanvasElement>('ref-wave')), live: refLive, fill: $('ref-fill'), sec: $('ref-sec'), done: ref.done }, REF_DONE_AFTER, true, () => refFinish(), () => refQuiet());
 
-type RefState = 'idle' | 'asking' | 'listening' | 'analysing' | 'ready' | 'failed';
+type RefState = 'idle' | 'asking' | 'listening' | 'cleaning' | 'analysing' | 'ready' | 'failed';
 let refState: RefState = 'idle';
 let refToken = 0;
-/** お手本。利用者が聞かせた物（マイク・タブ・ファイル）は、登録に使う声の質も持つ */
+/** 比べる相手（お手本の数字） */
 interface Target {
   features: Features;
   name: string;
-  /** このサイトで測ったお手本の時だけ: 英語の名前（英語のページで出す） */
-  nameEn?: string;
-  reg?: { quality: { voicedSeconds: number; gapTonal: number; snrDb: number } };
   /** セリフ真似の時だけ: お手本の高さと大きさの動き */
   contour?: Contour;
-  /** 利用者が聞かせたお手本の声（秒）。このサイトで測ったお手本は無し */
-  voicedSeconds?: number;
-  /** 声だけを切り出したファイルに、無音を足して測った（雑音との差が分からないので、登録には使わない） */
-  padded?: boolean;
 }
-let target: Target | null = null;
-let refKind: 'mic' | 'tab' = 'mic';
-let best = 0;
-let tries = 0;
+/** お手本: 音（きれいにした後の物）・数字・その時の選び方 */
+interface Model {
+  clip: Clip;
+  target: Target;
+  clean: CleanChoice;
+  /** お手本の言葉（まとめの文） */
+  from: Msg;
+}
+let model: Model | null = null;
 
 let refMsg: Msg = () => '',
   refBad = false,
   mimMsg: Msg = () => '',
   mimBad = false;
-/** お手本の所を描く。`redraw` は言葉を切り替えた時（声の玉はそのまま。お手本を録っている間に止まって見えないように） */
+/** お手本の所を描く。`redraw` は言葉を切り替えた時（声の玉はそのまま） */
 function showRef(next: RefState, msg: Msg, bad = false, redraw = false): void {
   refState = next;
   refMsg = msg;
   refBad = bad;
   ref.stage.dataset.state = next;
-  refLive.mode(next === 'listening' ? 'listening' : next === 'analysing' && refAnalysingMic ? 'analysing' : 'off');
+  refLive.mode(next === 'listening' ? 'listening' : next === 'analysing' ? 'analysing' : 'off');
   if (!redraw) orb.mode(ORB_MODE[next] ?? 'idle');
-  lockMics();
   ref.status.textContent = msg();
   ref.status.classList.toggle('bad', bad);
-  const busy = next === 'asking' || next === 'listening' || next === 'analysing';
+  const busy = isBusy(next);
+  const rev = mode === 'reverse';
+  ref.title.textContent = rev ? t('言葉を録る', 'Record a word') : t('お手本を録る', 'Record the model');
+  ref.hint.textContent = rev
+    ? t('逆再生にする言葉を、マイクに向かって言ってください（「おはようございます」くらいの短い言葉がおすすめ）。録ったら、逆再生を聞いて、聞こえたとおりに真似します。', 'Say the word to reverse into the mic (a short phrase like “good morning” works best). Then listen to it reversed and imitate what you hear.')
+    : t('お手本の声を、マイクに聞かせてください（自分や相手が言う・スマホなどで流す）。セリフ 1 つ（「おはようございます」くらいから）なら、抑揚とタイミングまで比べます。BGM が大きい時は「音楽を消す」を使ってください。', 'Play the model’s voice into the mic (say it yourself, have someone say it, or play it from a phone). A single line (from a short phrase up) is compared for intonation and timing too. If the BGM is loud, use “Remove music”.');
   ref.pick.hidden = next === 'ready';
-  for (const b of [ref.mic, ref.tab, ref.fileButton]) b.disabled = busy;
-  ref.catalog.disabled = busy;
   ref.name.disabled = busy;
+  ref.rec.hidden = busy;
+  ref.rec.textContent = model ? t('新しいお手本を録る', 'Record a new model') : t('録る', 'Record');
+  ref.rec.classList.toggle('primary', !model);
   ref.done.hidden = next !== 'listening';
   ref.cancel.hidden = !(next === 'listening' || next === 'asking');
-  ref.change.hidden = next !== 'ready';
-  ref.summary.hidden = next !== 'ready';
-  reg.box.hidden = !(next === 'ready' && target?.reg);
-  const short = next === 'ready' && target?.voicedSeconds !== undefined && !target.reg;
-  regShort.hidden = !short;
-  // 無音を足して測ったファイルは、声が足りていても登録できない（「声が足りない」と出さない）
-  if (short && target!.padded && target!.voicedSeconds! >= REG_MIN_VOICED) regShort.textContent = t('声だけを切り出したファイルなので、雑音の大きさが分からず、登録には使えません。声の前後の静かな所も入ったファイルにすると、登録もできます。', 'This file has only the voice cut out, so the noise level cannot be told and it cannot be used to add the voice. Use a file that also has the quiet parts before and after the voice to be able to add it.');
-  else if (short) regShort.textContent = t(`この声をサイトに登録するには、声が ${REG_MIN_VOICED} 秒以上いります（今は ${target!.voicedSeconds!.toFixed(1)} 秒）。セリフをいくつか続けて聞かせると、登録もできます。`, `To add this voice to the site, ${REG_MIN_VOICED} s of voice is needed (now ${target!.voicedSeconds!.toFixed(1)} s). Play several lines in a row to be able to add it.`);
-  ref.done.textContent = t('聞かせ終えた', 'Done');
+  ref.done.textContent = t('録り終えた', 'Done');
   ref.cancel.textContent = t('やめる', 'Stop');
-  ref.change.textContent = t('お手本を変える', 'Change the model');
+  ref.play.hidden = !model || busy;
+  ref.original.hidden = !rev;
+  ref.summary.hidden = !model || busy;
+  if (model) ref.summary.textContent = summaryOf(model);
+  lockAll();
+  drawClean();
 }
 
-async function refListen(kind: 'mic' | 'tab'): Promise<void> {
+async function refListen(): Promise<void> {
   const my = ++refToken;
-  refKind = kind;
-  // ほかの方法で聞かせはじめた: ?target= のお手本は使わない（ファイルを選ぶ画面は、もう閉じている）
-  wanted = null;
-  choosingFile = false;
+  playback.stop();
+  // 真似を録っている・計算している途中なら、止めて音を捨てる
+  mimStop();
   refTake.drop();
-  showRef('asking', kind === 'mic' ? M('マイクの許可を待っています…', 'Waiting for microphone permission…') : M('共有するタブを選んでください…', 'Choose the tab to share…'));
+  showRef('asking', M('マイクの許可を待っています…', 'Waiting for microphone permission…'));
   try {
-    const m = kind === 'mic' ? await openMic(refTake.onChunk, () => refEnded('mic'), mics.get()) : await openTabAudio(refTake.onChunk, () => refEnded('tab'));
+    const m = await openMic(refTake.onChunk, refEnded, mics.get());
     if (my !== refToken || refState !== 'asking') {
       m.stop();
       return;
     }
     refTake.begin(m);
-    if (kind === 'mic') void mics.refresh();
+    void mics.refresh();
     const label = m.label ?? '';
     showRef('listening', () =>
-      kind === 'mic'
-        ? t(
-            `お手本を流して、マイクに聞かせてください。音が聞こえたら数えはじめます。セリフ 1 つでもかまいません。流し終えたら「聞かせ終えた」を押してください（最大 ${LISTEN_MAX} 秒）。${label ? `マイク: ${label}` : ''}`,
-            `Play the model to the microphone. Counting starts when sound is heard. A single line is fine. Press “Done” when it ends (up to ${LISTEN_MAX} s).${label ? ` Microphone: ${label}` : ''}`,
-          )
-        : t(
-            `選んだタブで、お手本を再生してください。セリフ 1 つなら、言い終わったら動画を止めて、このページで「聞かせ終えた」を押してください（音が来てから ${LISTEN_MAX} 秒で止まります）。`,
-            `Play the model in the chosen tab. For a single line, pause the video when it ends and press “Done” on this page (it stops ${LISTEN_MAX} s after the sound starts).`,
-          ),
+      (mode === 'reverse'
+        ? t(`言葉を言ってください。音が聞こえたら数えはじめます。言い終えたら「録り終えた」を押してください（最大 ${LISTEN_MAX} 秒）。`, `Say the word. Counting starts when sound is heard. Press “Done” when you finish (up to ${LISTEN_MAX} s).`)
+        : t(`お手本をマイクに聞かせてください。音が聞こえたら数えはじめます。セリフ 1 つでもかまいません。終えたら「録り終えた」を押してください（最大 ${LISTEN_MAX} 秒）。`, `Play the model to the microphone. Counting starts when sound is heard. A single line is fine. Press “Done” when it ends (up to ${LISTEN_MAX} s).`)) + (label ? t(`マイク: ${label}`, ` Microphone: ${label}`) : ''),
     );
   } catch (e) {
     if (my !== refToken) return;
     refTake.stop();
     refTake.drop();
     if ((e as { name?: string } | null)?.name === 'MicGoneError') mics.reset();
-    showRef('failed', () => (kind === 'mic' ? micErrorText(e) : tabErrorText(e)), true);
+    showRef('failed', () => micErrorText(e), true);
   }
 }
 
@@ -333,41 +592,82 @@ function refFinish(): void {
   if (refState !== 'listening') return;
   const got = refTake.take();
   if (!got) {
-    showRef('failed', M('お手本の音が届きませんでした。音量を上げて、もう一度試してください。', 'No sound from the model reached the page. Turn the volume up and try again.'), true);
+    showRef('failed', M('お手本の音が届きませんでした。マイクを確かめて、もう一度録ってください。', 'No sound reached the page. Check the microphone and record again.'), true);
     return;
   }
-  refAnalysingMic = true;
-  showRef('analysing', M('お手本を計算しています…', 'Working out the model…'));
   const my = refToken;
-  void Promise.all([measureAsync(got.pcm, got.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: true }), refLive.analysing(ANALYSE_MS)]).then(([m]) => {
-    refAnalysingMic = false;
-    if (my !== refToken || refState !== 'analysing') return;
+  const choice = choiceNow();
+  showRef(choice.denoise || choice.music ? 'cleaning' : 'analysing', M('お手本を計算しています…', 'Working out the model…'));
+  void cleanAndMeasure(
+    got,
+    choice,
+    false,
+    true,
+    (msg) => {
+      if (my === refToken && refState === 'cleaning') showRef('cleaning', msg);
+    },
+    refLive,
+    () => {
+      if (my === refToken && refState === 'cleaning') showRef('analysing', M('お手本を計算しています…', 'Working out the model…'));
+    },
+  ).then((r) => {
+    if (my !== refToken || !isBusy(refState)) {
+      if ('clip' in r) r.clip.pcm.fill(0);
+      return;
+    }
+    if ('error' in r) {
+      showRef('failed', M('音をきれいにできませんでした。「音をきれいにする」を外すか、ページを読み直して、もう一度録ってください。', 'The sound could not be cleaned up. Untick “Clean up the sound” or reload the page, then record again.'), true);
+      return;
+    }
+    const { clip, m } = r;
     if (!m.ok) {
+      clip.pcm.fill(0);
       showRef('failed', () => failText(m.reason, m.info.voicedSeconds, true), true);
       return;
     }
-    targetFrom(m, false);
+    setModel(clip, m, choice);
   });
 }
 
-/** 測ったお手本から Target を作る（セリフ 1 つなら動きも。登録は声が足りて、無音を足していない時だけ） */
-function targetFrom(m: Extract<Measured, { ok: true }>, padded: boolean): void {
-  const i = m.info;
-  const line = i.contour && i.speechSeconds <= LINE_MAX_SECONDS ? i.contour : undefined;
-  const canReg = !padded && i.voicedSeconds >= REG_MIN_VOICED;
-  setTarget(
-    forLength(m.features, i.voicedSeconds),
-    ref.name.value.trim(),
-    line ? M(`セリフ ${i.speechSeconds.toFixed(1)} 秒`, `a ${i.speechSeconds.toFixed(1)} s line`) : M(`声 ${i.voicedSeconds.toFixed(1)} 秒分`, `${i.voicedSeconds.toFixed(1)} s of voice`),
-    canReg ? { quality: { voicedSeconds: i.voicedSeconds, gapTonal: i.gapTonal, snrDb: i.loudDb - i.floorDb } } : undefined,
-    line,
-    i.voicedSeconds,
-    undefined,
-    padded,
-  );
+function summaryOf(md: Model): string {
+  const f = md.target.features;
+  const name = md.target.name;
+  const ja = name ? `「${name}」` : '';
+  const en = name ? `“${name}”` : '';
+  if (mode === 'reverse') return t(`${ja ? `${ja}を` : '言葉を'}録りました（${md.from()}）。「逆再生を聞く」で聞いて、聞こえたとおりに真似してください。`, `${en || 'The word'} is recorded (${md.from()}). Press “Play reversed”, then imitate what you hear.`);
+  return md.target.contour
+    ? t(`${ja ? `${ja}のセリフ` : 'セリフ'}をお手本にしました（${md.from()}）。セリフ真似: 抑揚とタイミングまで比べます。声の高さ ${formatFeature('pitch', f.pitch)}。`, `${en ? `A line by ${en}` : 'A line'} is the model (${md.from()}). Line mimic: intonation and timing are compared too. Pitch ${formatFeature('pitch', f.pitch)}.`)
+    : t(`${ja ? `${ja}をお手本にしました` : 'お手本を測りました'}（${md.from()}）。声の高さ ${formatFeature('pitch', f.pitch)}・抑揚 ${formatFeature('pitchRange', f.pitchRange)}・速さ ${formatFeature('rate', f.rate)}。`, `${en ? `${en} is the model` : 'The model was measured'} (${md.from()}). Pitch ${formatFeature('pitch', f.pitch)}, intonation ${formatFeature('pitchRange', f.pitchRange)}, rate ${formatFeature('rate', f.rate)}.`);
 }
 
-/** 止めて、音を捨てる */
+/** 測ったお手本を置く（前のお手本の音は捨て、点数表は新しいお手本の回にする） */
+function setModel(clip: Clip, m: Extract<Measured, { ok: true }>, choice: CleanChoice): void {
+  const i = m.info;
+  const line = i.contour && i.speechSeconds <= LINE_MAX_SECONDS ? i.contour : undefined;
+  dropModel();
+  endRound();
+  model = {
+    clip,
+    target: { features: forLength(m.features, i.voicedSeconds), name: ref.name.value.trim(), ...(line ? { contour: line } : {}) },
+    clean: choice,
+    from: line ? M(`セリフ ${i.speechSeconds.toFixed(1)} 秒`, `a ${i.speechSeconds.toFixed(1)} s line`) : M(`声 ${i.voicedSeconds.toFixed(1)} 秒分`, `${i.voicedSeconds.toFixed(1)} s of voice`),
+  };
+  $('result').hidden = true;
+  shown = null;
+  drawMimHints();
+  showRef('ready', mode === 'reverse' ? M('言葉を録りました。「逆再生を聞く」で聞いてから、真似してください。', 'The word is recorded. Play it reversed, then imitate it.') : M('お手本の準備ができました。「お手本を聞く」で何回でも聞き直せます。', 'The model is ready. Press “Play the model” to hear it as often as you like.'));
+  showMim('idle', nextMsg());
+  drawBoard();
+}
+/** お手本の音を捨てる */
+function dropModel(): void {
+  if (!model) return;
+  if (playback.playing === 'model' || playback.playing === 'original') playback.stop();
+  model.clip.pcm.fill(0);
+  model = null;
+}
+
+/** 止めて、録っている音を捨てる */
 function refStop(): void {
   refToken++;
   refTake.stop();
@@ -375,340 +675,43 @@ function refStop(): void {
 }
 function refCancel(): void {
   refStop();
-  showRef('idle', M('やめました。音は捨てました。', 'Stopped. The sound was thrown away.'));
+  showRef(model ? 'ready' : 'idle', M('やめました。録っていた音は捨てました。', 'Stopped. The sound being recorded was thrown away.'));
 }
-/** マイクが外れた・タブの共有が止まった時: 聞かせ終えられる長さがあれば、そこまでで測る。無ければ止めて、そのことを伝える */
-function refEnded(kind: 'mic' | 'tab'): void {
+/** マイクが外れた時: 録り終えられる長さがあれば、そこまでで測る。無ければ止めて、そのことを伝える */
+function refEnded(): void {
   if (refState !== 'listening') return;
   if (refTake.seconds >= REF_DONE_AFTER) {
     refFinish();
     return;
   }
   refStop();
-  showRef(
-    'failed',
-    kind === 'mic'
-      ? M('マイクが外れたので止めました。つなぎ直して、もう一度押してください。', 'The microphone went away, so this stopped. Plug it back in and press again.')
-      : M('タブの共有が止まったので止めました。もう一度押して、お手本のタブを選んでください。', 'Sharing the tab stopped, so this stopped. Press again and choose the tab with the model.'),
-    true,
-  );
+  showRef('failed', M('マイクが外れたので止めました。つなぎ直して、もう一度押してください。', 'The microphone went away, so this stopped. Plug it back in and press again.'), true);
 }
-/** お手本の音が来ないまま WAIT_MAX 秒たった時: 止めて伝える（マイク・タブの音を開いたままにしない） */
+/** お手本の音が来ないまま WAIT_MAX 秒たった時: 止めて伝える（マイクを開いたままにしない） */
 function refQuiet(): void {
   if (refState !== 'listening') return;
   refStop();
-  showRef('failed', M(`音が聞こえないまま ${WAIT_MAX} 秒たったので止めました。お手本を流せるようにしてから、もう一度押してください。`, `No sound was heard for ${WAIT_MAX} s, so this stopped. Get the model ready to play, then press again.`), true);
+  showRef('failed', M(`音が聞こえないまま ${WAIT_MAX} 秒たったので止めました。もう一度押してください。`, `No sound was heard for ${WAIT_MAX} s, so this stopped. Press again.`), true);
 }
 
-async function decodeFile(f: File): Promise<{ pcm: Float32Array; rate: number }> {
-  const buf = await f.arrayBuffer();
-  const OAC = window.OfflineAudioContext ?? (window as unknown as { webkitOfflineAudioContext: typeof OfflineAudioContext }).webkitOfflineAudioContext;
-  // デコードだけに使う: ファイルの音を FILE_RATE で出す
-  const ctx = new OAC(1, FILE_RATE, FILE_RATE);
-  const audio = await new Promise<AudioBuffer>((resolve, reject) => {
-    const p = ctx.decodeAudioData(buf, resolve, reject) as Promise<AudioBuffer> | undefined;
-    p?.then(resolve, reject);
-  });
-  const n = Math.min(audio.length, Math.floor(LONG_MAX_SECONDS * audio.sampleRate));
-  const pcm = new Float32Array(n);
-  const ch = audio.numberOfChannels;
-  for (let c = 0; c < ch; c++) {
-    const d = audio.getChannelData(c);
-    for (let i = 0; i < n; i++) pcm[i] = pcm[i]! + d[i]! / ch;
-  }
-  return { pcm, rate: audio.sampleRate };
-}
-
-async function refFromFile(f: File): Promise<void> {
-  if (f.size > (isRawAudio(f) ? RAW_FILE_MAX_BYTES : FILE_MAX_BYTES)) {
-    showRef('failed', M(`ファイルが大きすぎます（mp3・m4a などは ${FILE_MAX_BYTES >> 20} MB、wav・flac は ${RAW_FILE_MAX_BYTES >> 20} MB まで）。使いたい所だけを切り出したファイルにしてください。`, `The file is too big (up to ${FILE_MAX_BYTES >> 20} MB for mp3, m4a and the like; ${RAW_FILE_MAX_BYTES >> 20} MB for wav and flac). Cut out just the part you want to use.`), true);
-    return;
-  }
-  const my = ++refToken;
-  showRef('analysing', M('ファイルを読んでいます…', 'Reading the file…'));
-  let sound: { pcm: Float32Array; rate: number };
-  try {
-    sound = await decodeFile(f);
-  } catch {
-    if (my === refToken) showRef('failed', M('このファイルは読めませんでした。mp3・m4a・wav などの音声ファイルを選んでください。', 'This file could not be read. Choose a sound file such as mp3, m4a or wav.'), true);
-    return;
-  }
-  /** 無音を足した写し（短いファイルの測り直し用） */
-  let padded: Float32Array | null = null;
-  try {
-    const secs = sound.pcm.length / sound.rate;
-    if (secs <= 40) {
-      // 短いファイル: 測る所（Worker）で測る（画面を止めない）。セリフ用に、高さと大きさの時間の動きも出す
-      const opts = { minVoicedSeconds: ONE_LINE_SECONDS, contour: true };
-      // 声だけに切った音には、雑音を見分けるための静かな所が無い: 雑音とされたら、前後に無音を足して、もう一度測る
-      // （measureAsync は渡した音を 0 で埋めるので、足した写しを先に作っておく）
-      if (secs <= PAD_FILE_MAX_SECONDS) {
-        const pad = Math.round(sound.rate * 0.3);
-        padded = new Float32Array(sound.pcm.length + 2 * pad);
-        padded.set(sound.pcm, pad);
-      }
-      let m = await measureAsync(sound.pcm, sound.rate, opts);
-      let usedPad = false;
-      if (padded && !m.ok && m.reason === 'noisy' && my === refToken) {
-        m = await measureAsync(padded, sound.rate, opts);
-        usedPad = true;
-      }
-      if (my !== refToken) return;
-      if (!m.ok) {
-        showRef('failed', () => failText(m.reason, m.info.voicedSeconds, true), true);
-        return;
-      }
-      targetFrom(m, usedPad);
-      return;
-    }
-    // 長いファイル: 30 秒ずつ測る（窓と窓の間で、画面を描く）
-    const m = await measureLong(sound.pcm, sound.rate, {
-      minVoicedSeconds: ONE_LINE_SECONDS,
-      onProgress: (done, total) => {
-        if (total <= 1 || my !== refToken) return;
-        // 言葉を切り替えても、進み具合を出したままにする
-        refMsg = M(`数字にしています… ${done} / ${total}`, `Measuring… ${done} / ${total}`);
-        ref.status.textContent = refMsg();
-      },
-    });
-    if (my !== refToken) return;
-    if (!m.ok) {
-      showRef('failed', () => failText(m.reason, m.voicedSeconds, true), true);
-      return;
-    }
-    const part = m.seconds >= LONG_MAX_SECONDS ? M(`最初の ${LONG_MAX_SECONDS / 60} 分のうち、声 ${m.voicedSeconds.toFixed(1)} 秒分`, `${m.voicedSeconds.toFixed(1)} s of voice in the first ${LONG_MAX_SECONDS / 60} min`) : M(`声 ${m.voicedSeconds.toFixed(1)} 秒分`, `${m.voicedSeconds.toFixed(1)} s of voice`);
-    const canReg = m.voicedSeconds >= REG_MIN_VOICED;
-    setTarget(forLength(m.features, m.voicedSeconds), ref.name.value.trim(), part, canReg ? { quality: { voicedSeconds: m.voicedSeconds, gapTonal: m.gapTonal, snrDb: m.snrDb } } : undefined, undefined, m.voicedSeconds);
-  } catch {
-    // 測る途中の思わぬ誤り: 「ファイルを読んでいます…」のまま止まらないように、ボタンを戻して伝える
-    if (my === refToken) showRef('failed', M('このファイルを数字にできませんでした。もう一度試すか、ほかのファイルを選んでください。', 'This file could not be measured. Try again, or choose another file.'), true);
-  } finally {
-    // 音はすぐ捨てる（測れた時も、途中で誤りが出た時も）
-    sound.pcm.fill(0);
-    padded?.fill(0);
-  }
-}
-
-/** お手本のまとめの文（言葉を切り替えた時に出し直す） */
-let summaryMsg: Msg = () => '';
-function setTarget(features: Features, name: string, from: Msg, regInfo?: Target['reg'], contour?: Contour, voicedSeconds?: number, nameEn?: string, padded = false): void {
-  // 真似を録っている・計算している途中なら、止めて音を捨てる（マイクを開いたまま隠れないように）
-  const stopped = mimStop();
-  target = { features, name, ...(nameEn ? { nameEn } : {}), ...(regInfo ? { reg: regInfo } : {}), ...(contour ? { contour } : {}), ...(voicedSeconds !== undefined ? { voicedSeconds } : {}), ...(padded ? { padded } : {}) };
-  resetRegister(name);
-  best = 0;
-  tries = 0;
-  $('result').hidden = true;
-  const f = features;
-  summaryMsg = () => {
-    const ja = name ? `「${name}」` : '';
-    const en = name ? `“${nameEn || name}”` : '';
-    return contour
-      ? t(`${ja ? `${ja}のセリフ` : 'セリフ'}をお手本にしました（${from()}）。セリフ真似: 抑揚とタイミングまで比べます。声の高さ ${formatFeature('pitch', f.pitch)}。`, `${en ? `A line by ${en}` : 'A line'} is the model (${from()}). Line mimic: intonation and timing are compared too. Pitch ${formatFeature('pitch', f.pitch)}.`)
-      : t(`${ja ? `${ja}をお手本にしました` : 'お手本を測りました'}（${from()}）。声の高さ ${formatFeature('pitch', f.pitch)}・抑揚 ${formatFeature('pitchRange', f.pitchRange)}・速さ ${formatFeature('rate', f.rate)}。`, `${en ? `${en} is the model` : 'The model was measured'} (${from()}). Pitch ${formatFeature('pitch', f.pitch)}, intonation ${formatFeature('pitchRange', f.pitchRange)}, rate ${formatFeature('rate', f.rate)}.`);
-  };
-  ref.summary.textContent = summaryMsg();
-  topicBox.hidden = !!contour;
-  lineHint.hidden = !contour;
-  showRef('ready', contour ? M('お手本の準備ができました。次は、同じセリフを真似して言ってください。', 'The model is ready. Next, say the same line, imitating it.') : M('お手本の準備ができました。次は、真似して話してください。', 'The model is ready. Next, talk imitating it.'));
-  const next = contour ? M('「真似して話す」を押して、お手本と同じセリフを言ってください。', 'Press “Imitate” and say the same line as the model.') : M('「真似して話す」を押して、お手本のように話してください。', 'Press “Imitate” and talk like the model.');
-  showMim('idle', stopped ? () => t('お手本が変わったので、真似を止めました（音は捨てました）。', 'The model changed, so the imitation was stopped (the sound was thrown away). ') + next() : next);
-}
-
-ref.mic.addEventListener('click', () => void refListen('mic'));
-ref.tab.addEventListener('click', () => void refListen('tab'));
-/** 音声ファイルを選ぶ画面を開いている間（その間に ?target= のお手本を勝手に選ばないように） */
-let choosingFile = false;
-ref.fileButton.addEventListener('click', () => {
-  choosingFile = true;
-  ref.file.click();
-});
-ref.file.addEventListener('change', () => {
-  choosingFile = false;
-  const f = ref.file.files?.[0];
-  ref.file.value = '';
-  if (f) {
-    wanted = null;
-    void refFromFile(f);
-  } else autoPick();
-});
-// 選ぶ画面を、選ばずに閉じた時（この知らせが無い古いブラウザーでは、?target= のお手本を使わないまま）
-ref.file.addEventListener('cancel', () => {
-  choosingFile = false;
-  autoPick();
-});
+ref.rec.addEventListener('click', () => void refListen());
 ref.done.addEventListener('click', refFinish);
 ref.cancel.addEventListener('click', refCancel);
-ref.change.addEventListener('click', () => {
-  target = null;
-  $('result').hidden = true;
-  showRef('idle', M('お手本の聞かせ方を選んでください。', 'Choose how to play the model.'));
-  showMim('locked', M('先にお手本を聞かせてください。', 'Play the model first.'));
-});
-/* お手本の声をサイトに登録する（アキネーター方式。壁 ① をここで確かめ、送るのは利用者が Google フォームで） */
-const regShort = $('reg-short');
-const reg = {
-  box: $<HTMLDetailsElement>('register'),
-  name: $<HTMLInputElement>('reg-name'),
-  group: $<HTMLInputElement>('reg-group'),
-  kinds: $('reg-kinds'),
-  link: $<HTMLInputElement>('reg-link'),
-  ok: $<HTMLInputElement>('reg-ok'),
-  make: $<HTMLButtonElement>('reg-make'),
-  problems: $('reg-problems'),
-  out: $('reg-out'),
-  code: $<HTMLTextAreaElement>('reg-code'),
-  copy: $<HTMLButtonElement>('reg-copy'),
-  form: $<HTMLAnchorElement>('reg-form'),
-  howto: $('reg-howto'),
-};
-// 大枠のチェックボックス: ラベルには両方の言葉を書く（ページのほかの所と同じ）
-reg.kinds.replaceChildren(
-  ...KINDS.map((k) => {
-    const box = el('input');
-    box.type = 'checkbox';
-    box.value = String(k.bit);
-    const label = el('label', 'check');
-    const ja = el('span', undefined, k.ja);
-    ja.lang = 'ja';
-    const en = el('span', undefined, k.en);
-    en.lang = 'en';
-    label.append(box, ' ', ja, en);
-    return label;
-  }),
-);
-const kindBoxes = () => [...reg.kinds.querySelectorAll<HTMLInputElement>('input[type=checkbox]')];
-// 送る内容を作った後に欄を変えたら、前の送る内容とフォームのリンクを隠す（作り直すまで、前の名前などのまま送らないように）
-for (const type of ['input', 'change'])
-  reg.box.addEventListener(type, (e) => {
-    if (e.target !== reg.code) reg.out.hidden = true;
-  });
-/** 「コピー」のボタン（コピーした後は「コピーしました」。送る内容が変わったら戻す） */
-let copied = false;
-function drawCopy(): void {
-  reg.copy.textContent = copied ? t('コピーしました', 'Copied') : t('コピー', 'Copy');
-}
-/** 直してほしい所を出した時の、送る内容（言葉を切り替えた時に、今の言葉で出し直すため） */
-let problemSub: ReturnType<typeof makeSubmission> | null = null;
-function drawProblems(): void {
-  const problems = problemSub ? checkSubmission(problemSub) : [];
-  reg.problems.replaceChildren(...problems.map((p) => el('li', undefined, p.text)));
-  reg.problems.hidden = !problems.length;
-}
-function resetRegister(name: string): void {
-  reg.box.open = false;
-  reg.name.value = name;
-  reg.group.value = '';
-  reg.link.value = '';
-  reg.ok.checked = false;
-  for (const b of kindBoxes()) b.checked = false;
-  reg.problems.hidden = reg.out.hidden = true;
-  reg.problems.replaceChildren();
-  problemSub = null;
-  reg.code.value = '';
-  copied = false;
-  drawCopy();
-}
-reg.make.addEventListener('click', () => {
-  if (!target?.reg) return;
-  const kinds = kindBoxes().reduce((m, b) => (b.checked ? m | (1 << Number(b.value)) : m), 0);
-  const sub = makeSubmission({ name: reg.name.value, group: reg.group.value, kinds, link: reg.link.value, quality: target.reg.quality, features: target.features, consent: reg.ok.checked });
-  const problems = checkSubmission(sub);
-  problemSub = problems.length ? sub : null;
-  drawProblems();
-  reg.out.hidden = problems.length > 0;
-  if (problems.length) return;
-  const code = encodeSubmission(sub);
-  if (code !== reg.code.value) {
-    copied = false;
-    drawCopy();
-  }
-  reg.code.value = code;
-  if (SUBMIT_FORM.url) {
-    reg.form.hidden = false;
-    reg.form.href = SUBMIT_FORM.entry ? `${SUBMIT_FORM.url}?usp=pp_url&entry.${SUBMIT_FORM.entry}=${encodeURIComponent(code)}` : SUBMIT_FORM.url;
-    howtoMsg = SUBMIT_FORM.entry ? M('「フォームを開く」で、送る内容が入ったフォームが開きます。そのまま送信してください。', '“Open the form” opens it with the entry filled in. Just send it.') : M('「コピー」してから「フォームを開く」で、送る内容を貼って送信してください。', 'Press “Copy”, then “Open the form”, paste the entry and send it.');
-  } else {
-    reg.form.hidden = true;
-    howtoMsg = M('登録の受け付けは準備中です。もうしばらくお待ちください。', 'Adding voices is not open yet. Please wait a little longer.');
-  }
-  reg.howto.textContent = howtoMsg();
-});
-let howtoMsg: Msg = () => '';
-reg.copy.addEventListener('click', () => {
-  const code = reg.code.value;
-  const done = () => {
-    // コピーの間に送る内容が変わっていたら、「コピーしました」にしない
-    if (reg.code.value !== code) return;
-    copied = true;
-    drawCopy();
-  };
-  navigator.clipboard?.writeText(code).then(done, () => {
-    reg.code.select();
-  }) ?? reg.code.select();
-});
 
-/* このサイトで事前に測ったお手本（名前で探して選ぶ。英語のページでは英語名で並べ、日本語の名前でも選べる） */
-const labelOf = (id: string, l: Lang) => {
-  const v = ENTRY_BY_ID.get(id)!;
-  const g = groupOf(v, l);
-  return g ? (l === 'en' ? `${nameOf(v, l)} (${g})` : `${v.name}（${g}）`) : nameOf(v, l);
-};
-const pickCatalog = (p: (typeof PROFILES)[number]) => {
-  const v = ENTRY_BY_ID.get(p.id)!;
-  // お手本を録っている・計算している途中なら、先に止めて音を捨てる
-  if (isBusy(refState)) {
-    refToken++;
-    refAnalysingMic = false;
-    refTake.stop();
-    refTake.drop();
-  }
-  wanted = null;
-  setTarget(p.features, v.name, M('このサイトで測った代表値', 'a voice measured by this site'), undefined, undefined, undefined, v.nameEn);
-};
-/** 声のページから来た時のお手本（?target=）。ファイルを選ぶ画面を開いている間は、閉じるまで待つ */
-let wanted: (typeof PROFILES)[number] | null = null;
-function autoPick(): void {
-  if (!wanted || choosingFile) return;
-  const p = wanted;
-  wanted = null;
-  if (!target && !isBusy(refState)) pickCatalog(p);
-}
-// 声は裏で読む。読み終えたら一覧が出る
-let byLabel = new Map<string, (typeof PROFILES)[number]>();
-ref.catalog.addEventListener('change', () => {
-  const p = byLabel.get(ref.catalog.value.trim());
-  if (!p) return;
-  ref.catalog.value = '';
-  pickCatalog(p);
-});
-/** お手本の一覧を、今の言葉で並べ直す */
-function fillCatalogList(): void {
-  byLabel = new Map(PROFILES.flatMap((p) => [[labelOf(p.id, 'ja'), p] as const, [labelOf(p.id, 'en'), p] as const]));
-  const labels = PROFILES.map((p) => labelOf(p.id, lang)).sort((a, b) => a.localeCompare(b, lang));
-  $('ref-catalog-list').replaceChildren(
-    ...labels.map((label) => {
-      const o = document.createElement('option');
-      o.value = label;
-      return o;
-    }),
-  );
-}
-if (tabAudioSupported()) ref.tab.hidden = ref.tabNote.hidden = false;
-void voicesReady.then(() => {
-  if (!PROFILES.length) return;
-  fillCatalogList();
-  ref.catalogBox.hidden = false;
-  $('ref-catalog-count').textContent = t(`${PROFILES.length} 件`, `${PROFILES.length}`);
-  // 声のページからのリンク: ?target=<名前>（いつも日本語の名前）
-  const name = new URLSearchParams(location.search).get('target');
-  const p = name ? PROFILES.find((x) => ENTRY_BY_ID.get(x.id)!.name === name) : undefined;
-  // 読み終える前に、マイク・タブ・ファイルでお手本を聞かせはじめていたら、そちらを使う（ファイルを選ぶ画面を開いている間は、閉じるまで待つ）
-  if (p && !target && !isBusy(refState)) {
-    wanted = p;
-    autoPick();
-  }
-});
+/* ---- 遊び方を変えた時: お手本はそのまま、点数は新しい回に ---- */
+for (const r of modeInputs)
+  r.addEventListener('change', () => {
+    if (!r.checked) return;
+    mode = r.value === 'reverse' ? 'reverse' : 'mimic';
+    playback.stop();
+    if (model) endRound();
+    $('result').hidden = true;
+    shown = null;
+    drawMimHints();
+    showRef(refState, model ? (mode === 'reverse' ? M('逆再生チャレンジにしました。今の言葉の逆再生を聞いて、真似してください。', 'Switched to the reverse challenge. Play the word reversed and imitate it.') : M('声真似にしました。お手本を聞いて、真似してください。', 'Switched to mimic. Listen to the model and imitate it.')) : refMsg, refBad);
+    if (model) showMim('idle', nextMsg());
+    drawBoard();
+  });
 
 /* ---- 2. 真似 ---- */
 const topicBox = $('topic-box');
@@ -736,6 +739,20 @@ topic.read.addEventListener('click', () => {
   showTopic();
 });
 showTopic();
+/** 真似の所の案内（セリフ・逆再生・お題） */
+function drawMimHints(): void {
+  const rev = mode === 'reverse';
+  topicBox.hidden = !model || rev || !!model.target.contour;
+  lineHint.hidden = !model || !(rev || model.target.contour);
+  lineHint.replaceChildren();
+  if (rev) lineHint.append(t('逆再生の音を、', 'Imitate the reversed sound '), el('strong', undefined, t('聞こえたとおりに', 'just as you hear it')), t('真似して言ってください。録った声を逆にして、元の言葉と比べます。', '. Your take is reversed and compared with the original word.'));
+  else lineHint.append(t('お手本と', 'Say '), el('strong', undefined, t('同じセリフ', 'the same line')), t('を、お手本のように言ってください。', ' as the model, the way the model says it.'));
+}
+const nextMsg = (): Msg => () => {
+  const who = players.length > 1 ? t(`${current().name}の番です。`, `${current().name}’s turn. `) : '';
+  if (mode === 'reverse') return who + t('「真似する」を押して、逆再生の音を真似してください。', 'Press “Imitate” and imitate the reversed sound.');
+  return who + (model?.target.contour ? t('「真似する」を押して、お手本と同じセリフを言ってください。', 'Press “Imitate” and say the same line as the model.') : t('「真似する」を押して、お手本のように話してください。', 'Press “Imitate” and talk like the model.'));
+};
 
 const mim = {
   stage: $('mim'),
@@ -747,7 +764,7 @@ const mim = {
 const mimLive = createLiveAnalysis($('mim-live'));
 const mimTake = new Take({ wave: createWave($<HTMLCanvasElement>('mim-wave')), live: mimLive, fill: $('mim-fill'), sec: $('mim-sec'), done: mim.done }, MIM_DONE_AFTER, false, () => mimFinish());
 
-type MimState = 'locked' | 'idle' | 'asking' | 'listening' | 'analysing' | 'done' | 'failed';
+type MimState = 'locked' | 'idle' | 'asking' | 'listening' | 'cleaning' | 'analysing' | 'done' | 'failed';
 let mimState: MimState = 'locked';
 let mimToken = 0;
 
@@ -759,23 +776,26 @@ function showMim(next: MimState, msg: Msg, bad = false, redraw = false): void {
   mim.stage.dataset.state = next;
   mimLive.mode(next === 'listening' ? 'listening' : next === 'analysing' ? 'analysing' : 'off');
   if (!redraw) orb.mode(ORB_MODE[next] ?? 'idle');
-  lockMics();
   mim.status.textContent = msg();
   mim.status.classList.toggle('bad', bad);
   mim.start.hidden = !(next === 'locked' || next === 'idle' || next === 'failed' || next === 'done');
   mim.start.disabled = next === 'locked';
-  mim.start.textContent = next === 'done' ? t('もう一度真似する', 'Imitate again') : t('真似して話す', 'Imitate');
+  mim.start.textContent = next === 'done' ? t('もう一度真似する', 'Imitate again') : t('真似する', 'Imitate');
   mim.done.textContent = t('話し終えた', 'Done');
   mim.cancel.textContent = t('やめる', 'Stop');
   mim.done.hidden = next !== 'listening';
   mim.cancel.hidden = !(next === 'listening' || next === 'asking');
-  ref.change.disabled = next === 'asking' || next === 'listening' || next === 'analysing';
-  topic.next.disabled = topic.read.disabled = next === 'asking' || next === 'listening' || next === 'analysing';
+  const busy = isBusy(next);
+  ref.rec.disabled = busy;
+  topic.next.disabled = topic.read.disabled = busy;
+  nextBtn.disabled = againBtn.disabled = busy;
+  lockAll();
 }
 
 async function mimStart(): Promise<void> {
-  if (!target) return;
+  if (!model || isBusy(refState)) return;
   const my = ++mimToken;
+  playback.stop();
   mimTake.drop();
   showMim('asking', M('マイクの許可を待っています…', 'Waiting for microphone permission…'));
   try {
@@ -787,12 +807,12 @@ async function mimStart(): Promise<void> {
     mimTake.begin(m);
     void mics.refresh();
     const label = m.label ?? '';
-    const isLine = !!target.contour;
+    const who = players.length > 1 ? current().name : '';
     showMim('listening', () => {
       const on = label ? t(`マイク: ${label}`, ` Microphone: ${label}`) : '';
-      return isLine
-        ? t(`お手本と同じセリフを、お手本のように言ってください。言い終えたら「話し終えた」を押してください。`, 'Say the same line as the model, imitating it. Press “Done” when you finish.') + on
-        : t(`お手本のように話してください。一言でもかまいませんが、長く話すほど多くの項目で比べられます（最大 ${LISTEN_MAX} 秒）。`, `Talk like the model. A single phrase is fine, but the longer you talk, the more items are compared (up to ${LISTEN_MAX} s).`) + on;
+      const head = who ? t(`${who}の番。`, `${who}: `) : '';
+      if (mode === 'reverse') return head + t('逆再生の音を、聞こえたとおりに真似して言ってください。言い終えたら「話し終えた」を押してください。', 'Imitate the reversed sound just as you hear it. Press “Done” when you finish.') + on;
+      return head + (model?.target.contour ? t('お手本と同じセリフを、お手本のように言ってください。言い終えたら「話し終えた」を押してください。', 'Say the same line as the model, imitating it. Press “Done” when you finish.') : t(`お手本のように話してください。一言でもかまいませんが、長く話すほど多くの項目で比べられます（最大 ${LISTEN_MAX} 秒）。`, `Talk like the model. A single phrase is fine, but the longer you talk, the more items are compared (up to ${LISTEN_MAX} s).`)) + on;
     });
   } catch (e) {
     if (my !== mimToken) return;
@@ -804,26 +824,51 @@ async function mimStart(): Promise<void> {
 }
 
 function mimFinish(): void {
-  if (mimState !== 'listening' || !target) return;
+  if (mimState !== 'listening' || !model) return;
   const got = mimTake.take();
   if (!got) {
     showMim('failed', M('声が届きませんでした。もう一度試してください。', 'No voice reached the page. Please try again.'), true);
     return;
   }
-  showMim('analysing', M('計算しています…', 'Working it out…'));
   const my = mimToken;
-  void Promise.all([measureAsync(got.pcm, got.rate, { minVoicedSeconds: ONE_LINE_SECONDS, contour: !!target.contour }), mimLive.analysing(ANALYSE_MS)]).then(([m]) => {
-    if (my !== mimToken || mimState !== 'analysing' || !target) return;
+  const md = model;
+  const who = current();
+  const rev = mode === 'reverse';
+  showMim(md.clean.denoise || md.clean.music ? 'cleaning' : 'analysing', M('計算しています…', 'Working it out…'));
+  void cleanAndMeasure(
+    got,
+    md.clean,
+    rev,
+    !!md.target.contour,
+    (msg) => {
+      if (my === mimToken && mimState === 'cleaning') showMim('cleaning', msg);
+    },
+    mimLive,
+    () => {
+      if (my === mimToken && mimState === 'cleaning') showMim('analysing', M('計算しています…', 'Working it out…'));
+    },
+  ).then((r) => {
+    if (my !== mimToken || !isBusy(mimState) || model !== md) {
+      if ('clip' in r) r.clip.pcm.fill(0);
+      return;
+    }
+    if ('error' in r) {
+      showMim('failed', M('音をきれいにできませんでした。「音をきれいにする」を外して、お手本から録り直してください。', 'The sound could not be cleaned up. Untick “Clean up the sound” and record the model again.'), true);
+      return;
+    }
+    const { clip, m } = r;
     if (!m.ok) {
+      clip.pcm.fill(0);
       showMim('failed', () => failText(m.reason, m.info.voicedSeconds, false), true);
       return;
     }
-    if (!render(target, forLength(m.features, m.info.voicedSeconds), m.info.contour)) {
-      showMim('failed', M('お手本と比べられる項目がありませんでした。お手本か声を測り直してください。', 'No item could be compared with the model. Measure the model or your voice again.'), true);
+    if (!render(md.target, forLength(m.features, m.info.voicedSeconds), m.info.contour, who, clip)) {
+      clip.pcm.fill(0);
+      showMim('failed', M('お手本と比べられる項目がありませんでした。お手本か声を録り直してください。', 'No item could be compared with the model. Record the model or your voice again.'), true);
       return;
     }
     showMim('done', M('測りました。結果は下にあります。', 'Measured. The result is below.'));
-    $('result').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    scrollTo($('result'));
   });
 }
 
@@ -833,13 +878,14 @@ function mimStop(): boolean {
   mimToken++;
   mimTake.stop();
   mimTake.drop();
+  showMim(model ? 'idle' : 'locked', model ? nextMsg() : M('先にお手本を録ってください。', 'Record the model first.'));
   return true;
 }
 function mimCancel(): void {
   mimToken++;
   mimTake.stop();
   mimTake.drop();
-  showMim(target ? 'idle' : 'locked', M('やめました。音は捨てました。', 'Stopped. The sound was thrown away.'));
+  showMim(model ? 'idle' : 'locked', M('やめました。音は捨てました。', 'Stopped. The sound was thrown away.'));
 }
 /** マイクが外れた時: 話し終えられる長さがあれば、そこまでで測る。無ければ止めて、そのことを伝える */
 function mimEnded(): void {
@@ -857,36 +903,69 @@ function mimEnded(): void {
 mim.start.addEventListener('click', () => void mimStart());
 mim.done.addEventListener('click', mimFinish);
 mim.cancel.addEventListener('click', mimCancel);
-document.addEventListener('visibilitychange', () => {
-  // お手本を聞かせている時は止めない（ほかのタブやアプリで流すため。音が来ないまま WAIT_MAX 秒で止まる）
-  if (document.hidden && (mimState === 'listening' || mimState === 'asking')) mimCancel();
-});
-// ページを離れる時は止めて、音を捨てる。戻るで戻った時に「聞いています」のまま止まって見えないよう、画面も戻す
-// （タブを切り替えただけでは来ない。お手本をほかのタブで流している間は止めない）
-window.addEventListener('pagehide', () => {
-  if (refState === 'asking' || refState === 'listening') refCancel();
-  else refTake.stop();
-  if (mimState === 'asking' || mimState === 'listening') mimCancel();
-  else mimTake.stop();
+
+/* ---- 次の人へ・もう一度 ---- */
+const nextBtn = $<HTMLButtonElement>('next-player');
+const againBtn = $<HTMLButtonElement>('again');
+function nextPlayer(): void {
+  if (players.length < 2 || isBusy(mimState) || isBusy(refState)) return;
+  turn = (turn + 1) % players.length;
+  playback.stop();
+  drawPlayers();
+  drawTurn();
+  drawBoard();
+  if (model) showMim('idle', nextMsg());
+  scrollTo(mim.stage);
+}
+nextBtn.addEventListener('click', nextPlayer);
+againBtn.addEventListener('click', () => {
+  if (isBusy(mimState) || isBusy(refState)) return;
+  scrollTo(mim.stage);
+  void mimStart();
 });
 
-function failText(reason: MeasureFail, voiced: number | undefined, model: boolean): string {
+document.addEventListener('visibilitychange', () => {
+  // お手本を録っている時は止めない（ほかのタブやアプリで流してマイクに聞かせるため。音が来ないまま WAIT_MAX 秒で止まる）
+  if (document.hidden && (mimState === 'listening' || mimState === 'asking')) mimCancel();
+});
+// ページを離れる時: 録るのを止め、録った音（お手本・真似）を全部 0 で埋めて捨てる。点数表と名前は数字と文字だけなので残す
+// （戻るで戻った時に、聞き直すボタンが無音を鳴らさないよう、画面も最初に戻す）
+window.addEventListener('pagehide', () => {
+  refStop();
+  mimToken++;
+  mimTake.stop();
+  mimTake.drop();
+  playback.close();
+  dropModel();
+  for (const p of players) {
+    p.last?.pcm.fill(0);
+    p.last = null;
+  }
+  if (shown?.clip) shown.clip.pcm.fill(0);
+  shown = null;
+  $('result').hidden = true;
+  showRef('idle', M('録った音は、ページを離れた時に捨てました。お手本を録ってください。', 'Recorded sound was thrown away when you left the page. Record a model.'));
+  showMim('locked', M('先にお手本を録ってください。', 'Record the model first.'));
+  drawBoard();
+});
+
+function failText(reason: MeasureFail, voiced: number | undefined, isModel: boolean): string {
   const v = (voiced ?? 0).toFixed(1);
   switch (reason) {
     case 'silent':
-      return model ? t('お手本の音が聞こえませんでした。音量を上げるか、マイクの近くで流してください。', 'The model could not be heard. Turn the volume up or play it closer to the microphone.') : t('声が聞こえませんでした。マイクが消音になっていないか、使うマイクが合っているか確かめてください。', 'No voice was heard. Check that the microphone is not muted and that the right one is chosen.');
+      return isModel ? t('お手本の音が聞こえませんでした。マイクが消音になっていないか、使うマイクが合っているか確かめてください。', 'The model could not be heard. Check that the microphone is not muted and that the right one is chosen.') : t('声が聞こえませんでした。マイクが消音になっていないか、使うマイクが合っているか確かめてください。', 'No voice was heard. Check that the microphone is not muted and that the right one is chosen.');
     case 'quiet':
-      return model ? t('お手本の音が小さくて測れませんでした。音量を上げてください。', 'The model was too quiet to measure. Turn the volume up.') : t('声が小さくて測れませんでした。マイクに少し近づいて話してください。', 'The voice was too quiet to measure. Move a little closer to the microphone.');
+      return isModel ? t('お手本の音が小さくて測れませんでした。マイクの近くで、大きめに聞かせてください。', 'The model was too quiet to measure. Play it louder, closer to the microphone.') : t('声が小さくて測れませんでした。マイクに少し近づいて話してください。', 'The voice was too quiet to measure. Move a little closer to the microphone.');
     case 'noisy':
       // ほかの音のほか、静かな所でも、息の多い声・ささやき声でこうなる。ほかの音が多いとは言い切らない
-      return model
-        ? t('お手本の声をはっきり聞き取れませんでした。BGM・効果音・雑音や、息の多い声・ささやき声だと、こうなることがあります。声がはっきりした、声だけの所を選んでください。', 'The model’s voice could not be picked out clearly. BGM, sound effects, noise, or a breathy or whispered voice can cause this. Choose a part where the voice is clear and alone.')
+      return isModel
+        ? t('お手本の声をはっきり聞き取れませんでした。BGM・効果音・雑音や、息の多い声・ささやき声だと、こうなることがあります。「音をきれいにする」を使うか、声だけの所を聞かせてください。', 'The model’s voice could not be picked out clearly. BGM, sound effects, noise, or a breathy or whispered voice can cause this. Use “Clean up the sound”, or play a part with the voice alone.')
         : t('声をはっきり聞き取れませんでした。まわりの音や、息の多い声・ささやき声だと、こうなることがあります。静かな所で、ささやかずに、もう一度話してください。', 'The voice could not be picked out clearly. Background sound, or a breathy or whispered voice, can cause this. Try again somewhere quiet, without whispering.');
     case 'clipped':
-      return model ? t('お手本の音が大きすぎて、割れていました。音量を少し下げてください。', 'The model was so loud that it distorted. Turn the volume down a little.') : t('声が大きすぎて、音が割れていました。マイクから少し離れてください。', 'The voice was so loud that it distorted. Move a little away from the microphone.');
+      return isModel ? t('お手本の音が大きすぎて、割れていました。少し離れるか、音量を下げてください。', 'The model was so loud that it distorted. Move back a little or turn the volume down.') : t('声が大きすぎて、音が割れていました。マイクから少し離れてください。', 'The voice was so loud that it distorted. Move a little away from the microphone.');
     case 'short':
-      return model
-        ? t(`お手本の声を ${v} 秒分しか測れませんでした。声がはっきり聞こえるセリフを、1 つ以上流してください。`, `Only ${v} s of the model’s voice was measured. Play at least one line where the voice is clear.`)
+      return isModel
+        ? t(`お手本の声を ${v} 秒分しか測れませんでした。「おはようございます」くらいの長さで、はっきり聞かせてください。`, `Only ${v} s of the model’s voice was measured. Give at least a short phrase, like “good morning everyone”, clearly.`)
         : t(`声を ${v} 秒分しか測れませんでした。「おはようございます」くらいの長さで、ささやかずに言ってください。`, `Only ${v} s of voice was measured. Say at least a short phrase, like “good morning everyone”, without whispering.`);
     default:
       return t('うまく数字にできませんでした。もう一度試してください。', 'It could not be measured. Please try again.');
@@ -898,7 +977,6 @@ function failText(reason: MeasureFail, voiced: number | undefined, model: boolea
 function showScore(score: number): void {
   const gauge = $('gauge');
   const num = $('score');
-  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   // 輪は毎回、まずすぐ 0 に戻し、それから点数まで満ちる
   gauge.style.transition = 'none';
   gauge.style.setProperty('--score', '0');
@@ -906,7 +984,7 @@ function showScore(score: number): void {
   gauge.style.transition = '';
   gauge.style.setProperty('--score', String(score));
   num.textContent = String(score);
-  if (still) return;
+  if (still()) return;
   num.textContent = '0';
   let t0 = -1;
   const step = (now: number) => {
@@ -917,32 +995,45 @@ function showScore(score: number): void {
   };
   requestAnimationFrame(step);
 }
-/** 出している結果（言葉を切り替えた時に出し直すため） */
-let shown: { tg: Target; mine: Features; mineContour?: Contour; score: number; before: number } | null = null;
-function render(tg: Target, mine: Features, mineContour?: Contour): boolean {
+/** 出している結果（言葉を切り替えた時に出し直すため）。clip は、この真似の声（聞き直す用） */
+let shown: { tg: Target; mine: Features; mineContour?: Contour; score: number; before: number | null; who: Player; tries: number; reverse: boolean; clip: Clip | null } | null = null;
+function render(tg: Target, mine: Features, mineContour: Contour | undefined, who: Player, clip: Clip): boolean {
   const voice = mimicScore(tg.features, mine);
   const line = tg.contour && mineContour ? compareLines(tg.contour, mineContour) : null;
   if (!voice && !line) return false;
   const score = line ? lineScore(line, voice?.score ?? null) : voice!.score;
-  tries++;
-  const before = best;
-  best = Math.max(best, score);
-  shown = { tg, mine, ...(mineContour ? { mineContour } : {}), score, before };
+  const before = who.best;
+  who.best = Math.max(who.best ?? 0, score);
+  who.roundTries++;
+  who.tries++;
+  // 聞き直す用に、この人の最後の声として持つ（前の声は捨てる）
+  if (who.last && who.last !== clip) who.last.pcm.fill(0);
+  who.last = clip;
+  who.lastReverse = mode === 'reverse';
+  shown = { tg, mine, ...(mineContour ? { mineContour } : {}), score, before, who, tries: who.roundTries, reverse: mode === 'reverse', clip };
   showScore(score);
   $('result').hidden = false;
   paint();
+  drawBoard();
   return true;
 }
 /** 結果の言葉と図（今の言葉で。点数の数えあがりはしない） */
 function paint(): void {
   if (!shown) return;
-  const { tg, mine, mineContour, score, before } = shown;
+  const { tg, mine, mineContour, score, before, who, tries, reverse } = shown;
   const voice = mimicScore(tg.features, mine);
   const line = tg.contour && mineContour ? compareLines(tg.contour, mineContour) : null;
-  const tgName = nameOf(tg);
-  $('score-label').textContent = t(`${tg.name ? `「${tg.name}」` : 'お手本'}との近さ${line ? '（セリフ真似）' : ''}`, `Closeness to ${tg.name ? `“${tgName}”` : 'the model'}${line ? ' (line mimic)' : ''}`);
+  const tgName = tg.name;
+  const many = players.length > 1;
+  const whoJa = many ? `${who.name}：` : '';
+  const whoEn = many ? `${who.name}: ` : '';
+  const what = reverse ? t(`${tgName ? `「${tgName}」` : '元の言葉'}との近さ（逆再生チャレンジ）`, `closeness to ${tgName ? `“${tgName}”` : 'the original word'} (reverse challenge)`) : t(`${tgName ? `「${tgName}」` : 'お手本'}との近さ${line ? '（セリフ真似）' : ''}`, `closeness to ${tgName ? `“${tgName}”` : 'the model'}${line ? ' (line mimic)' : ''}`);
+  $('score-label').textContent = t(whoJa, whoEn) + what;
   $('score-word').textContent = scoreWord(score);
-  $('best').textContent = tries === 1 ? '' : score > before ? t(`最高点を更新しました（${tries} 回目）`, `New best! (try ${tries})`) : t(`このお手本での最高は ${best} 点です（${tries} 回目）`, `Your best with this model is ${best} (try ${tries})`);
+  $('best').textContent = tries === 1 ? '' : before !== null && score > before ? t(`最高点を更新しました（${tries} 回目）`, `New best! (try ${tries})`) : t(`このお手本での${many ? `${who.name}の` : ''}最高は ${who.best} 点です（${tries} 回目）`, `${many ? `${who.name}’s` : 'Your'} best with this model is ${who.best} (try ${tries})`);
+  $('play-mine-rev').hidden = !reverse;
+  $('play-model2').dataset.play = reverse ? 'original' : 'model';
+  drawPlay();
 
   // セリフ真似: 点数の 3 つの内訳と、重ねた 2 本の高さの線
   const subs = $('subscores');
@@ -991,8 +1082,8 @@ function paint(): void {
   decor(() => share.update({ kind: 'mimic', features: mine, model: { name: tgName, features: tg.features }, score, word: scoreWord(score), line: !!line }));
   decor(() =>
     mountShapes($('shapes'), $('shape-guide'), [
-      { who: t('お手本', 'Model'), ...(tg.name ? { sub: tgName } : {}), f: tg.features },
-      { who: t('あなた', 'You'), sub: t(`${tries} 回目`, `Try ${tries}`), f: mine },
+      { who: t('お手本', 'Model'), ...(tgName ? { sub: tgName } : {}), f: tg.features },
+      { who: many ? who.name : t('あなた', 'You'), sub: t(`${tries} 回目`, `Try ${tries}`), f: mine },
     ]),
   );
 }
@@ -1005,20 +1096,46 @@ function decor(f: () => void): void {
   }
 }
 
-showRef('idle', M('お手本の聞かせ方を選んでください。', 'Choose how to play the model.'));
-showMim('locked', M('先にお手本を聞かせてください。', 'Play the model first.'));
+/* ---- キーボード（配信向け） ---- */
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  const tg = e.target as HTMLElement | null;
+  if (tg && (tg.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName))) return;
+  // ボタンや要約にいる時の Space・Enter は、その物を押す（ここでは何もしない）
+  if ((e.key === ' ' || e.key === 'Enter') && tg && /^(BUTTON|A|SUMMARY)$/.test(tg.tagName)) return;
+  const key = e.key.toLowerCase();
+  if (key === ' ') {
+    e.preventDefault();
+    if (refState === 'listening') refFinish();
+    else if (mimState === 'listening') mimFinish();
+    else if (isBusy(refState) || isBusy(mimState)) return;
+    else if (!model) void refListen();
+    else void mimStart();
+  } else if (key === 'p') togglePlay('model');
+  else if (key === 'o' && mode === 'reverse') togglePlay('original');
+  else if (key === 'm' && shown?.clip) togglePlay(mode === 'reverse' ? 'mine-rev' : 'mine');
+  else if (key === 'n') nextPlayer();
+  else if (key === 'escape') {
+    if (playback.playing) playback.stop();
+    else if (refState === 'listening' || refState === 'asking') refCancel();
+    else if (mimState === 'listening' || mimState === 'asking') mimCancel();
+  }
+});
+
+showRef('idle', M('「録る」を押して、お手本を録ってください。', 'Press “Record” to record the model.'));
+showMim('locked', M('先にお手本を録ってください。', 'Record the model first.'));
+drawTurn();
+drawBoard();
 
 onLang(() => {
+  if (defaultNamed && players.length === 1 && players[0]!.tries === 0) players[0]!.name = t('あなた', 'You');
   showRef(refState, refMsg, refBad, true);
   showMim(mimState, mimMsg, mimBad, true);
   showTopic();
-  if (target) ref.summary.textContent = summaryMsg();
-  if (!reg.out.hidden) reg.howto.textContent = howtoMsg();
-  drawCopy();
-  if (problemSub) drawProblems();
-  if (PROFILES.length) {
-    $('ref-catalog-count').textContent = t(`${PROFILES.length} 件`, `${PROFILES.length}`);
-    fillCatalogList();
-  }
+  drawMimHints();
+  drawTurn();
+  drawBoard();
+  drawClean();
+  drawPlay();
   if (!$('result').hidden) paint();
 });

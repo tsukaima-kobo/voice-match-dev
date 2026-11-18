@@ -11,3 +11,6 @@ handoff/
 CLAUDE.md
 # 声の登録から、サイトを作る時だけ作る物（元は Google スプレッドシート。リポジトリには入れない）
 data/generated/
+
+# 声真似練習場の AI の部品（tools/models.ts が、サイトを作る時に取ってくる。大きいのでリポジトリには入れない）
+public/models/

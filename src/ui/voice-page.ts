@@ -454,12 +454,6 @@ function renderMatches(f: Features, before: string[]): { name: string; word: str
     const near = c.slice(0, 3).map(([k]) => FEATURE_BY_KEY[k].name);
     const far = c.slice(-2).map(([k]) => FEATURE_BY_KEY[k].name);
     li.append(el('div', 'why', t(`似ている所: ${near.join('・')}　違う所: ${far.join('・')}`, `Alike in: ${near.join(', ')} · Different in: ${far.join(', ')}`)));
-    const practice = el('a', 'practice', t('この声で声真似の点数をみる', 'Try imitating this voice'));
-    practice.href = `./mimic.html?target=${encodeURIComponent(v.name)}`;
-    // 新しいタブで開き、このページの結果を残す（声はどこにも残さないので、結果を出し直せない）
-    practice.target = '_blank';
-    practice.rel = 'noopener';
-    if (r.id !== MINE_ID) li.append(practice);
     list.append(li);
   });
   // 共有カードと声紋では、あなたをサイトの声の 1 位と並べる（自分の声とは並べない）

@@ -1,5 +1,5 @@
 // 声の登録（アキネーター方式）の「送る内容」: 作る・読む・確かめる（壁 ①）。DOM なし・乱数なし。
-// 声真似の点数のページ（mimic.html）が、利用者が聞かせたお手本の数字から作り、利用者が Google フォームに貼って送る。
+// 声を登録するページ（register.html）が、利用者が聞かせた声の数字から作り、利用者が Google フォームに貼って送る。
 // 受け取った後に tools/intake.ts がもう一度確かめる（ページの確認は回り込めるため）。
 // 入るのは数字・名前・所属や作品名・大枠・公式ページのリンク・測り方と測れた声の質だけ。音は入らない。送った人の情報も入らない。
 import { FEATURE_BY_KEY, FEATURE_KEYS, roundFeature, type FeatureKey, type Features } from '../voice/features.ts';
