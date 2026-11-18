@@ -2,6 +2,7 @@
 // 1. 高い声を正しいオクターブで測る。2. 1100 Hz より高い音は、半分の高さにせず捨てる。
 // 3. 500 Hz より低い声は、版 3.1.0 と全く同じ数字（3.1.0 で測った声と比べられるように）。息の多い声も（3.2.0 は、2 倍音・3 倍音を
 //    本当の高さと取り違えて 1 オクターブ高く測ったり、上限より高い答えで 3.1.0 の答えを捨てたりしていた）。
+// 4. 息の混じった 500 Hz より高い声を、1/2・1/3 の高さに測らない（3.3.0 まで）。響きの細い低い声は、それで変わらない（3.4.0）。
 import { describe, expect, it } from 'vitest';
 import { MEASURE_COMPATIBLE, MEASURE_VERSION, measureVoice, type Measured } from '../src/voice/measure.ts';
 import { bursts, concat, silence, tone, vowel } from './voice-synth.ts';
@@ -61,9 +62,9 @@ describe('高い声', () => {
 describe('500 Hz より低い声は、版 3.1.0 と同じ', () => {
   const glide = (span: number, mid: number) => (t: number) => mid * 2 ** ((span * 2 * (Math.abs(((t * 0.5) % 1) - 0.5) - 0.25)) / 12);
   const voice = (mid: number) => inRoom(vowel({ rate: R, seconds: 5, f0: glide(4, mid), jitter: 0.01, shimmer: 0.04, breath: 0.02, envelope: talk }));
-  it('版の名前: 3.3.0。3.1.0 と 3.2.0 の数字と比べてよい', () => {
-    expect(MEASURE_VERSION).toBe('3.3.0');
-    expect(MEASURE_COMPATIBLE).toEqual(['3.1.0', '3.2.0']);
+  it('版の名前: 3.4.0。3.1.0・3.2.0・3.3.0 の数字と比べてよい', () => {
+    expect(MEASURE_VERSION).toBe('3.4.0');
+    expect(MEASURE_COMPATIBLE).toEqual(['3.1.0', '3.2.0', '3.3.0']);
   });
   // 版 3.1.0 で測った数字（そのまま写した物）
   const v310: Record<number, Record<string, number | null>> = {
@@ -120,5 +121,50 @@ describe('2 倍音がとても強い高い声（F1 が 2F0）', () => {
       const x = inRoom(vowel({ rate: R, seconds: 3, f0, jitter: 0.01, shimmer: 0.04, breath: 0.02, formants: [[Math.max(800, f0 * 1.1), 120], [1600, 150], [2900, 200]], envelope: talk }));
       expect(Math.abs(ok(measureVoice(x, R, ONE)).features.pitch! / f0 - 1), `${f0} Hz`).toBeLessThan(0.01);
     }
+  });
+});
+
+describe('息の混じった高い声（3.3.0 は 1/2・1/3 の高さに測った）', () => {
+  const notes = bursts(1.5, { share: 0.85, floor: 0.0 });
+  const glide = (span: number, mid: number) => (t: number) => mid * 2 ** ((span * 2 * (Math.abs(((t * 0.5) % 1) - 0.5) - 0.25)) / 12);
+  /** 歌（ビブラート）か話し声（ゆっくり上下）。F1 は声の高さより上 */
+  const voice = (st: number, style: 'sing' | 'talk', vib: number, F1: number, breath: number) => {
+    const f0 = 500 * 2 ** (st / 12);
+    const F = Math.max(F1, f0 * 1.05);
+    const fn = style === 'sing' ? (t: number) => f0 * 2 ** ((vib * Math.sin(2 * Math.PI * 5.8 * t)) / 12) : glide(4 * vib, f0);
+    const sing = style === 'sing';
+    return { f0, x: inRoom(vowel({ rate: R, seconds: 4, f0: fn, jitter: sing ? 0.004 : 0.01, shimmer: sing ? 0.016 : 0.04, breath, formants: [[F, 100], [Math.max(F + 600, 1500), 130], [2800, 180]], envelope: sing ? notes : talk, seed: st + 1 })) };
+  };
+  it('630 Hz の歌（息 0.02）・944 Hz の歌（息 0.05）・794 Hz の話し声（息 0.1）を、正しいオクターブで測る（3.3.0 は 1/2 か 1/3）', () => {
+    for (const [st, style, vib, F1, breath] of [[4, 'sing', 1, 900, 0.02], [11, 'sing', 0.5, 700, 0.05], [8, 'talk', 0.5, 700, 0.1]] as const) {
+      const { f0, x } = voice(st, style, vib, F1, breath);
+      expect(Math.abs(Math.log2(ok(measureVoice(x, R, ONE)).features.pitch! / f0)), `${f0.toFixed(0)} Hz ${style} 息 ${breath}`).toBeLessThan(0.05);
+    }
+  });
+  it('高い声を 1 オクターブ高くは測らない', () => {
+    for (const breath of [0.02, 0.05, 0.1])
+      for (const st of [0, 6, 12]) {
+        const { f0, x } = voice(st, 'sing', 1, 900, breath);
+        const m = measureVoice(x, R, ONE);
+        if (m.ok) expect(m.features.pitch!, `${f0.toFixed(0)} Hz 息 ${breath}`).toBeLessThan(f0 * 1.2);
+      }
+  });
+
+  // 響き（F1）の幅がとても細い低い声: F1 の高さで鳴った枠を、高い声と取り違えて戻さない（3.3.0 と同じ数字）
+  const narrow = (f0: number, F1: number, fry: number, breath: number, envelope: (t: number) => number, F2: number, F3: number, span: number, rate: number) => {
+    const fn = (t: number) => {
+      const u = t % 1.5;
+      const base = f0 * 2 ** ((span * Math.sin(2 * Math.PI * rate * t)) / 12);
+      return fry && u > 1.15 ? base * (fry / base) ** Math.min(1, (u - 1.15) / 0.1) : base;
+    };
+    return inRoom(vowel({ rate: R, seconds: 6, f0: fn, jitter: 0.01 + (fry ? 0.02 : 0), shimmer: 0.05, breath, formants: [[F1, 40], [F2, F2 === F1 + 700 ? 90 : 100], [F3, 150]], envelope, seed: f0 + F1 + 40 }));
+  };
+  it('160 Hz の男性の声（F1 1100 Hz・幅 40 Hz・息 0.1）: 45 項目が 3.3.0 と全く同じ', () => {
+    const x = narrow(160, 1100, 0, 0.1, bursts(4, { share: 0.8, floor: 0.2, group: 6, pause: 0.5 }), 1800, 2600, 1.5, 0.3);
+    expect(ok(measureVoice(x, R, ONE)).features).toEqual({ pitch: 160.3, pitchRange: 26.06, pitchSkew: 2.33, pitchMotion: null, f1: 1083, f2: 1806, f3: 2595, f4: null, formantSpacing: 1114, f1Range: null, f2Range: null, b1: 59, b2: 109, centroid: 1572, hammarberg: 18.47, slopeLow: 54.15, slopeMid: 13.64, mfcc1: 11.83, mfcc2: -13.181, mfcc3: -0.01, mfcc4: 3.497, mfcc5: -0.579, mfcc6: 2.242, mfcc7: 0.075, mfcc8: -1.622, mfcc9: -0.187, mfcc10: -0.403, mfcc11: 0.942, mfcc12: 1.733, mfcc13: -0.83, mfccDelta: 1.58, hnr: 3.12, cpp: 14.93, h1h2: 1.26, jitter: 0.00654, shimmer: 0.0975, rate: 1.54, rateVar: null, pauseShare: 0.174, pauseLen: 0.48, runLen: 1.52, rhythm: null, voicedShare: 0.2, levelRange: 15.93, tilt: 13.87 });
+  });
+  it('240 Hz の女性の声（F1 850 Hz・幅 40 Hz、語尾が 45 Hz までかすれる）: 45 項目が 3.3.0 と全く同じ', () => {
+    const x = narrow(240, 850, 45, 0, bursts(5, { share: 0.8, floor: 0.25, group: 7, pause: 0.45 }), 1900, 2900, 2, 0.35);
+    expect(ok(measureVoice(x, R, ONE)).features).toEqual({ pitch: 268.9, pitchRange: 11.53, pitchSkew: 4.76, pitchMotion: 2.8, f1: 835, f2: 1894, f3: 2917, f4: null, formantSpacing: 1207, f1Range: 2, f2Range: 0.54, b1: 68, b2: 101, centroid: 1081, hammarberg: 24.49, slopeLow: 37.84, slopeMid: -17.77, mfcc1: 14.621, mfcc2: -8.534, mfcc3: -2.355, mfcc4: -0.723, mfcc5: -3.197, mfcc6: 1.359, mfcc7: 1.842, mfcc8: 0.361, mfcc9: -1.212, mfcc10: -3.288, mfcc11: -0.542, mfcc12: 0.384, mfcc13: -1.883, mfccDelta: 0.998, hnr: 8.12, cpp: 18.6, h1h2: -0.11, jitter: 0.00813, shimmer: 0.1236, rate: 5.08, rateVar: null, pauseShare: 0.216, pauseLen: 0.43, runLen: 1.42, rhythm: 12.2, voicedShare: 0.782, levelRange: 18.74, tilt: -10.75 });
   });
 });

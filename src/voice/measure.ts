@@ -25,12 +25,16 @@ import { FEATURE_KEYS, roundFeature, type Features } from './features.ts';
 // 2026-11-08 版 3.3.0: 3.2.0 は、息の多い声で 2 倍音・3 倍音を本当の高さと取り違え、1 オクターブ高く測っていた。500 Hz より
 // 高い答えは、周期がはっきりしていて、低い方の高さの倍音の山が無い時だけ取る（それ以外は 3.1.0 と同じ答え）。上限より高い答えの
 // 時も、3.1.0 の答えを捨てない。低い声の短い声を測れたことにするのは、その低い高さが確かな時だけ。
+// 2026-11-18 版 3.4.0: 息の混じった 500 Hz より高い声を、1/2・1/3 の高さ（3.1.0 の答え）に測る枠を、前後の枠を合わせて確かめて
+// 本当の高さに戻す（liftHigh）。合成の歌声（息 0.02〜0.2）で、1 オクターブ低く出る録音が 245 → 174（672 通り中）、悪くなった
+// 録音は 0。500 Hz より低い声は、試しの合成音 5572 通りで 3.3.0 と全く同じ（線を決めるのに使っていない 3187 通りでは 3 つが
+// 少し動いた。響き（F1）の幅が 30 Hz ほどのとても細い声で、うち 2 つは 3.3.0 でも高さを 2.5 倍ほどに測っていた声）。
 /** 測り方の版（数字の意味が変わったら上げる。事前に測ったお手本の数字と利用者の数字は、同じ版どうしで比べる） */
-export const MEASURE_VERSION = '3.3.0';
+export const MEASURE_VERSION = '3.4.0';
 /** 今の版と比べてよい前の版。3.1.0 との違いは、声が 500 Hz ほどより高い所だけ（そこは捨てるか、1 オクターブ低く測っていた）。
  * 3.1.0 で測った 350 人の数字は、そのまま使う。3.2.0 は、息の多い声を 1 オクターブ高く測ることがあったが、短い間に集めた数字を
- * 捨てないよう、比べてよいことにしておく（運営が後で外してよい） */
-export const MEASURE_COMPATIBLE: readonly string[] = ['3.1.0', '3.2.0'];
+ * 捨てないよう、比べてよいことにしておく（運営が後で外してよい）。3.3.0 との違いも、500 Hz より高い息の混じった声だけ */
+export const MEASURE_COMPATIBLE: readonly string[] = ['3.1.0', '3.2.0', '3.3.0'];
 
 /** 今の版と比べてよい版か（今の版か、MEASURE_COMPATIBLE） */
 export function readableVersion(v: string | null | undefined, current: string = MEASURE_VERSION): boolean {
@@ -390,6 +394,24 @@ const LOW_PEAK = 10;
  * 山が崩れにくい） */
 const PEAK_BAND = 1500;
 const PEAK_HARMONICS = 6;
+/** 版 3.4.0: 1/2・1/3 の高さに測った枠を戻すかを、前後この枠数の中の枠を合わせて決める */
+const LIFT_NEAR = 20;
+/** 合わせる枠の数の下限（1 つの枠では、倍音の山は雑音で見分けられない） */
+const LIFT_FRAMES = 15;
+/** 合わせる枠は、戻した高さがこの半音までの物（同じ答えの枠） */
+const LIFT_SPAN = 1;
+/** 戻した高さ F の倍音の間（[F/2 の奇数倍, F/3 の 3 の倍数でない倍]）の山が、合わせてそのすぐ横のこれより弱ければ、そこに山は
+ * 無い（パワーの比）。合成の 500 Hz より低い声（息・ゆらぎ・F1 の置き方を変えた 3000 通りほど）でいちばん小さい比の 2/3 ほど */
+const LIFT_RATIO = [1.5, 2];
+/** 合わせる枠で、高さの答えの谷より長い周期の谷が、平均してこれより深ければ戻さない（低い声が、細い響き（F1）の高さで鳴り続け、
+ * その 2 周期を高さと測った枠。本当の周期の谷がずっと深い。高い声では、長い周期の谷は高さの答えの谷とほぼ同じ） */
+const LIFT_DEEPER = 0.03;
+/** 声のある枠の高さの中央値がこれ（Hz）より低い録音では戻さない。高い声を 1/2 に測った録音の中央値は 250 Hz より上（1/3 に
+ * 測った 750 Hz より低い声は戻らない） */
+const LIFT_FLOOR = 250;
+/** 合わせる枠の、枠の中の大きさの揺れ（pulseOf）の中央値がこれより大きければ戻さない（語尾のかすれ（fry）などで、声の脈が
+ * 離れて来て、その間に細い響きだけが鳴る所。高い声は途切れなく鳴るので、揺れは小さい） */
+const LIFT_PULSE = 0.42;
 
 /** x の `centre` を中心にした n サンプル（2 のべき乗）の Hann 窓での、`hz` のパワー（Goertzel。ビンとビンの間でもよい） */
 function powerAt(x: Float64Array, centre: number, n: number, hz: number): number {
@@ -408,11 +430,11 @@ function powerAt(x: Float64Array, centre: number, n: number, hz: number): number
 }
 
 /**
- * 周期 `low` の倍音のうち、周期 `high` の倍音でない物の山が、そのすぐ横（倍音の間）の何倍か（パワーの比。見る所が無ければ 0）。
+ * 周期 `low` の倍音のうち、周期 `high` の倍音でない物の山のパワーの和と、そのすぐ横（倍音の間）のパワーの和。
  * 声が本当に `low` の高さなら、そこに倍音の山がある（息の雑音の中でも、すぐ横より強い）。`high` の高さなら、そこは倍音の間で、
  * すぐ横と同じくらい
  */
-function lowerPeaks(x: Float64Array, centre: number, low: number, high: number): number {
+function lowerSums(x: Float64Array, centre: number, low: number, high: number): [number, number] {
   const fo = RATE / low,
     fs = RATE / high;
   // 窓は low の 8 周期以上: 山の幅（Hann の 2 ビン）が fo / 4 より狭くなる
@@ -436,16 +458,117 @@ function lowerPeaks(x: Float64Array, centre: number, low: number, high: number):
     peak += powerAt(x, centre, n, h);
     gap += g / k;
   }
+  return [peak, gap];
+}
+
+/** lowerSums の山が横の何倍か（パワーの比。見る所が無ければ 0） */
+function lowerPeaks(x: Float64Array, centre: number, low: number, high: number): number {
+  const [peak, gap] = lowerSums(x, centre, low, high);
   return gap > 0 ? peak / gap : 0;
+}
+
+/** 枠の真ん中の 512 サンプルを 64 サンプル（4 ms）ずつに分けた、大きさ（2 乗の和）の変動係数 */
+function pulseOf(x: Float64Array, centre: number): number {
+  const e = new Float64Array(8);
+  let mean = 0;
+  for (let k = 0; k < 8; k++) {
+    let s = 0;
+    for (let j = 0; j < 64; j++) {
+      const i = centre + (k - 4) * 64 + j;
+      const v = i >= 0 && i < x.length ? x[i]! : 0;
+      s += v * v;
+    }
+    e[k] = s;
+    mean += s / 8;
+  }
+  if (!(mean > 0)) return 0;
+  let v = 0;
+  for (let k = 0; k < 8; k++) v += (e[k]! - mean) ** 2 / 8;
+  return Math.sqrt(v) / mean;
+}
+
+/**
+ * 版 3.4.0: 息の混じった 500 Hz より高い声は、周期の谷がはっきりせず、1/2・1/3 の高さ（前の版の答え）に測る枠がある。
+ * k 倍（2・3）の高さ F が本当の高さなら、F の倍音の間（F/2 の奇数倍・F/3 の 3 の倍数でない倍）に山は無い。1 つの枠では雑音で
+ * 見分けられないので、同じひと続きの前後 LIFT_NEAR 枠の、戻した高さが LIFT_SPAN 半音までの枠を LIFT_FRAMES 個以上合わせて見て、
+ * F/2・F/3 のどちらの山も無い時だけ F にする（F/2 だけを見ると、本当の高さが F/3 の声を F と取り違える）。
+ * 低い声が細い響き（F1）の高さで鳴った枠も、倍音の間に山が無く見える。それを戻さないため: 本当の周期の谷（`deeper`）がずっと
+ * 深い枠・枠の中で大きさが脈打つ枠（語尾のかすれ）が多い時と、声のある枠の高さの中央値が LIFT_FLOOR より低い録音では戻さない。
+ * F が 500 Hz より低い・上限より高い枠は見ない。戻した枠のもう 1 つの答え（`alt`）は、戻す前の高さ（前後と合わない時に、
+ * そちらに戻せるように）。`f0`・`alt` を書き換える
+ */
+function liftHigh(lp: Float64Array, f0: Float64Array, alt: Float64Array, deeper: Float64Array, runs: [number, number][]): void {
+  const nF = f0.length;
+  // 枠ごと・k（2・3）ごとの、F/2 の [山, 横] と F/3 の [山, 横]（見ない枠は NaN）と、枠の中の大きさの揺れ
+  const ev = new Float64Array(8 * nF).fill(NaN);
+  const pulse = new Float64Array(nF);
+  let any = false;
+  for (let f = 0; f < nF; f++) {
+    const hz = f0[f]!;
+    if (!(hz > 0)) continue;
+    const centre = f * HOP + (WIN >> 1);
+    for (let i = 0; i < 2; i++) {
+      const up = (i + 2) * hz;
+      if (up < OLD_F0_MAX || up > F0_MAX) continue;
+      for (let j = 0; j < 2; j++) {
+        const [peak, gap] = lowerSums(lp, centre, (RATE * (j + 2)) / up, RATE / up);
+        ev[8 * f + 4 * i + 2 * j] = peak;
+        ev[8 * f + 4 * i + 2 * j + 1] = gap;
+      }
+      any = true;
+    }
+    if (!Number.isNaN(ev[8 * f]!) || !Number.isNaN(ev[8 * f + 4]!)) pulse[f] = pulseOf(lp, centre);
+  }
+  if (!any) return;
+  // 声のある枠の高さの中央値が低い（男性の話し声など）時は戻さない（細い響きで鳴った枠を、高い声と取り違えないため）
+  const voicedHz: number[] = [];
+  for (let f = 0; f < nF; f++) if (f0[f]! > 0) voicedHz.push(f0[f]!);
+  if (median(voicedHz) < LIFT_FLOOR) return;
+  const lift = new Uint8Array(nF);
+  const sum = new Float64Array(4);
+  for (const [a, b] of runs) {
+    for (let f = a; f <= b; f++) {
+      let k = 0;
+      for (let i = 0; i < 2; i++) {
+        if (Number.isNaN(ev[8 * f + 4 * i]!)) continue;
+        // 戻した高さ F が同じ（LIFT_SPAN 半音まで）枠を合わせる（1/2 と 1/3 の高さの枠が混ざっていても、同じ F なら合わせる）
+        const s = semitones((i + 2) * f0[f]!);
+        sum.fill(0);
+        let n = 0,
+          deep = 0;
+        const pulses: number[] = [];
+        for (let g = Math.max(a, f - LIFT_NEAR); g <= Math.min(b, f + LIFT_NEAR); g++) {
+          for (let j = 0; j < 2; j++) {
+            const og = 8 * g + 4 * j;
+            if (Number.isNaN(ev[og]!) || Math.abs(semitones((j + 2) * f0[g]!) - s) > LIFT_SPAN) continue;
+            for (let q = 0; q < 4; q++) sum[q] = sum[q]! + ev[og + q]!;
+            deep += deeper[g]!;
+            pulses.push(pulse[g]!);
+            n++;
+          }
+        }
+        if (n < LIFT_FRAMES || !(sum[1]! > 0) || !(sum[3]! > 0) || deep > LIFT_DEEPER * n || median(pulses) > LIFT_PULSE) continue;
+        // 2 倍と 3 倍の両方に当たる時は、どちらとも決めない
+        if (sum[0]! < LIFT_RATIO[0]! * sum[1]! && sum[2]! < LIFT_RATIO[1]! * sum[3]!) k = k ? -1 : i + 2;
+      }
+      if (k > 0) lift[f] = k;
+    }
+  }
+  for (let f = 0; f < nF; f++) {
+    if (!lift[f]) continue;
+    alt[f] = f0[f]!;
+    f0[f] = lift[f]! * f0[f]!;
+  }
 }
 
 /**
  * 周期 tauMin..tauMax（サンプル）の声を探す。OLD_TAU より長い周期は前の版と同じ探し方。`wide` の時は短い周期（500 Hz より
  * 高い声）も、上限の 2 倍の高さ（tauMin の半分）から探す: 上限より高い音は、周期の何倍かが tauMin の手前に出るので、低く測らずに
  * 捨てられる。短い周期を取るのは、周期がはっきりしていて、低い方の高さの倍音の山が無い時だけ（それ以外は前の版の答え）。
- * `alt` は、取らなかった方の答え（周期。無ければ 0）
+ * `alt` は、取らなかった方の答え（周期。無ければ 0）。`deeper` は、前の版の答えの谷より、前の範囲のいちばん深い谷がどれだけ深いか
+ * （前の版の答えでない時は 0）
  */
-function yin(x: Float64Array, sq: Float64Array, b: number, tauMin: number, tauMax: number, d: Float64Array, wide: boolean): { tau: number; dip: number; alt: number } {
+function yin(x: Float64Array, sq: Float64Array, b: number, tauMin: number, tauMax: number, d: Float64Array, wide: boolean): { tau: number; dip: number; alt: number; deeper: number } {
   const e0 = sq[b + YIN_W]! - sq[b]!;
   let run = 0;
   d[0] = 1;
@@ -485,8 +608,12 @@ function yin(x: Float64Array, sq: Float64Array, b: number, tauMin: number, tauMa
     tau = OLD_TAU;
     for (let t = OLD_TAU + 1; t <= tauMax; t++) if (d[t]! < d[tau]!) tau = t;
   }
-  const old = { tau: refine(tau, OLD_TAU), dip: d[tau]!, alt: 0 };
+  const old = { tau: refine(tau, OLD_TAU), dip: d[tau]!, alt: 0, deeper: 0 };
   if (!old.tau) old.dip = 1;
+  // 前の範囲のいちばん深い谷
+  let best = Infinity;
+  for (let t = OLD_TAU; t <= tauMax; t++) if (d[t]! < best) best = d[t]!;
+  old.deeper = Math.max(0, old.dip - best);
   if (!wide) return old;
   // それより短い周期の谷
   const from = tauMin >> 1;
@@ -545,11 +672,9 @@ function yin(x: Float64Array, sq: Float64Array, b: number, tauMin: number, tauMa
   const dip = d[near]!;
   if (dip > SHORT_CLEAR) return keep();
   // 上限より高い音: 低く測らずに捨てる
-  if (short < tauMin) return { tau: short, dip, alt: 0 };
+  if (short < tauMin) return { tau: short, dip, alt: 0, deeper: 0 };
   // 前の範囲のいちばん深い谷と同じくらい深ければ、短い周期
-  let best = Infinity;
-  for (let t = OLD_TAU; t <= tauMax; t++) if (d[t]! < best) best = d[t]!;
-  if (dip <= best + SHORT_MARGIN) return { tau: short, dip, alt: old.dip <= VOICED_MAX ? old.tau : 0 };
+  if (dip <= best + SHORT_MARGIN) return { tau: short, dip, alt: old.dip <= VOICED_MAX ? old.tau : 0, deeper: 0 };
   return keep();
 }
 
@@ -558,7 +683,8 @@ export const NOW_LEN = 2048;
 const nowBuf = { x: new Float64Array(NOW_LEN), sq: new Float64Array(NOW_LEN + 1), d: new Float64Array(Math.ceil(RATE / F0_MIN) + 2) };
 /**
  * 16 kHz の直近の音（終わりの NOW_LEN サンプル）の、真ん中（64 ms 前）の声の高さ（Hz。無い時・60〜1100 Hz の外の時は 0）。
- * 測る時と同じ探し方（60 Hz より下と 1500 Hz より上を切ってから、同じ YIN）。録っている間の高さの線に使う
+ * 測る時と同じ探し方（60 Hz より下と 1500 Hz より上を切ってから、同じ YIN）。録っている間の高さの線に使う（前後の枠を合わせて
+ * 1/2・1/3 の高さから戻す liftHigh は無い）
  */
 export function pitchNow(x: ArrayLike<number>): number {
   if (x.length < NOW_LEN) return 0;
@@ -886,6 +1012,8 @@ function measure(pcm: ArrayLike<number>, sampleRate: number, opts: MeasureOption
   const f0 = new Float64Array(nF);
   // その枠のもう 1 つの答え（Hz。高さが前後と大きく違う枠を、捨てる代わりに使う）
   const alt = new Float64Array(nF);
+  // その枠の、高さの答えの谷より、もっと長い周期の谷がどれだけ深いか（liftHigh が使う）
+  const deeper = new Float64Array(nF);
   const inRange = (tau: number) => tau > 0 && RATE / tau >= F0_MIN && RATE / tau <= F0_MAX;
   for (let f = 0; f < nF; f++) {
     if (level[f]! < gate) continue;
@@ -894,6 +1022,7 @@ function measure(pcm: ArrayLike<number>, sampleRate: number, opts: MeasureOption
     const r = yin(lp, sqLp, b, tauMin, tauMax, d, true);
     if (r.dip <= VOICED_MAX && inRange(r.tau)) f0[f] = RATE / r.tau;
     if (inRange(r.alt)) alt[f] = RATE / r.alt;
+    deeper[f] = r.deeper;
   }
   const runsOf = (on: (f: number) => boolean): [number, number][] => {
     const out: [number, number][] = [];
@@ -909,6 +1038,7 @@ function measure(pcm: ArrayLike<number>, sampleRate: number, opts: MeasureOption
     return out;
   };
   for (const [a, b] of runsOf((f) => f0[f]! > 0)) if (b - a + 1 < 3) for (let f = a; f <= b; f++) f0[f] = 0;
+  liftHigh(lp, f0, alt, deeper, runsOf((f) => f0[f]! > 0));
   const st = new Float64Array(nF);
   for (let f = 0; f < nF; f++) st[f] = f0[f]! > 0 ? semitones(f0[f]!) : 0;
   const slips: [number, number][] = [];
