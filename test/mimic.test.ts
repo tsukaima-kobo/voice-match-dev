@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { measureVoice, type Measured } from '../src/voice/measure.ts';
 import { measureLong, medianFeatures } from '../src/voice/combine.ts';
-import { ADVICE, adviceFor, differences, mimicScore, scoreWord } from '../src/mimic/mimic.ts';
+import { ADVICE, adviceFor, differences, mimicScore, scoreRank, scoreWord } from '../src/mimic/mimic.ts';
 import { FEATURE_KEYS, type Features } from '../src/voice/features.ts';
 import { bursts, concat, silence, vowel } from './voice-synth.ts';
 
@@ -40,6 +40,7 @@ describe('点数', () => {
   });
   it('どの点数にも言葉がある', () => {
     expect([100, 90, 89, 75, 74, 55, 54, 35, 34, 0].map(scoreWord)).toEqual(['そっくり', 'そっくり', 'かなり近い', 'かなり近い', '近い', '近い', '少し近い', '少し近い', 'まだ遠い', 'まだ遠い']);
+    expect([100, 90, 89, 75, 74, 55, 54, 35, 34, 0].map(scoreRank)).toEqual(['S', 'S', 'A', 'A', 'B', 'B', 'C', 'C', 'D', 'D']);
   });
 });
 

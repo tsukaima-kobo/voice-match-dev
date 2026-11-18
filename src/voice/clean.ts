@@ -1,8 +1,8 @@
 // 声真似練習場で、録った音をきれいにする（利用者が選んだ時だけ）。どれも、この端末の中だけで動かす。音はどこにも送らない。
-//   音楽を消す: Demucs（src/voice/demucs.ts・music.worker.ts）。WebGPU の使えるブラウザー（パソコンの Chrome・Edge など）だけ。
-//               AI の部品（約 155 MB）は、最初に使う時だけ、このサイトから読む（ブラウザーのキャッシュに残る）。
-//   ノイズを減らす: RNNoise（src/voice/denoise.ts・denoise.worker.ts）。スマホでも動く。
-// 両方を選んだ時は、音楽を消してから、ノイズを減らす。速さの直しはブラウザーの OfflineAudioContext で（Demucs は 44.1 kHz、
+//   ノイズカット 大（music）: Demucs（src/voice/demucs.ts・music.worker.ts）。BGM・伴奏も消す。WebGPU の使えるブラウザー
+//               （パソコンの Chrome・Edge など）だけ。AI の部品（約 155 MB）は、最初に使う時だけ、このサイトから読む（ブラウザーのキャッシュに残る）。
+//   ノイズカット 小（denoise）: RNNoise（src/voice/denoise.ts・denoise.worker.ts）。スマホでも動く。
+// 画面ではどちらか 1 つだけ選ぶ（2 つ重ねると声が崩れる）。両方を渡された時は、音楽を消してから、ノイズを減らす。速さの直しはブラウザーの OfflineAudioContext で（Demucs は 44.1 kHz、
 // RNNoise は 48 kHz の音を受ける）。お手本と真似の両方に、同じ物をかける（呼ぶ側の mimic-page.ts が、お手本ごとに決める）。
 import DenoiseWorker from './denoise.worker.ts?worker';
 import MusicWorker from './music.worker.ts?worker';

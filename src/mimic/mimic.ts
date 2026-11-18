@@ -115,6 +115,15 @@ export function adviceFor(diffs: readonly Difference[], n = 3): { key: ScoredKey
 }
 
 /** 点数の言葉（暫定） */
+/** 点数のランク（ゲームの画面で、点数の横に大きく出す）。区切りは scoreWord と同じ */
+export function scoreRank(score: number): 'S' | 'A' | 'B' | 'C' | 'D' {
+  if (score >= 90) return 'S';
+  if (score >= 75) return 'A';
+  if (score >= 55) return 'B';
+  if (score >= 35) return 'C';
+  return 'D';
+}
+
 export function scoreWord(score: number): string {
   if (score >= 90) return t('そっくり', 'Spot on');
   if (score >= 75) return t('かなり近い', 'Very close');

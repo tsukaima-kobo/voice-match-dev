@@ -403,12 +403,12 @@ footer.site-foot .foot-links { display: flex; flex-wrap: wrap; gap: 6px 18px; ju
 }
 /* ---- 声真似練習場（ゲームの画面） ----
    遊ぶ所は 1 つの枠（.game）。段階（data-phase: ref = お手本を録る・mim = 聞いて真似する・result = 点数）で中身を入れ替える。
-   上に出す言葉は短い 1 行（.cue）だけ。説明・設定・くわしい結果は、下の折りたたみ（.game-more）。広い画面では、点数表を右に並べる。 */
+   今することの短い 1 行（.cue）は、字幕のように下に。点数の時は、ランクと、高さの線を重ねた図も。説明・設定・くわしい結果は、下の折りたたみ（.game-more）。広い画面では、点数表を右に並べる。 */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64px); }
 .game-wrap { display: grid; gap: var(--gap); align-items: start; min-width: 0; }
 @media (min-width: 1100px) { .game-wrap { grid-template-columns: minmax(0, 1fr) minmax(360px, 30vw); } }
-.game { position: relative; display: grid; grid-template-rows: auto auto 1fr; gap: clamp(12px, 1.4vw, 18px); padding: clamp(14px, 2vw, 28px); min-height: min(940px, calc(100svh - 120px)); min-width: 0; overflow: hidden; transition: border-color 0.3s, box-shadow 0.3s; }
+.game { position: relative; display: grid; grid-template-rows: auto auto 1fr; gap: clamp(12px, 1.4vw, 18px); padding: clamp(14px, 2vw, 28px); min-height: min(940px, calc(100svh - 120px)); min-width: 0; overflow: hidden; overflow: clip; transition: border-color 0.3s, box-shadow 0.3s; }
 .game:is([data-ref="listening"], [data-mim="listening"]) { border-color: color-mix(in oklch, var(--a1) 55%, transparent); box-shadow: var(--shadow), 0 0 0 4px color-mix(in oklch, var(--a1) 14%, transparent), var(--glow); }
 .game-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; min-width: 0; }
 .game-title { font-size: clamp(1.05rem, 0.6vw + 0.95rem, 1.35rem); font-weight: 900; margin-right: auto; white-space: nowrap; }
@@ -419,7 +419,12 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 .seg label:has(input:disabled) { opacity: 0.6; cursor: default; }
 .seg label:has(input:focus-visible), .toggle:has(input:focus-visible) { outline: 3px solid var(--a2); outline-offset: 2px; }
 .toggles { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; }
-.game-bar .toggles { margin-left: auto; }
+.game-bar .toggles { margin-left: 0; }
+/* ノイズカット: なし・小・大の小さな切り替え（どれか 1 つ） */
+.seg-sm { flex-wrap: nowrap; align-items: center; padding: 3px; font-size: 0.84em; }
+.seg-sm label { padding: 0.3em 0.9em; font-size: 1em; }
+.seg-title { padding: 0 0.35em 0 0.8em; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.game-bar .clean-seg { margin-left: auto; }
 .toggle { position: relative; display: inline-flex; align-items: center; gap: 0.5em; padding: 0.36em 0.95em; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface-2); font-size: 0.84em; font-weight: 700; cursor: pointer; white-space: nowrap; transition: border-color 0.2s, background-color 0.2s; }
 .toggle::before { content: ""; width: 0.72em; height: 0.72em; flex: none; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--line-strong); transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s; }
 .toggle:has(input:checked) { border-color: color-mix(in oklch, var(--a1) 70%, transparent); background: color-mix(in oklch, var(--a1) 13%, var(--surface-2)); }
@@ -452,12 +457,13 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 .turn-label { font-size: 0.8em; font-weight: 700; color: var(--a1); letter-spacing: 0.06em; }
 .turn-name { font-family: var(--f-display); font-weight: 900; font-size: clamp(1.3rem, 1.2vw + 1rem, 2rem); overflow-wrap: anywhere; }
 .turn-count { color: var(--muted); font-size: 0.85em; }
-.game-body { display: grid; align-content: center; justify-items: center; text-align: center; gap: clamp(8px, 1vw, 14px); min-width: 0; }
+/* 縦に並べる（flex。今することの 1 行を、画面の下に貼り付けられるように） */
+.game-body { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: clamp(8px, 1vw, 14px); min-width: 0; }
 .game-body > * { width: 100%; max-width: 780px; min-width: 0; }
 .game .turn { justify-content: center; padding: 0; background: none; border: 0; }
 .game .turn-name { font-size: clamp(1.8rem, 2.6vw + 1rem, 3.2rem); }
 .game .orb-wrap { grid-area: auto; margin-block: calc(-1 * min(3vw, 2.5svh)); }
-.game .orb { width: min(56vw, 28svh, 300px); }
+.game .orb { width: min(56vw, 24svh, 280px); }
 .game[data-phase="result"] .orb-wrap, .game[data-phase="ref"] .turn { display: none; }
 .cue { font-family: var(--f-display); font-weight: 900; font-size: clamp(1.35rem, 1.6vw + 0.9rem, 2.3rem); line-height: 1.3; letter-spacing: -0.02em; text-wrap: balance; }
 .cue:empty { display: none; }
@@ -470,7 +476,7 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 .game .wave { display: none; }
 .game .live { padding: 10px 14px; gap: 8px; }
 .game .live :is(.live-read, .live-tiers, .live-items, .live-status) { display: none; }
-.game .live-scope { height: clamp(80px, 14cqi, 130px); }
+.game .live-scope { height: clamp(72px, 11cqi, 110px); }
 .game .meter { max-width: 560px; }
 .game .pick { justify-items: center; }
 .game #ref-name { font: inherit; font-size: 0.9em; width: min(100%, 22em); padding: 0.55em 1em; text-align: center; border: 1px solid var(--line-strong); border-radius: 999px; background: color-mix(in oklch, var(--surface-solid) 70%, transparent); color: var(--ink); }
@@ -497,6 +503,22 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 @container (min-width: 521px) { .game .score-text { text-align: left; } }
 .game .gauge { width: clamp(180px, 20vw, 280px); }
 .game .result-actions { padding: 0; justify-content: center; }
+/* 点数の下に、お手本とあなたの高さの線を重ねた図（セリフ・逆再生の時）。くわしい結果の図と同じ物を、小さく */
+.game .line-box { order: 1; padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; gap: 4px; justify-self: center; width: 100%; max-width: 680px; }
+.game .result .more-link { order: 2; }
+.game .line-head { justify-content: center; }
+.game .line-title { display: none; }
+.game .line-head .legend { font-size: 0.82em; }
+.game .line-chart svg { height: clamp(72px, 8vw, 120px); }
+.game .line-frame .axis.lo { bottom: 24%; }
+.game .line-foot { font-size: 0.7rem; }
+/* ランク（S・A・B・C・D）: 点数の輪の右下に大きく。点数が数えあがった後に出る */
+.score-rank { position: absolute; z-index: 2; right: -6%; bottom: -2%; margin: 0; font-family: var(--f-display); font-weight: 900; font-size: clamp(2.4rem, 3vw + 1.2rem, 4.2rem); line-height: 1; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 3px 12px color-mix(in oklch, var(--a1) 45%, transparent)); }
+.score-rank:empty { display: none; }
+@media (prefers-reduced-motion: no-preference) { .score-rank.pop { animation: rank-pop 0.55s var(--ease-out) 1.25s both; } }
+@keyframes rank-pop { from { opacity: 0; transform: scale(2.4) rotate(-14deg); } }
+/* 今することの 1 行は、字幕のように下に（遊ぶ所の真ん中は、声の玉とボタンだけに）。枠が画面より長い時は、画面の下に貼り付ける */
+.game .cue { order: 9; position: sticky; bottom: 12px; z-index: 3; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); width: auto; margin-top: clamp(2px, 0.8vw, 10px); padding: 0.38em 1.1em; border-radius: 14px; border: 1px solid var(--line); background: color-mix(in oklch, var(--surface-solid) 72%, transparent); font-size: clamp(1.05rem, 0.8vw + 0.85rem, 1.55rem); }
 .more-link { padding: 0.3em 0.9em; border: 0; background: none; box-shadow: none; backdrop-filter: none; color: var(--link); font-size: 0.88em; }
 /* キーボードの印（マウスのある画面だけ） */
 @media (hover: hover) and (pointer: fine) {
@@ -505,7 +527,7 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 /* スマホ: 上の操作を詰め、玉を小さくして、録るボタンまで 1 画面に（配信向けの表示は、パソコンだけ） */
 @media (max-width: 599px) {
   .game-bar, .players-bar { gap: 6px; }
-  .game-bar .toggles { margin-left: 0; }
+  .game-bar .clean-seg { margin-left: 0; font-size: 0.78em; }
   .game-bar .game-mic { justify-content: flex-start; flex-wrap: nowrap; }
   .game-bar .game-mic label { white-space: nowrap; }
   .game-bar .game-mic select { flex: 1 1 auto; width: 0; }
@@ -555,7 +577,8 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 kbd { font-family: var(--f-num); font-size: 0.85em; padding: 0.1em 0.5em; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 6px; background: var(--surface-solid); margin-right: 0.4em; }
 /* 配信向けの表示: 下の説明を隠し、順番・点数を大きく */
 .stream-view .game-more, .stream-view .site-foot { display: none; }
-.stream-view .cue { font-size: clamp(1.6rem, 2.2vw + 1rem, 2.8rem); }
+.game .cue.flow { position: static; }
+.stream-view .game .cue { font-size: clamp(1.3rem, 1.4vw + 0.95rem, 2.2rem); }
 .stream-view .score { font-size: clamp(4.4rem, 7vw + 1.6rem, 8.4rem); }
 .stream-view .game .gauge { width: clamp(240px, 28vw, 400px); }
 .stream-view .game .turn-name { font-size: clamp(2.2rem, 3vw + 1rem, 4rem); }

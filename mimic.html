@@ -26,10 +26,14 @@
               <label><input type="radio" name="mode" value="mimic" checked /><span lang="ja">声真似</span><span lang="en">Mimic</span></label>
               <label><input type="radio" name="mode" value="reverse" /><span lang="ja">逆再生チャレンジ</span><span lang="en">Reverse challenge</span></label>
             </div>
+            <div class="seg seg-sm clean-seg" role="radiogroup" aria-label="ノイズカット（どれか 1 つ）" data-en-aria-label="Noise cut (pick one)">
+              <span class="seg-title" aria-hidden="true"><span lang="ja">ノイズカット</span><span lang="en">Noise cut</span></span>
+              <label><input type="radio" name="clean" value="off" checked /><span lang="ja">なし</span><span lang="en">Off</span></label>
+              <label title="部屋の雑音・ファンの音などを減らします" data-en-title="Reduces room noise, fans and so on"><input type="radio" name="clean" value="small" /><span lang="ja">小</span><span lang="en">Light</span></label>
+              <label id="clean-big-label" title="BGM・伴奏も消して、声だけにします" data-en-title="Also removes BGM and backing tracks, leaving the voice"><input type="radio" name="clean" value="big" id="clean-big" /><span lang="ja">大</span><span lang="en">Strong</span></label>
+            </div>
             <fieldset class="toggles">
-              <legend class="sr-only"><span lang="ja">音をきれいにする・表示</span><span lang="en">Clean-up and view</span></legend>
-              <label class="toggle"><input type="checkbox" id="clean-noise" /><span lang="ja">ノイズを減らす</span><span lang="en">Reduce noise</span></label>
-              <label class="toggle"><input type="checkbox" id="clean-music" /><span lang="ja">音楽を消す</span><span lang="en">Remove music</span></label>
+              <legend class="sr-only"><span lang="ja">表示</span><span lang="en">View</span></legend>
               <label class="toggle"><input type="checkbox" id="stream-view" /><span lang="ja">配信向け</span><span lang="en">Stream view</span></label>
             </fieldset>
             <div class="mic-pick game-mic" id="mic-pick" hidden>
@@ -53,7 +57,6 @@
               <div class="orb" id="orb" aria-hidden="true"></div>
               <p class="orb-label" aria-hidden="true"><span lang="ja">聞いています</span><span lang="en">Listening</span></p>
             </div>
-            <p class="cue" id="cue" aria-live="polite"></p>
 
             <section class="stage step" id="ref" data-state="idle" aria-label="お手本" data-en-aria-label="Model">
               <div id="ref-pick" class="pick">
@@ -104,7 +107,7 @@
             <section class="result" id="result" hidden aria-live="polite" aria-label="点数" data-en-aria-label="Score">
               <div class="score-wrap">
                 <div class="score-card">
-                  <div class="gauge" id="gauge"><p class="score"><span id="score"></span><small lang="ja">点</small><small lang="en">pts</small></p></div>
+                  <div class="gauge" id="gauge"><p class="score"><span id="score"></span><small lang="ja">点</small><small lang="en">pts</small></p><p class="score-rank" id="rank" aria-hidden="true"></p></div>
                   <div class="score-text">
                     <p class="score-label" id="score-label"></p>
                     <p class="score-word" id="score-word"></p>
@@ -117,6 +120,17 @@
                   </div>
                 </div>
               </div>
+              <figure class="line-box card" id="line-box" hidden>
+                <figcaption class="line-head">
+                  <span class="line-title"><span lang="ja">抑揚の重なり</span><span lang="en">Intonation overlay</span></span>
+                  <span class="legend"><span><i class="swatch ref" aria-hidden="true"></i><span lang="ja">お手本</span><span lang="en">Model</span></span><span><i class="swatch mine" aria-hidden="true"></i><span lang="ja">あなた（お手本の時間に合わせて）</span><span lang="en">You (aligned to the model’s timing)</span></span></span>
+                </figcaption>
+                <div class="line-frame">
+                  <span class="axis hi"><span lang="ja">高い</span><span lang="en">High</span></span><span class="axis lo"><span lang="ja">低い</span><span lang="en">Low</span></span>
+                  <div class="line-chart" id="line-chart"></div>
+                </div>
+                <p class="line-foot"><span><span lang="ja">0 秒</span><span lang="en">0 s</span></span><span><span lang="ja">下の山はお手本の声の大きさ</span><span lang="en">The hills below show the model’s loudness</span></span><span id="line-seconds"></span></p>
+              </figure>
               <div class="result-actions">
                 <div class="playback" role="group" aria-label="自分の声を聞き直す" data-en-aria-label="Listen to your take">
                   <button type="button" id="play-mine" data-play="mine"><span lang="ja">▶ 自分の声</span><span lang="en">▶ My voice</span></button>
@@ -129,6 +143,7 @@
               </div>
               <button type="button" class="more-link" id="more-result"><span lang="ja">くわしい結果を見る ▼</span><span lang="en">See the details ▼</span></button>
             </section>
+            <p class="cue" id="cue" aria-live="polite"></p>
           </div>
         </section>
 
@@ -146,19 +161,8 @@
 
         <section class="game-more" aria-label="くわしい結果・説明・設定" data-en-aria-label="Details, how to play and settings">
           <details class="more-item" id="detail" hidden>
-            <summary><span lang="ja">くわしい結果（抑揚の重なり・声紋・直し方・項目・シェア）</span><span lang="en">Details (intonation overlay, voiceprints, tips, items, share)</span></summary>
+            <summary><span lang="ja">くわしい結果（声紋・直し方・項目・シェア）</span><span lang="en">Details (voiceprints, tips, items, share)</span></summary>
             <div class="more-body">
-              <figure class="line-box card" id="line-box" hidden>
-                <figcaption class="line-head">
-                  <span class="line-title"><span lang="ja">抑揚の重なり</span><span lang="en">Intonation overlay</span></span>
-                  <span class="legend"><span><i class="swatch ref" aria-hidden="true"></i><span lang="ja">お手本</span><span lang="en">Model</span></span><span><i class="swatch mine" aria-hidden="true"></i><span lang="ja">あなた（お手本の時間に合わせて）</span><span lang="en">You (aligned to the model’s timing)</span></span></span>
-                </figcaption>
-                <div class="line-frame">
-                  <span class="axis hi"><span lang="ja">高い</span><span lang="en">High</span></span><span class="axis lo"><span lang="ja">低い</span><span lang="en">Low</span></span>
-                  <div class="line-chart" id="line-chart"></div>
-                </div>
-                <p class="line-foot"><span><span lang="ja">0 秒</span><span lang="en">0 s</span></span><span><span lang="ja">下の山はお手本の声の大きさ</span><span lang="en">The hills below show the model’s loudness</span></span><span id="line-seconds"></span></p>
-              </figure>
               <section class="shape-sec" aria-labelledby="shape-title">
                 <header class="section-head">
                   <p class="kicker"><span lang="ja">声紋</span><span lang="en">Voiceprint</span></p>
@@ -205,17 +209,15 @@
           </details>
 
           <details class="more-item">
-            <summary><span lang="ja">マイク・音をきれいにする・配信向けの表示</span><span lang="en">Mic, clean-up and stream view</span></summary>
+            <summary><span lang="ja">マイク・ノイズカット・配信向けの表示</span><span lang="en">Mic, noise cut and stream view</span></summary>
             <div class="more-body prose">
               <dl class="rules">
                 <dt><span lang="ja">マイク</span><span lang="en">Mic</span></dt>
                 <dd><span lang="ja">上の「使うマイク」で選びます。「（端末の設定）」の付いた物が、端末で選んでいるマイクです（名前は、マイクを一度許可すると出ます）。ブラウザーが音を変える機能（エコーを消す・雑音を抑える・音量を自動で合わせる）は、全部切っています。音が小さい時は、雑音より十分大きければ、大きくしてから測ります（点数に使う数字は、音の大きさで変わりません）。</span><span lang="en">Choose it with “Mic in use” at the top. The one marked “(device default)” is the mic chosen on the device (names appear once the mic has been allowed). The browser’s sound processing (echo cancellation, noise suppression, automatic volume) is all turned off. A quiet recording is turned up before measuring, as long as it is well above the background noise (the numbers used for the score do not depend on loudness).</span></dd>
-                <dt><span lang="ja">ノイズを減らす</span><span lang="en">Reduce noise</span></dt>
-                <dd><span lang="ja">RNNoise。部屋の雑音・ファンの音などを減らします。スマホでも動きます。</span><span lang="en">RNNoise. Removes room noise, fans and so on. Works on phones too.</span></dd>
-                <dt><span lang="ja">音楽を消す</span><span lang="en">Remove music</span></dt>
-                <dd><span lang="ja">Demucs。BGM や歌の伴奏を消して、声だけにします。WebGPU の使えるパソコンのブラウザー（Chrome・Edge など）だけで動きます。最初の 1 回だけ、AI（約 155 MB）をこのサイトから読みます。</span><span lang="en">Demucs. Removes BGM and backing tracks, leaving the voice. Works only in computer browsers with WebGPU (Chrome, Edge and others). The AI (about 155 MB) is read from this site the first time only.</span></dd>
+                <dt><span lang="ja">ノイズカット</span><span lang="en">Noise cut</span></dt>
+                <dd><span lang="ja">「なし」「小」「大」から 1 つだけ選びます（2 つ重ねてかけると、声が崩れるため）。「小」は RNNoise で、部屋の雑音・ファンの音などを減らします。スマホでも動きます。「大」は Demucs で、BGM や歌の伴奏も消して、声だけにします。WebGPU の使えるパソコンのブラウザー（Chrome・Edge など）だけで動き、最初の 1 回だけ AI（約 155 MB）をこのサイトから読みます。</span><span lang="en">Pick just one of “Off”, “Light” and “Strong” (stacking two of them damages the voice). “Light” is RNNoise: it reduces room noise, fans and so on, and works on phones too. “Strong” is Demucs: it also removes BGM and backing tracks, leaving the voice. It works only in computer browsers with WebGPU (Chrome, Edge and others), and the AI (about 155 MB) is read from this site the first time only.</span></dd>
                 <dt><span lang="ja">お手本と真似に同じように</span><span lang="en">Same for the model and the imitations</span></dt>
-                <dd><span lang="ja">お手本を録った時の選び方を、そのお手本の間ずっと使います。変えた物は、次のお手本からです。音は端末の中できれいにし、どこにも送りません。</span><span lang="en">The choice made when the model was recorded is used for that whole model. Changes apply from the next model. The sound is cleaned on this device and never sent.</span></dd>
+                <dd><span lang="ja">お手本を録った時のノイズカットを、そのお手本の間ずっと使います。変えた物は、次のお手本からです。音は端末の中できれいにし、どこにも送りません。</span><span lang="en">The noise cut chosen when the model was recorded is used for that whole model. Changes apply from the next model. The sound is cleaned on this device and never sent.</span></dd>
                 <dt><span lang="ja">配信向け</span><span lang="en">Stream view</span></dt>
                 <dd><span lang="ja">下の説明を隠して、点数と順番を大きくします（このタブを閉じるまで覚えます）。</span><span lang="en">Hides the explanations below and makes the score and turn bigger (remembered until this tab is closed).</span></dd>
               </dl>

@@ -2,7 +2,7 @@
 // 2026-11-18 からゲームにした（運営「ゲーム感覚の場所に。お手本もマイクから直接取る方式のみ。マイクによって差が出ちゃうから」）。
 //   遊び方: 「声真似」（お手本の声を真似する）と「逆再生チャレンジ」（逆再生した言葉を真似し、録った声を逆にして元の言葉と比べる）。
 //   人: 何人でも（MAX_PLAYERS まで）順番に。点数表は、お手本ごとの最高点を足して合計にする。配信・コラボ向けに、キーボードでも遊べる。
-//   音をきれいにする: ノイズを減らす（RNNoise）・音楽を消す（Demucs。WebGPU のパソコンだけ）。src/voice/clean.ts。
+//   ノイズカット: なし・小（RNNoise）・大（Demucs。WebGPU のパソコンだけ）から 1 つ。src/voice/clean.ts。2 つ重ねると声が崩れるので、重ねない。
 //     お手本と真似の両方に、同じ物をかける（お手本を録った時の選び方を、そのお手本の間ずっと使う。変えた物は次のお手本から）。
 // お手本が 1 つのセリフ（話しはじめから終わりまで LINE_MAX_SECONDS 以内）なら「セリフ真似」: 抑揚・タイミング（mimic/line.ts）と
 // 声の質（mimic.ts）で比べ、2 本の線を重ねた図を出す。それより長いお手本は「声全体」: 声の数字だけで比べる。
@@ -13,8 +13,9 @@
 // 止まる。音が来ないまま 60 秒たった時も止める）。真似して話す時は、ページが隠れたらすぐ止める。
 // 声の登録は、声を登録するページ（register.html）に分けた（タブの音・音声ファイルも使えるように）。
 // 画面（2026-11-18、運営「ゲーム画面は逆再生キングみたいに、文字は下の方に隠して遊びやすい形に」）: 遊ぶ所を 1 つの大きな枠（#game）に
-// まとめ、段階（data-phase）で中身を入れ替える。ref = お手本を録る、mim = 聞いて真似する、result = 点数。上に出す言葉は短い 1 行（#cue）
-// だけにし、説明・設定・くわしい結果は、下の折りたたみ（.more）に置く。名前・見た目は、ほかのゲームから写さない。
+// まとめ、段階（data-phase）で中身を入れ替える。ref = お手本を録る、mim = 聞いて真似する、result = 点数。今することは短い 1 行（#cue）
+// だけにして字幕のように下に出し、説明・設定・くわしい結果は、下の折りたたみ（.more）に置く。点数は、数えあがる数字・ランク・
+// お手本とあなたの高さの線を重ねた図（2026-11-19、運営が示した配信の動画を見て、遊び方の作りだけを取った）。名前・絵・見た目は、ほかのゲームから写さない。
 // 声から性別や年齢を判断しない。お題のランダムはお題の選び方だけ。
 import { micErrorText, openMic, type Mic } from '../voice/listen.ts';
 import type { MeasureFail, Measured } from '../voice/measure.ts';
@@ -29,7 +30,7 @@ import { compareLines, LINE_MAX_SECONDS, lineScore } from '../mimic/line.ts';
 import { drawLineChart } from './line-chart.ts';
 import { mountShapes } from './voiceprint.ts';
 import { el, itemRow, renderGroups } from './items.ts';
-import { adviceFor, differences, mimicScore, scoreWord } from '../mimic/mimic.ts';
+import { adviceFor, differences, mimicScore, scoreRank, scoreWord } from '../mimic/mimic.ts';
 import { nextPromptIndex, nextReadingIndex, promptText, readingText } from '../prompts/prompts.ts';
 import { mountLang, onLang, t } from '../i18n.ts';
 import { mountFooter, mountGithubLink, mountShare } from './share.ts';
@@ -243,20 +244,31 @@ $('board-clear').addEventListener('click', () => {
   drawBoard();
 });
 
-/* ---- 音をきれいにする ---- */
-const cleanNoise = $<HTMLInputElement>('clean-noise');
-const cleanMusic = $<HTMLInputElement>('clean-music');
+/* ---- ノイズカット（なし・小・大から 1 つ。2 つ重ねると声が崩れるので、重ねない） ---- */
+const cleanInputs = [...document.querySelectorAll<HTMLInputElement>('input[name="clean"]')];
+const cleanBig = $<HTMLInputElement>('clean-big');
+const cleanBigLabel = $('clean-big-label');
 const cleanNote = $('clean-note');
 let music: MusicSupport | null = null;
-const choiceNow = (): CleanChoice => ({ denoise: cleanNoise.checked, music: cleanMusic.checked && !!music?.ok });
-const choiceText = (c: CleanChoice) => [c.music ? t('音楽を消す', 'remove music') : '', c.denoise ? t('ノイズを減らす', 'reduce noise') : ''].filter(Boolean).join(t('・', ', ')) || t('なし', 'none');
-/** 「音をきれいにする」の短い注意（くわしい説明は、下の折りたたみ） */
+const cleanLevel = () => cleanInputs.find((r) => r.checked)?.value ?? 'off';
+const choiceNow = (): CleanChoice => {
+  const v = cleanLevel();
+  return { denoise: v === 'small', music: v === 'big' && !!music?.ok };
+};
+const choiceText = (c: CleanChoice) => (c.music ? t('ノイズカット 大', 'strong noise cut') : c.denoise ? t('ノイズカット 小', 'light noise cut') : t('ノイズカットなし', 'no noise cut'));
+/** 属性の title を、日本語と英語の両方で置き換える（言葉を切り替えても合うように） */
+function setTitle(e: HTMLElement, ja: string, en: string): void {
+  e.setAttribute('data-ja-title', ja);
+  e.setAttribute('data-en-title', en);
+  e.title = t(ja, en);
+}
+/** ノイズカットの短い注意（くわしい説明は、下の折りたたみ） */
 function drawClean(): void {
   const notes: string[] = [];
   if (music && !music.ok) {
-    const why = music.why === 'gpu' ? t('「音楽を消す」は、このブラウザーでは使えません（WebGPU のパソコンの Chrome・Edge など）', '“Remove music” is not available in this browser (needs WebGPU: Chrome, Edge… on a computer)') : t('「音楽を消す」の AI が、まだこのサイトにありません', 'The AI for “Remove music” is not on this site yet');
-    cleanMusic.closest('label')!.title = why;
-  } else if (music?.ok && cleanMusic.checked && !model) notes.push(t(`最初の 1 回だけ AI（約 ${Math.round(music.bytes / 1e6)} MB）を読みます。音は送りません`, `Reads the AI (about ${Math.round(music.bytes / 1e6)} MB) the first time only. No sound is sent`));
+    if (music.why === 'gpu') setTitle(cleanBigLabel, 'ノイズカットの「大」は、このブラウザーでは使えません（WebGPU のパソコンの Chrome・Edge など）', '“Strong” noise cut is not available in this browser (needs WebGPU: Chrome, Edge… on a computer)');
+    else setTitle(cleanBigLabel, 'ノイズカットの「大」の AI が、まだこのサイトにありません', 'The AI for “Strong” noise cut is not on this site yet');
+  } else if (music?.ok && cleanLevel() === 'big' && !model) notes.push(t(`「大」は、最初の 1 回だけ AI（約 ${Math.round(music.bytes / 1e6)} MB）を読みます。音は送りません`, `“Strong” reads the AI (about ${Math.round(music.bytes / 1e6)} MB) the first time only. No sound is sent`));
   if (model) {
     const now = choiceNow();
     const same = now.denoise === model.clean.denoise && now.music === model.clean.music;
@@ -265,26 +277,26 @@ function drawClean(): void {
   cleanNote.textContent = notes.join(t('。', '. '));
   cleanNote.hidden = !notes.length;
 }
-cleanMusic.disabled = true;
+cleanBig.disabled = true;
 void musicSupport().then((s) => {
   music = s;
-  cleanMusic.disabled = !s.ok || isBusy(refState) || isBusy(mimState);
-  if (!s.ok) cleanMusic.checked = false;
+  if (!s.ok && cleanBig.checked) cleanInputs.find((r) => r.value === 'off')!.checked = true;
+  lockAll();
   drawClean();
 });
-for (const c of [cleanNoise, cleanMusic]) c.addEventListener('change', drawClean);
+for (const c of cleanInputs) c.addEventListener('change', drawClean);
 
 /** 音をきれいにしている間の文（言葉を切り替えても出したままにする） */
 function cleanMsg(stage: CleanStage, done: number, total: number): Msg {
   switch (stage) {
     case 'download':
-      return M(`音楽を消す AI を読んでいます… ${Math.floor((done / total) * 100)}%（最初の 1 回だけ）`, `Loading the music-removal AI… ${Math.floor((done / total) * 100)}% (first time only)`);
+      return M(`ノイズカット（大）の AI を読んでいます… ${Math.floor((done / total) * 100)}%（最初の 1 回だけ）`, `Loading the AI for strong noise cut… ${Math.floor((done / total) * 100)}% (first time only)`);
     case 'prepare':
-      return M(`音楽を消す AI を用意しています… ${done} / ${total}`, `Getting the music-removal AI ready… ${done} / ${total}`);
+      return M(`ノイズカット（大）の AI を用意しています… ${done} / ${total}`, `Getting the AI for strong noise cut ready… ${done} / ${total}`);
     case 'separate':
-      return M(`音楽を消しています… ${done} / ${total}`, `Removing music… ${done} / ${total}`);
+      return M(`ノイズカット（大）をかけています… ${done} / ${total}`, `Applying strong noise cut… ${done} / ${total}`);
     default:
-      return M('ノイズを減らしています…', 'Reducing noise…');
+      return M('ノイズカット（小）をかけています…', 'Applying light noise cut…');
   }
 }
 
@@ -306,8 +318,7 @@ function lockAll(): void {
   const busy = isBusy(refState) || isBusy(mimState);
   mics.lock(busy);
   for (const r of modeInputs) r.disabled = busy;
-  cleanNoise.disabled = busy;
-  cleanMusic.disabled = busy || !music?.ok;
+  for (const r of cleanInputs) r.disabled = busy || (r === cleanBig && !music?.ok);
   drawPlayers();
   drawPlay();
 }
@@ -673,7 +684,7 @@ function refFinish(): void {
       return;
     }
     if ('error' in r) {
-      showRef('failed', M('音をきれいにできませんでした。「音をきれいにする」を外すか、ページを読み直して、もう一度録ってください。', 'The sound could not be cleaned up. Untick “Clean up the sound” or reload the page, then record again.'), true);
+      showRef('failed', M('ノイズカットをかけられませんでした。ノイズカットを「なし」にするか、ページを読み直して、もう一度録ってください。', 'The noise cut could not be applied. Set the noise cut to “Off” or reload the page, then record again.'), true);
       return;
     }
     const { clip, m } = r;
@@ -800,7 +811,7 @@ function drawMimHints(): void {
   topicBox.hidden = !model || mode === 'reverse' || !!model.target.contour;
 }
 
-/* ---- 段階と、上に出す短い言葉 ---- */
+/* ---- 段階と、今することの短い 1 行（字幕のように下に出す） ---- */
 type Phase = 'ref' | 'mim' | 'result';
 function phaseNow(): Phase {
   // お手本が無い・新しいお手本を録っている間は「お手本を録る」。録り直しに失敗した時は、前のお手本で続けられる
@@ -830,7 +841,7 @@ function cueText(ph: Phase): string {
   }
 }
 const cue = $('cue');
-/** 枠の段階と、上の短い言葉を描く（showRef・showMim の最後に） */
+/** 枠の段階と、今することの 1 行を描く（showRef・showMim の最後に） */
 function drawStage(): void {
   const ph = phaseNow();
   game.dataset.phase = ph;
@@ -838,7 +849,24 @@ function drawStage(): void {
   game.dataset.mim = mimState;
   const text = cueText(ph);
   if (cue.textContent !== text) cue.textContent = text;
+  requestAnimationFrame(placeCue);
 }
+/** 今することの 1 行は、枠が画面より長い時、画面の下に貼り付ける（CSS の sticky）。ただし、そこにボタンやうまくいかなかった
+ *  知らせがある時は貼り付けない（隠さない。その時は、枠のいちばん下に置く） */
+function placeCue(): void {
+  if (!cue.textContent) return;
+  const room = innerHeight - cue.offsetHeight - 24;
+  const keep = game.querySelectorAll<HTMLElement>('.actions, .result-actions, .playback, .status.bad');
+  let cover = false;
+  for (const e of keep) {
+    if (!e.offsetHeight || !e.textContent?.trim()) continue;
+    const b = e.getBoundingClientRect();
+    if (b.bottom > room && b.top < innerHeight) cover = true;
+  }
+  cue.classList.toggle('flow', cover);
+}
+addEventListener('scroll', placeCue, { passive: true });
+addEventListener('resize', placeCue);
 
 const mim = {
   stage: $('mim'),
@@ -939,7 +967,7 @@ function mimFinish(): void {
       return;
     }
     if ('error' in r) {
-      showMim('failed', M('音をきれいにできませんでした。「音をきれいにする」を外して、お手本から録り直してください。', 'The sound could not be cleaned up. Untick “Clean up the sound” and record the model again.'), true);
+      showMim('failed', M('ノイズカットをかけられませんでした。ノイズカットを「なし」にして、お手本から録り直してください。', 'The noise cut could not be applied. Set the noise cut to “Off” and record the model again.'), true);
       return;
     }
     const { clip, m } = r;
@@ -1058,7 +1086,7 @@ function failText(reason: MeasureFail, voiced: number | undefined, isModel: bool
     case 'noisy':
       // ほかの音のほか、静かな所でも、息の多い声・ささやき声でこうなる。ほかの音が多いとは言い切らない
       return isModel
-        ? t('お手本の声をはっきり聞き取れませんでした。BGM・効果音・雑音や、息の多い声・ささやき声だと、こうなることがあります。「音をきれいにする」を使うか、声だけの所を聞かせてください。', 'The model’s voice could not be picked out clearly. BGM, sound effects, noise, or a breathy or whispered voice can cause this. Use “Clean up the sound”, or play a part with the voice alone.')
+        ? t('お手本の声をはっきり聞き取れませんでした。BGM・効果音・雑音や、息の多い声・ささやき声だと、こうなることがあります。ノイズカット（BGM があれば「大」）を使うか、声だけの所を聞かせてください。', 'The model’s voice could not be picked out clearly. BGM, sound effects, noise, or a breathy or whispered voice can cause this. Use the noise cut (“Strong” if there is BGM), or play a part with the voice alone.')
         : t('声をはっきり聞き取れませんでした。まわりの音や、息の多い声・ささやき声だと、こうなることがあります。静かな所で、ささやかずに、もう一度話してください。', 'The voice could not be picked out clearly. Background sound, or a breathy or whispered voice, can cause this. Try again somewhere quiet, without whispering.');
     case 'clipped':
       return isModel ? t('お手本の音が大きすぎて、割れていました。少し離れるか、音量を下げてください。', 'The model was so loud that it distorted. Move back a little or turn the volume down.') : t('声が大きすぎて、音が割れていました。マイクから少し離れてください。', 'The voice was so loud that it distorted. Move a little away from the microphone.');
@@ -1072,10 +1100,16 @@ function failText(reason: MeasureFail, voiced: number | undefined, isModel: bool
 }
 
 /* ---- 結果 ---- */
-/** 点数: 輪（CSS の --score）と、数えあがる数字。動きを減らす設定では、すぐその数 */
+/** 点数: 輪（CSS の --score）と、数えあがる数字と、ランク。動きを減らす設定では、すぐその数 */
 function showScore(score: number): void {
   const gauge = $('gauge');
   const num = $('score');
+  // ランクは、点数が数えあがった後に出す（毎回、出し直す）
+  const rank = $('rank');
+  rank.textContent = scoreRank(score);
+  rank.classList.remove('pop');
+  void rank.offsetWidth;
+  rank.classList.add('pop');
   // 輪は毎回、まずすぐ 0 に戻し、それから点数まで満ちる
   gauge.style.transition = 'none';
   gauge.style.setProperty('--score', '0');
