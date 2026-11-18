@@ -115,14 +115,19 @@ function drawPlayers(): void {
   const busy = isBusy(refState) || isBusy(mimState);
   playerList.replaceChildren(
     ...players.map((p, i) => {
-      const li = el('li', i === turn ? 'player now' : 'player');
+      // 1 人の時は「の番」・番号・枠の色を出さない（対戦の相手がいるように見えた。人を足した時だけ、同じ画面で順番に回す）
+      const many = players.length > 1;
+      const li = el('li', many && i === turn ? 'player now' : 'player');
       const pick = el('button', 'player-pick');
       pick.type = 'button';
       pick.disabled = busy;
-      pick.append(el('span', 'player-no', String(i + 1)), el('span', 'player-name', p.name));
-      if (i === turn) pick.append(el('span', 'player-turn', t('の番', '’s turn')));
-      pick.setAttribute('aria-pressed', String(i === turn));
-      pick.title = t(`${p.name}の番にする`, `Make it ${p.name}’s turn`);
+      if (many) pick.append(el('span', 'player-no', String(i + 1)));
+      pick.append(el('span', 'player-name', p.name));
+      if (many && i === turn) pick.append(el('span', 'player-turn', t('の番', '’s turn')));
+      if (many) {
+        pick.setAttribute('aria-pressed', String(i === turn));
+        pick.title = t(`${p.name}の番にする`, `Make it ${p.name}’s turn`);
+      }
       pick.addEventListener('click', () => {
         turn = i;
         drawPlayers();
