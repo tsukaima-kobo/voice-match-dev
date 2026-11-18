@@ -405,14 +405,13 @@ footer.site-foot .foot-links { display: flex; flex-wrap: wrap; gap: 6px 18px; ju
    遊ぶ所は 1 つの枠（.game）。段階（data-phase: ref = お手本を録る・mim = 聞いて真似する・result = 点数）で中身を入れ替える。
    今することの短い 1 行（.cue）は、字幕のように下に。点数の時は、ランクと、高さの線を重ねた図も。説明・設定・くわしい結果は、下の折りたたみ（.game-more）。 */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64px); }
+main.game-page { padding-top: clamp(10px, 1.4vw, 20px); gap: clamp(32px, 4vw, 64px); }
 .game-wrap { display: grid; gap: var(--gap); align-items: start; min-width: 0; }
 /* 1 人で遊ぶ枠だけ（点数表は 2026-11-19 に外した）。広い画面でも、横に広がりすぎない */
 .game-wrap, .game-more { width: 100%; max-width: 920px; margin-inline: auto; }
-.game { position: relative; display: grid; grid-template-rows: auto 1fr; gap: clamp(12px, 1.4vw, 18px); padding: clamp(14px, 2vw, 28px); min-height: min(940px, calc(100svh - 120px)); min-width: 0; overflow: hidden; overflow: clip; transition: border-color 0.3s, box-shadow 0.3s; }
+.game-wrap { max-width: 1240px; }
+.game { position: relative; display: grid; grid-template-rows: auto 1fr; gap: clamp(12px, 1.4vw, 18px); padding: clamp(14px, 2vw, 28px); min-height: clamp(520px, calc(100svh - 96px), 1000px); min-width: 0; overflow: hidden; overflow: clip; transition: border-color 0.3s, box-shadow 0.3s; }
 .game:is([data-ref="listening"], [data-mim="listening"]) { border-color: color-mix(in oklch, var(--a1) 55%, transparent); box-shadow: var(--shadow), 0 0 0 4px color-mix(in oklch, var(--a1) 14%, transparent), var(--glow); }
-.game-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; min-width: 0; }
-.game-title { font-size: clamp(1.05rem, 0.6vw + 0.95rem, 1.35rem); font-weight: 900; margin-right: auto; white-space: nowrap; }
 .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 4px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line-strong); }
 .seg label { position: relative; padding: 0.42em 1.05em; border-radius: 999px; font-weight: 800; font-size: 0.92em; cursor: pointer; white-space: nowrap; transition: background-color 0.2s, color 0.2s; }
 .seg input, .toggle input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
@@ -420,30 +419,19 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 .seg label:has(input:disabled) { opacity: 0.6; cursor: default; }
 .seg label:has(input:focus-visible), .toggle:has(input:focus-visible) { outline: 3px solid var(--a2); outline-offset: 2px; }
 .toggles { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; }
-.game-bar .toggles { margin-left: 0; }
-/* ノイズカット: なし・小・大の小さな切り替え（どれか 1 つ） */
-.seg-sm { flex-wrap: nowrap; align-items: center; padding: 3px; font-size: 0.84em; }
-.seg-sm label { padding: 0.3em 0.9em; font-size: 1em; }
-.seg-title { padding: 0 0.35em 0 0.8em; font-weight: 700; color: var(--muted); white-space: nowrap; }
-.game-bar .clean-seg { margin-left: auto; }
 .toggle { position: relative; display: inline-flex; align-items: center; gap: 0.5em; padding: 0.36em 0.95em; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface-2); font-size: 0.84em; font-weight: 700; cursor: pointer; white-space: nowrap; transition: border-color 0.2s, background-color 0.2s; }
 .toggle::before { content: ""; width: 0.72em; height: 0.72em; flex: none; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--line-strong); transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s; }
 .toggle:has(input:checked) { border-color: color-mix(in oklch, var(--a1) 70%, transparent); background: color-mix(in oklch, var(--a1) 13%, var(--surface-2)); }
 .toggle:has(input:checked)::before { background: var(--a1); border-color: var(--a1); box-shadow: 0 0 8px var(--a1); }
 .toggle:has(input:disabled) { opacity: 0.45; cursor: default; }
-.clean-note { flex-basis: 100%; font-size: 0.8em; color: var(--muted); text-align: right; }
-/* 使うマイク: 上の帯の 2 行目に、小さく（どのマイクで録るかが、いつも見えるように） */
-.game-bar .game-mic { flex: 1 1 100%; justify-content: flex-end; font-size: 0.8em; gap: 6px 8px; }
-.game-bar .game-mic select { flex: 0 1 24em; padding: 0.38em 2.2em 0.38em 0.85em; }
-.game-bar .game-mic button { padding: 0.36em 0.9em; }
 .result-actions { padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; }
 .playback { display: flex; flex-wrap: wrap; gap: 8px; }
 .playback button.playing { border-color: var(--a1); color: var(--a1); }
 /* 縦に並べる（flex。今することの 1 行を、画面の下に貼り付けられるように） */
 .game-body { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: clamp(8px, 1vw, 14px); min-width: 0; }
 .game-body > * { width: 100%; max-width: 780px; min-width: 0; }
-.game .orb-wrap { grid-area: auto; margin-block: calc(-1 * min(3vw, 2.5svh)); }
-.game .orb { width: min(56vw, 24svh, 280px); }
+.game .orb-wrap { grid-area: auto; margin-top: auto; margin-bottom: calc(-1 * min(3vw, 2.5svh)); isolation: isolate; }
+.game .orb { width: min(60vw, 30svh, 340px); }
 .game[data-phase="result"] .orb-wrap { display: none; }
 .cue { font-family: var(--f-display); font-weight: 900; font-size: clamp(1.35rem, 1.6vw + 0.9rem, 2.3rem); line-height: 1.3; letter-spacing: -0.02em; text-wrap: balance; }
 .cue:empty { display: none; }
@@ -493,12 +481,16 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 .game .line-frame .axis.lo { bottom: 24%; }
 .game .line-foot { font-size: 0.7rem; }
 /* ランク（S・A・B・C・D）: 点数の輪の右下に大きく。点数が数えあがった後に出る */
-.score-rank { position: absolute; z-index: 2; right: -6%; bottom: -2%; margin: 0; font-family: var(--f-display); font-weight: 900; font-size: clamp(2.4rem, 3vw + 1.2rem, 4.2rem); line-height: 1; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 3px 12px color-mix(in oklch, var(--a1) 45%, transparent)); }
+.score-rank { --rank: linear-gradient(135deg, oklch(0.8 0.17 350), oklch(0.62 0.24 330)); --rank-ring: oklch(0.78 0.18 350); position: absolute; z-index: 2; right: -3%; bottom: -3%; margin: 0; display: grid; place-items: center; width: 1.42em; height: 1.42em; font-family: var(--f-display); font-weight: 900; font-size: clamp(2.2rem, 2.6vw + 1.2rem, 3.8rem); line-height: 1; color: oklch(0.16 0.04 285); background: var(--rank); border-radius: 28%; rotate: -9deg; text-shadow: 0 1px 0 oklch(1 0 0 / 0.4); box-shadow: 0 0 0 4px oklch(0.12 0.04 285), 0 0 0 7px var(--rank-ring), 0 14px 34px -6px color-mix(in oklch, var(--rank-ring) 70%, transparent); }
+.score-rank[data-rank="S"] { --rank: linear-gradient(135deg, oklch(0.97 0.1 95), oklch(0.85 0.17 80) 50%, oklch(0.72 0.17 60)); --rank-ring: oklch(0.9 0.16 88); }
+.score-rank[data-rank="B"] { --rank: linear-gradient(135deg, oklch(0.8 0.14 295), oklch(0.6 0.22 290)); --rank-ring: oklch(0.75 0.17 295); }
+.score-rank[data-rank="C"] { --rank: linear-gradient(135deg, oklch(0.9 0.1 205), oklch(0.72 0.13 225)); --rank-ring: oklch(0.85 0.12 210); }
+.score-rank[data-rank="D"] { --rank: linear-gradient(135deg, oklch(0.85 0.02 285), oklch(0.65 0.03 285)); --rank-ring: oklch(0.75 0.02 285); }
 .score-rank:empty { display: none; }
 @media (prefers-reduced-motion: no-preference) { .score-rank.pop { animation: rank-pop 0.55s var(--ease-out) 1.25s both; } }
-@keyframes rank-pop { from { opacity: 0; transform: scale(2.4) rotate(-14deg); } }
+@keyframes rank-pop { 0% { opacity: 0; transform: scale(2.6) rotate(-18deg); } 60% { opacity: 1; transform: scale(0.92); } }
 /* 今することの 1 行は、字幕のように下に（遊ぶ所の真ん中は、声の玉とボタンだけに）。枠が画面より長い時は、画面の下に貼り付ける */
-.game .cue { order: 9; position: sticky; bottom: 12px; z-index: 3; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); width: auto; margin-top: clamp(2px, 0.8vw, 10px); padding: 0.38em 1.1em; border-radius: 14px; border: 1px solid var(--line); background: color-mix(in oklch, var(--surface-solid) 72%, transparent); font-size: clamp(1.05rem, 0.8vw + 0.85rem, 1.55rem); }
+.game .cue { order: 9; position: sticky; bottom: 12px; z-index: 3; width: auto; max-width: min(100%, 920px); margin-top: auto; padding: 0.32em 1.2em 0.4em; border: 0; border-radius: 12px; background: oklch(0.08 0.02 285 / 0.74); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); color: #fff; font-weight: 900; font-size: clamp(1.1rem, 1vw + 0.88rem, 1.85rem); letter-spacing: 0.02em; text-shadow: 0 2px 0 oklch(0 0 0 / 0.7), 0 0 20px oklch(0.62 0.25 330 / 0.6); box-shadow: 0 0 0 1px oklch(1 0 0 / 0.08), 0 12px 30px -12px #000; }
 .more-link { padding: 0.3em 0.9em; border: 0; background: none; box-shadow: none; backdrop-filter: none; color: var(--link); font-size: 0.88em; }
 /* キーボードの印（マウスのある画面だけ） */
 @media (hover: hover) and (pointer: fine) {
@@ -506,18 +498,158 @@ main.game-page { padding-top: clamp(12px, 2.4vw, 32px); gap: clamp(32px, 4vw, 64
 }
 /* スマホ: 上の操作を詰め、玉を小さくして、録るボタンまで 1 画面に（配信向けの表示は、パソコンだけ） */
 @media (max-width: 599px) {
-  .game-bar { gap: 6px; }
-  .game-bar .clean-seg { margin-left: 0; font-size: 0.78em; }
-  .game-bar .game-mic { justify-content: flex-start; flex-wrap: nowrap; }
-  .game-bar .game-mic label { white-space: nowrap; }
-  .game-bar .game-mic select { flex: 1 1 auto; width: 0; }
-  .game-bar .game-mic button { white-space: nowrap; flex: none; }
-  .toggle { font-size: 0.78em; padding: 0.32em 0.8em; }
   .toggle:has(#stream-view) { display: none; }
   .seg label { font-size: 0.86em; padding: 0.38em 0.9em; }
   /* スマホでは上の見出しが付いてこないので、遊ぶ枠を画面のいちばん上に合わせる */
   html:has(#game) { scroll-padding-top: 8px; }
   .game .orb { width: min(40vw, 22svh, 300px); }
+}
+/* ---- ゲームの見た目（2026-11-19、運営「ただの HTML ページって感じだから、ゲーム画面っぽく」） ----
+   遊ぶ枠は、明るい表示の時も暗い舞台（色はここで決め直す）。上から光、下に動く床、声の玉は台の上。
+   上の帯: 遊び方・1 2 3 の段階・設定（マイクの名前とノイズカットの札。押すと板が開く）。ボタンは厚みのある押しボタン。 */
+.game {
+  color-scheme: dark;
+  --bg: oklch(0.13 0.04 285);
+  --bg-deep: oklch(0.1 0.035 285);
+  --surface: oklch(0.22 0.05 285 / 0.6);
+  --surface-solid: oklch(0.19 0.045 285);
+  --surface-2: oklch(0.3 0.06 285 / 0.5);
+  --ink: oklch(0.97 0.012 285);
+  --muted: oklch(0.8 0.03 285);
+  --line: oklch(1 0 0 / 0.1);
+  --line-strong: oklch(1 0 0 / 0.22);
+  --a1: oklch(0.73 0.22 355);
+  --a2: oklch(0.7 0.19 295);
+  --a3: oklch(0.86 0.13 205);
+  --link: oklch(0.84 0.12 325);
+  --warn: oklch(0.86 0.14 80);
+  --wave: oklch(0.78 0.16 320);
+  --orb-ring: oklch(0.96 0.03 285);
+  --grad: linear-gradient(115deg, var(--a1), var(--a2) 52%, var(--a3));
+  --grad-btn: linear-gradient(115deg, oklch(0.63 0.25 355), oklch(0.53 0.26 292));
+  --glow: 0 14px 44px -12px oklch(0.6 0.26 330 / 0.55);
+  --edge: oklch(0.36 0.18 318);
+  color: var(--ink);
+  background: radial-gradient(90% 60% at 50% 0%, oklch(0.26 0.1 300 / 0.9), transparent 70%), linear-gradient(oklch(0.15 0.05 288), oklch(0.1 0.035 280));
+  border: 1px solid oklch(0.7 0.19 295 / 0.35);
+  border-radius: clamp(18px, 2vw, 30px);
+  box-shadow: 0 0 0 1px oklch(0 0 0 / 0.35), 0 30px 80px -30px oklch(0.3 0.2 300 / 0.8), inset 0 1px 0 oklch(1 0 0 / 0.07);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.game > :not(.game-fx) { position: relative; z-index: 1; }
+/* 舞台: 上からの光と、奥へ流れる床 */
+.game-fx { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.game-fx .fx-light { position: absolute; inset: -10% 0 35%; background: conic-gradient(from 180deg at 50% -6%, transparent 148deg, oklch(0.82 0.15 330 / 0.13) 162deg, transparent 172deg, oklch(0.85 0.1 220 / 0.1) 188deg, transparent 198deg, oklch(0.8 0.15 300 / 0.12) 208deg, transparent 218deg); mask: linear-gradient(#000 30%, transparent); transition: opacity 0.4s; }
+.game-fx .fx-floor { position: absolute; left: -40%; right: -40%; bottom: 0; height: 46%; overflow: hidden; transform: perspective(300px) rotateX(64deg); transform-origin: 50% 100%; mask: linear-gradient(transparent, #000 45%); opacity: 0.75; }
+.game-fx .fx-floor::before { content: ""; position: absolute; inset: -56px 0 0; background: linear-gradient(oklch(0.72 0.22 330 / 0.5) 2px, transparent 2px) 0 0 / 100% 56px, linear-gradient(90deg, oklch(0.72 0.16 265 / 0.38) 2px, transparent 2px) 50% 0 / 56px 100%; }
+@media (prefers-reduced-motion: no-preference) {
+  .game-fx .fx-floor::before { animation: floor-run 2.6s linear infinite; }
+  .game:is([data-ref="listening"], [data-mim="listening"]) .fx-floor::before { animation-duration: 0.9s; }
+}
+@keyframes floor-run { to { transform: translateY(56px); } }
+.game:is([data-ref="listening"], [data-mim="listening"]) .fx-light { opacity: 1.6; filter: hue-rotate(20deg) saturate(1.4); }
+/* 上の帯 */
+.hud { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px 14px; min-width: 0; }
+.hud .mode-seg { justify-self: start; padding: 5px; background: oklch(0 0 0 / 0.35); }
+.hud .mode-seg label { padding: 0.5em 1.25em; font-size: 0.95em; font-weight: 900; }
+.hud .clean-note { grid-column: 1 / -1; margin: -4px 0 0; font-size: 0.8em; color: var(--muted); text-align: right; }
+.steps { justify-self: center; display: flex; align-items: center; margin: 0; padding: 0; list-style: none; font-size: 0.86em; font-weight: 800; color: var(--muted); }
+.steps li { position: relative; display: inline-flex; align-items: center; gap: 0.45em; padding: 0.28em 0.85em 0.28em 0.3em; border-radius: 999px; border: 1px solid var(--line); background: oklch(1 0 0 / 0.03); white-space: nowrap; transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s; }
+.steps li + li { margin-left: 22px; }
+.steps li + li::before { content: ""; position: absolute; right: calc(100% + 4px); top: 50%; width: 14px; height: 2px; border-radius: 1px; background: var(--line-strong); }
+.steps b { display: inline-grid; place-items: center; width: 1.75em; height: 1.75em; border-radius: 50%; background: oklch(1 0 0 / 0.08); font-family: var(--f-num); font-size: 0.92em; }
+.game[data-phase="ref"] [data-step="ref"], .game[data-phase="mim"] [data-step="mim"], .game[data-phase="result"] [data-step="result"] { color: var(--ink); border-color: color-mix(in oklch, var(--a1) 60%, transparent); background: color-mix(in oklch, var(--a1) 16%, transparent); box-shadow: 0 0 22px -6px var(--a1); }
+.game[data-phase="ref"] [data-step="ref"] b, .game[data-phase="mim"] [data-step="mim"] b, .game[data-phase="result"] [data-step="result"] b { background: var(--grad-btn); color: #fff; }
+.game:is([data-phase="mim"], [data-phase="result"]) [data-step="ref"], .game[data-phase="result"] [data-step="mim"] { color: var(--ink); }
+.game:is([data-phase="mim"], [data-phase="result"]) [data-step="ref"] b, .game[data-phase="result"] [data-step="mim"] b { background: color-mix(in oklch, var(--a3) 34%, transparent); }
+/* 設定: 札を押すと、下に板が開く */
+.hud-set { position: relative; justify-self: end; min-width: 0; max-width: 100%; }
+.hud-set > summary { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 6px; border-radius: 999px; border: 1px solid var(--line-strong); background: oklch(0 0 0 / 0.3); font-size: 0.8em; font-weight: 700; cursor: pointer; list-style: none; min-width: 0; transition: border-color 0.2s, background-color 0.2s; }
+.hud-set > summary::-webkit-details-marker { display: none; }
+.hud-set > summary:hover, .hud-set[open] > summary { border-color: color-mix(in oklch, var(--a1) 70%, transparent); background: color-mix(in oklch, var(--a1) 12%, oklch(0 0 0 / 0.3)); }
+.hud-set > summary:focus-visible { outline: 3px solid var(--a2); outline-offset: 2px; }
+.set-chip { padding: 0.25em 0.8em; border-radius: 999px; background: oklch(1 0 0 / 0.07); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.set-chip[hidden] { display: none; }
+.set-mic { flex: 0 1 auto; max-width: 16em; }
+.set-mic::before { content: ""; display: inline-block; width: 0.62em; height: 0.92em; margin-right: 0.45em; vertical-align: -0.1em; border-radius: 0.32em; border: 2px solid currentColor; box-sizing: border-box; }
+#set-clean { flex: none; }
+.set-gear { flex: none; width: 2.1em; height: 2.1em; border-radius: 50%; background: var(--grad-btn); box-shadow: 0 3px 0 var(--edge); position: relative; }
+.set-gear::before { content: ""; position: absolute; inset: 22%; background: #fff; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M3 7h11M19 7h2M3 17h4M12 17h9'/%3E%3Ccircle cx='16.5' cy='7' r='2.5'/%3E%3Ccircle cx='9.5' cy='17' r='2.5'/%3E%3C/svg%3E") center / contain no-repeat; }
+.set-panel { position: absolute; z-index: 30; top: calc(100% + 10px); right: 0; width: min(460px, calc(100vw - 64px)); display: grid; gap: 12px; padding: 16px 18px 18px; border-radius: 18px; border: 1px solid var(--line-strong); background: oklch(0.17 0.045 285 / 0.97); box-shadow: 0 28px 60px -20px #000, 0 0 0 1px oklch(0 0 0 / 0.4); text-align: left; font-size: 0.9em; }
+@media (prefers-reduced-motion: no-preference) { .hud-set[open] .set-panel { animation: rise 0.25s var(--ease-out) both; } }
+.set-label { margin: 0; font-weight: 800; }
+.set-hint { margin: -4px 0 4px; color: var(--muted); font-size: 0.86em; }
+.set-panel .clean-seg { justify-self: start; }
+.set-panel .game-mic { padding-top: 12px; border-top: 1px solid var(--line); flex-wrap: wrap; font-size: 1em; }
+.set-panel .game-mic label { flex-basis: 100%; }
+.set-panel .game-mic select { flex: 1 1 12em; max-width: none; }
+.set-panel .toggles { padding-top: 12px; border-top: 1px solid var(--line); }
+/* ボタン: 厚みのある押しボタン（押すと沈む） */
+.game button { font-weight: 800; }
+.game button:not(.primary, .more-link) { border: 2px solid var(--line-strong); background-color: oklch(1 0 0 / 0.06); box-shadow: 0 4px 0 oklch(0 0 0 / 0.5); }
+.game button:not(.primary, .more-link):hover:not(:disabled) { border-color: color-mix(in oklch, var(--a2) 80%, transparent); background-color: color-mix(in oklch, var(--a2) 16%, transparent); transform: translateY(-1px); }
+.game button:not(.primary, .more-link):active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 oklch(0 0 0 / 0.5); }
+.game button.primary { background: linear-gradient(oklch(1 0 0 / 0.24), transparent 55%), var(--grad-btn); background-size: 180% 100%; font-weight: 900; letter-spacing: 0.05em; text-shadow: 0 2px 0 oklch(0.3 0.15 320 / 0.55); box-shadow: 0 6px 0 var(--edge), 0 20px 44px -12px oklch(0.6 0.26 330 / 0.75), inset 0 -3px 0 oklch(0 0 0 / 0.14); }
+.game button.primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 0 var(--edge), 0 24px 50px -12px oklch(0.6 0.26 330 / 0.85), inset 0 -3px 0 oklch(0 0 0 / 0.14); }
+.game button.primary:active:not(:disabled) { transform: translateY(5px); box-shadow: 0 1px 0 var(--edge), 0 10px 24px -12px oklch(0.6 0.26 330 / 0.6), inset 0 -3px 0 oklch(0 0 0 / 0.14); }
+.game button.primary:disabled { box-shadow: 0 6px 0 oklch(0 0 0 / 0.4); }
+/* 録っている間の「録り終えた」: 外へ広がる輪 */
+@media (prefers-reduced-motion: no-preference) { .game :is(#ref-done, #mim-done):not([hidden]) { animation: rec-ring 1.3s ease-out infinite; } }
+@keyframes rec-ring { from { outline: 3px solid color-mix(in oklch, var(--a1) 80%, transparent); outline-offset: 2px; } to { outline: 3px solid transparent; outline-offset: 16px; } }
+.game button.playing { border-color: var(--a1); color: var(--a1); box-shadow: 0 4px 0 oklch(0 0 0 / 0.5), 0 0 22px -6px var(--a1); }
+/* 声の玉は台の上 */
+.game .orb-wrap::before { content: ""; position: absolute; z-index: -1; left: 50%; bottom: 17%; width: 62%; aspect-ratio: 4 / 1; translate: -50% 0; border-radius: 50%; background: radial-gradient(closest-side, oklch(0.72 0.22 325 / 0.55), oklch(0.6 0.2 290 / 0.16) 65%, transparent); }
+.game .orb-wrap::after { content: ""; position: absolute; z-index: -1; left: 50%; bottom: 19%; width: 46%; aspect-ratio: 4.2 / 1; translate: -50% 0; border-radius: 50%; border: 2px solid oklch(0.85 0.13 310 / 0.5); box-shadow: 0 0 26px oklch(0.7 0.22 320 / 0.55), inset 0 0 16px oklch(0.7 0.22 320 / 0.4); }
+.game .orb-label { background: oklch(0 0 0 / 0.45); border-color: var(--line-strong); color: var(--ink); }
+/* 進む棒: 太く、斜めの縞 */
+.game .meter .track { height: 12px; border-radius: 6px; background: oklch(1 0 0 / 0.08); box-shadow: inset 0 1px 3px oklch(0 0 0 / 0.5); }
+.game .meter .fill { border-radius: 6px; background: repeating-linear-gradient(-45deg, oklch(1 0 0 / 0.2) 0 8px, transparent 8px 16px), var(--grad); }
+/* お手本の名前: 札のように */
+.game #ref-name { border-style: dashed; background: oklch(0 0 0 / 0.25); font-size: 0.86em; }
+.game .ref-summary { font-weight: 700; }
+/* 段階が変わった時、板が下から出る */
+@media (prefers-reduced-motion: no-preference) {
+  .game :is(#mim, #result) { animation: board-in 0.5s var(--ease-out) both; }
+  .game .cue.swap { animation: cue-in 0.35s var(--ease-out) both; }
+}
+@keyframes board-in { from { opacity: 0; translate: 0 20px; scale: 0.97; } }
+@keyframes cue-in { from { opacity: 0; translate: 0 10px; } }
+/* 点数: 光の筋・太い数字・ランクの札・新記録の帯 */
+.game[data-phase="result"] #result { margin-top: auto; }
+.game .gauge { isolation: isolate; }
+.game .gauge .rays { position: absolute; z-index: -1; inset: -34%; border-radius: 50%; background: repeating-conic-gradient(oklch(0.85 0.16 330 / 0.2) 0deg 5deg, transparent 5deg 15deg); mask: radial-gradient(closest-side, #000 35%, transparent 75%); }
+@media (prefers-reduced-motion: no-preference) { .game .gauge .rays { animation: rays-in 0.8s var(--ease-out) both, rays-turn 30s linear infinite; } }
+@keyframes rays-in { from { opacity: 0; scale: 0.6; } }
+@keyframes rays-turn { to { rotate: 360deg; } }
+.game .score-card { column-gap: clamp(28px, 4vw, 64px); }
+.game .score { font-size: clamp(3rem, 3.6vw + 1.3rem, 5.2rem); font-family: var(--f-display); font-weight: 900; letter-spacing: -0.04em; background: linear-gradient(#fff 35%, oklch(0.86 0.1 325)); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 4px 0 oklch(0.3 0.16 310 / 0.75)) drop-shadow(0 0 26px oklch(0.65 0.25 330 / 0.45)); }
+.game .score small { color: var(--muted); -webkit-text-fill-color: var(--muted); }
+.game .score-word { font-size: clamp(1.9rem, 2.8vw + 1rem, 3.4rem); background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 3px 0 oklch(0.2 0.08 300 / 0.8)); }
+@media (prefers-reduced-motion: no-preference) { .game #result:not([hidden]) .score-word { animation: word-in 0.5s var(--ease-out) 1.3s both; } }
+@keyframes word-in { from { opacity: 0; translate: -18px 0; } }
+.game .sub i { height: 12px; border-radius: 3px; mask: repeating-linear-gradient(90deg, #000 0 9px, transparent 9px 12px); }
+.game .best.new { justify-self: start; display: inline-block; padding: 0.3em 1.1em; border-radius: 8px; background: linear-gradient(100deg, oklch(0.93 0.13 92), oklch(0.82 0.17 70)); color: oklch(0.22 0.06 60); font-weight: 900; transform: skewX(-8deg); box-shadow: 0 4px 0 oklch(0.5 0.12 60), 0 0 24px -4px oklch(0.85 0.17 80 / 0.8); }
+@container (max-width: 520px) { .game .best.new { justify-self: center; } .game .score-text { width: 100%; } .game .subscores { width: min(100%, 24em); margin-inline: auto; } }
+.game .line-head .legend { gap: 4px 14px; justify-content: center; }
+@media (prefers-reduced-motion: no-preference) { .game .best.new { animation: best-in 0.5s var(--ease-out) 1.5s both; } }
+@keyframes best-in { from { opacity: 0; transform: skewX(-8deg) scale(1.6); } }
+.game .line-box { padding: 10px 14px 8px; border-radius: 16px; background: oklch(0 0 0 / 0.28); border: 1px solid var(--line); }
+.game .live { background: radial-gradient(120% 80% at 100% 0%, color-mix(in oklch, var(--a2) 18%, transparent), transparent 60%), oklch(0.08 0.03 285 / 0.75); }
+/* 幅が足りない時: 段階は 2 行目に。スマホ: 設定は丸いボタンだけ、枠は画面いっぱい */
+@media (max-width: 899px) {
+  .hud { grid-template-columns: minmax(0, 1fr) auto; }
+  .hud .steps { grid-column: 1 / -1; grid-row: 2; }
+}
+@media (max-width: 599px) {
+  .game { min-height: calc(100svh - 16px); }
+  .hud { gap: 8px; }
+  .hud .mode-seg label { padding: 0.45em 0.95em; font-size: 0.86em; }
+  .hud-set > summary { padding: 3px; border: 0; background: none; }
+  .hud-set .set-chip { display: none; }
+  .steps { font-size: 0.78em; }
+  .steps li + li { margin-left: 16px; }
+  .steps li + li::before { width: 10px; }
 }
 /* 下の折りたたみ（くわしい結果・遊び方・設定・キーボード） */
 .game-more { display: grid; gap: 12px; min-width: 0; }

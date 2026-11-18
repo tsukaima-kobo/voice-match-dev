@@ -3,6 +3,8 @@
 //   遊び方: 「声真似」（お手本の声を真似する）と「逆再生チャレンジ」（逆再生した言葉を真似し、録った声を逆にして元の言葉と比べる）。
 //   1 人で遊ぶ（2026-11-19、運営の答えで、同じ画面で交代する人・名前・次の人へ・点数表を外した。運営が頼んでいない物を足していた）。
 //   今のお手本での最高点と回数だけを持つ。配信向けに、キーボードでも遊べる。
+//   見た目はゲームの画面（2026-11-19、運営「ただの HTML ページって感じだから、ゲーム画面っぽく」）: 暗い舞台・上の帯（遊び方・1 2 3 の段階・
+//   設定）・真ん中に声の玉と大きなボタン・字幕のような今することの 1 行。マイク・ノイズカット・配信向けは、上の帯の設定（マイクの名前の所）の中。
 //   ノイズカット: なし・小（RNNoise）・大（Demucs。WebGPU のパソコンだけ）から 1 つ。src/voice/clean.ts。2 つ重ねると声が崩れるので、重ねない。
 //     お手本と真似の両方に、同じ物をかける（お手本を録った時の選び方を、そのお手本の間ずっと使う。変えた物は次のお手本から）。
 // お手本が 1 つのセリフ（話しはじめから終わりまで LINE_MAX_SECONDS 以内）なら「セリフ真似」: 抑揚・タイミング（mimic/line.ts）と
@@ -142,6 +144,7 @@ function drawClean(): void {
   }
   cleanNote.textContent = notes.join(t('。', '. '));
   cleanNote.hidden = !notes.length;
+  drawSet();
 }
 cleanBig.disabled = true;
 void musicSupport().then((s) => {
@@ -151,6 +154,33 @@ void musicSupport().then((s) => {
   drawClean();
 });
 for (const c of cleanInputs) c.addEventListener('change', drawClean);
+
+/* ---- 上の帯の設定（マイクの名前・ノイズカットの小さな札。押すと、マイク・ノイズカット・配信向けを変える板が開く） ---- */
+const setBox = $<HTMLDetailsElement>('hud-set');
+const setMic = $('set-mic');
+const setClean = $('set-clean');
+const micSelect = $<HTMLSelectElement>('mic-select');
+function drawSet(): void {
+  const name = micSelect.selectedOptions[0]?.textContent?.trim() ?? '';
+  setMic.textContent = name;
+  setMic.hidden = $('mic-pick').hidden || !name;
+  const v = cleanLevel();
+  setClean.textContent = t('ノイズカット ', 'Noise cut: ') + (v === 'small' ? t('小', 'light') : v === 'big' ? t('大', 'strong') : t('なし', 'off'));
+}
+micSelect.addEventListener('change', drawSet);
+// マイクの名前は、許可した後に出る（一覧を作り直す）。出し直した時も札を合わせる
+new MutationObserver(drawSet).observe(micSelect, { childList: true, subtree: true, characterData: true });
+new MutationObserver(drawSet).observe($('mic-pick'), { attributes: true, attributeFilter: ['hidden'] });
+// 板の外を押した時・Esc で閉じる
+document.addEventListener('pointerdown', (e) => {
+  if (setBox.open && !setBox.contains(e.target as Node)) setBox.open = false;
+});
+setBox.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !setBox.open) return;
+  e.stopPropagation();
+  setBox.open = false;
+  setBox.querySelector('summary')!.focus();
+});
 
 /** 音をきれいにしている間の文（言葉を切り替えても出したままにする） */
 function cleanMsg(stage: CleanStage, done: number, total: number): Msg {
@@ -704,8 +734,16 @@ function drawStage(): void {
   game.dataset.phase = ph;
   game.dataset.ref = refState;
   game.dataset.mim = mimState;
+  // 録っている・計算している間は、設定の板を閉じる（その間は変えられない）
+  if (isBusy(refState) || isBusy(mimState)) setBox.open = false;
   const text = cueText(ph);
-  if (cue.textContent !== text) cue.textContent = text;
+  if (cue.textContent !== text) {
+    cue.textContent = text;
+    // 字幕が変わった時、下から出す
+    cue.classList.remove('swap');
+    void cue.offsetWidth;
+    cue.classList.add('swap');
+  }
   requestAnimationFrame(placeCue);
 }
 /** 今することの 1 行は、枠が画面より長い時、画面の下に貼り付ける（CSS の sticky）。ただし、そこにボタンやうまくいかなかった
@@ -917,10 +955,10 @@ function failText(reason: MeasureFail, voiced: number | undefined, isModel: bool
   const mic = micUsed ? t(`（使ったマイク: ${micUsed}）`, ` (mic used: ${micUsed})`) : '';
   switch (reason) {
     case 'silent':
-      return (isModel ? t('お手本の音が聞こえませんでした', 'The model could not be heard') : t('声が聞こえませんでした', 'No voice was heard')) + mic + t('。消音になっていないか、上の「使うマイク」が合っているか確かめてください。', '. Check that the mic is not muted and that “Mic in use” at the top is the right one.');
+      return (isModel ? t('お手本の音が聞こえませんでした', 'The model could not be heard') : t('声が聞こえませんでした', 'No voice was heard')) + mic + t('。消音になっていないか、右上の設定の「使うマイク」が合っているか確かめてください。', '. Check that the mic is not muted and that “Mic in use” in the settings at the top right is the right one.');
     case 'quiet':
       // 雑音より十分大きい音は上げて測り直すので、ここに来るのは、小さい上に雑音との差も少ない音
-      return (isModel ? t('お手本の音が小さくて、まわりの雑音と分けられませんでした', 'The model was too quiet to tell apart from the background noise') : t('声が小さくて、まわりの雑音と分けられませんでした', 'The voice was too quiet to tell apart from the background noise')) + mic + t('。上の「使うマイク」が、音を聞かせているマイクか確かめてください。合っていれば、流す音量か、端末のマイクの音量（入力レベル）を上げてください。', '. Check that “Mic in use” at the top is the mic you are playing into. If it is, turn up the playback volume or the device’s mic input level.');
+      return (isModel ? t('お手本の音が小さくて、まわりの雑音と分けられませんでした', 'The model was too quiet to tell apart from the background noise') : t('声が小さくて、まわりの雑音と分けられませんでした', 'The voice was too quiet to tell apart from the background noise')) + mic + t('。右上の設定の「使うマイク」が、音を聞かせているマイクか確かめてください。合っていれば、流す音量か、端末のマイクの音量（入力レベル）を上げてください。', '. Check that “Mic in use” in the settings at the top right is the mic you are playing into. If it is, turn up the playback volume or the device’s mic input level.');
     case 'noisy':
       // ほかの音のほか、静かな所でも、息の多い声・ささやき声でこうなる。ほかの音が多いとは言い切らない
       return isModel
@@ -945,6 +983,7 @@ function showScore(score: number): void {
   // ランクは、点数が数えあがった後に出す（毎回、出し直す）
   const rank = $('rank');
   rank.textContent = scoreRank(score);
+  rank.dataset.rank = rank.textContent;
   rank.classList.remove('pop');
   void rank.offsetWidth;
   rank.classList.add('pop');
@@ -994,7 +1033,9 @@ function paint(): void {
   const what = reverse ? t(`${tgName ? `「${tgName}」` : '元の言葉'}との近さ（逆再生チャレンジ）`, `closeness to ${tgName ? `“${tgName}”` : 'the original word'} (reverse challenge)`) : t(`${tgName ? `「${tgName}」` : 'お手本'}との近さ${line ? '（セリフ真似）' : ''}`, `closeness to ${tgName ? `“${tgName}”` : 'the model'}${line ? ' (line mimic)' : ''}`);
   $('score-label').textContent = what;
   $('score-word').textContent = scoreWord(score);
-  $('best').textContent = tries === 1 ? '' : before !== null && score > before ? t(`最高点を更新しました（${tries} 回目）`, `New best! (try ${tries})`) : t(`このお手本での最高は ${best} 点です（${tries} 回目）`, `Your best with this model is ${best} (try ${tries})`);
+  const newBest = tries > 1 && before !== null && score > before;
+  $('best').classList.toggle('new', newBest);
+  $('best').textContent = tries === 1 ? '' : newBest ? t(`最高点を更新しました（${tries} 回目）`, `New best! (try ${tries})`) : t(`このお手本での最高は ${best} 点です（${tries} 回目）`, `Your best with this model is ${best} (try ${tries})`);
   $('play-mine-rev').hidden = !reverse;
   // キーボードの M は、比べた向きの声（逆再生チャレンジでは、逆にした声）
   $('play-mine').dataset.key = reverse ? '' : 'M';
