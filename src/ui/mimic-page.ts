@@ -1011,7 +1011,8 @@ function render(tg: Target, mine: Features, mineContour: Contour | undefined, cl
   const voice = mimicScore(tg.features, mine);
   const line = tg.contour && mineContour ? compareLines(tg.contour, mineContour) : null;
   if (!voice && !line) return false;
-  const score = line ? lineScore(line, voice?.score ?? null) : voice!.score;
+  // 逆再生チャレンジは、言葉が戻ってくるか（抑揚とタイミング）だけで見る。声の質は入れない（別の人が真似しても点が出るように）
+  const score = line ? lineScore(line, mode === 'reverse' ? null : (voice?.score ?? null)) : voice!.score;
   const before = best;
   best = Math.max(best ?? 0, score);
   roundTries++;
@@ -1055,6 +1056,7 @@ function paint(): void {
     part('sub-into', line.intonation);
     part('sub-timing', line.timing);
     part('sub-voice', voice?.score ?? null);
+    $('sub-voice').hidden = reverse;
     drawLineChart($('line-chart'), tg.contour!, line.warped);
     $('line-seconds').textContent = t(`${line.refSeconds.toFixed(1)} 秒`, `${line.refSeconds.toFixed(1)} s`);
   }
@@ -1064,12 +1066,21 @@ function paint(): void {
   list.replaceChildren();
   const tips: { text: string; why?: string }[] = [];
   for (const tip of (line?.tips ?? []).slice(0, 2)) tips.push({ text: tip.text });
-  for (const tip of adviceFor(diffs, 3))
+  // 逆再生チャレンジ（セリフで比べた時）は声の質を点に入れないので、声の質の直し方も出さない
+  for (const tip of reverse && line ? [] : adviceFor(diffs, 3))
     tips.push({
       text: tip.text,
       why: t(`（${FEATURE_BY_KEY[tip.key].name}: お手本 ${formatFeature(tip.key, tg.features[tip.key])}・あなた ${formatFeature(tip.key, mine[tip.key])}）`, ` (${FEATURE_BY_KEY[tip.key].name}: model ${formatFeature(tip.key, tg.features[tip.key])}, you ${formatFeature(tip.key, mine[tip.key])})`),
     });
-  if (!tips.length) list.append(el('li', undefined, line ? t('ほぼそろっています。次は、声の出し方の細かい所（息・響き）も寄せてみてください。', 'Nearly matched. Next, try matching the finer points too (breath and resonance).') : t('ほぼそろっています。次は、セリフ 1 つをお手本にして、言い回しや語尾も寄せてみてください。', 'Nearly matched. Next, use a single line as the model and match the phrasing and endings too.')));
+  if (!tips.length) {
+    // 直し方が 1 つも出ない時: 点が低ければ、低い方の内訳（抑揚かタイミング）を言う。「ほぼそろっています」は A（75 点）から
+    let text: string;
+    if (score < 75 && line) text = line.intonation <= line.timing ? t('高さの上がり下がりを、もう一度よく聞いてそろえてみてください。', 'Listen again and match the rises and falls in pitch.') : t(`言う速さと間を、${reverse ? '逆再生の音' : 'お手本'}にそろえてみてください。`, `Match the speed and pauses of the ${reverse ? 'reversed sound' : 'model'}.`);
+    else if (score < 75) text = t('もう一度、お手本をよく聞いて真似してみてください。', 'Listen to the model again and try once more.');
+    else if (line) text = reverse ? t('ほぼそろっています。次は、もっと長い言葉で試してみてください。', 'Nearly matched. Next, try a longer word.') : t('ほぼそろっています。次は、声の出し方の細かい所（息・響き）も寄せてみてください。', 'Nearly matched. Next, try matching the finer points too (breath and resonance).');
+    else text = t('ほぼそろっています。次は、セリフ 1 つをお手本にして、言い回しや語尾も寄せてみてください。', 'Nearly matched. Next, use a single line as the model and match the phrasing and endings too.');
+    list.append(el('li', undefined, text));
+  }
   for (const tip of tips.slice(0, 3)) {
     const li = el('li');
     li.append(el('strong', undefined, tip.text));

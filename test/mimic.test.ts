@@ -59,8 +59,8 @@ describe('直し方', () => {
     expect(adviceFor(d)).toEqual([]);
     expect(adviceFor(differences({ ...base, pitch: base.pitch! * 2 ** (1 / 12) }, base))).toEqual([]);
   });
-  it('大きな違いは 1 つでも効く: 1 オクターブずれると点数が半分を切る', () => {
-    expect(mimicScore({ ...base, pitch: base.pitch! * 2 }, base)!.score).toBeLessThan(50);
+  it('大きな違いは 1 つでも効く: 1 オクターブずれると点数が 60 を切る（高さの幅は ±3 半音）', () => {
+    expect(mimicScore({ ...base, pitch: base.pitch! * 2 }, base)!.score).toBeLessThan(60);
     expect(mimicScore({ ...base, pitch: base.pitch! * 2 ** (1 / 12) }, base)!.score).toBeGreaterThan(95);
   });
   it('こつは多くて n 個、違いの大きい物から', () => {

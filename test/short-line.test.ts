@@ -141,7 +141,7 @@ describe('セリフ真似', () => {
     const a = ok(line(1.2, rise, 1), true).info.contour!;
     const b = ok(line(1.2, fall, 2), true).info.contour!;
     const r = compareLines(a, b)!;
-    expect(r.intonation).toBeLessThan(30);
+    expect(r.intonation).toBeLessThan(40);
     expect(r.tips.map((t) => t.text).join('')).toContain('上げる');
   });
   it('ゆっくりのセリフは、抑揚でなくタイミングに出る', () => {
@@ -200,8 +200,9 @@ describe('セリフ真似', () => {
       expect(total, `seed ${seed}`).toBeCloseTo(best(n - 1, m - 1), 9);
     }
   });
-  it('抑揚・タイミング・声の質の重みは 4 : 2.5 : 3.5。声の質が無くても残りで出す', () => {
-    expect(lineScore({ intonation: 100, timing: 0 }, 0)).toBe(40);
-    expect(lineScore({ intonation: 100, timing: 0 }, null)).toBe(62);
+  it('抑揚・タイミング・声の質の重みは 4.5 : 3 : 2.5。声の質が無い時（逆再生チャレンジ）は 6 : 4', () => {
+    expect(lineScore({ intonation: 100, timing: 0 }, 0)).toBe(45);
+    expect(lineScore({ intonation: 100, timing: 0 }, null)).toBe(60);
+    expect(lineScore({ intonation: 0, timing: 100 }, null)).toBe(40);
   });
 });

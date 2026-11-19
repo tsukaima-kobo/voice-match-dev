@@ -3,6 +3,8 @@
 // 項目ごとに「ここまでのずれなら近い」幅（TOLERANCE、暫定）を決め、ずれをその何倍かにして（5 倍で止める）、
 // 二乗の合計 S から 100·exp(−S/30) を点数にする。項目どうしで平均しないので、1 つの大きなずれ（例: 高さが 1 オクターブ違う）も点に効く。
 // 幅と 30 は、本物の声で「同じ人が 2 回話した時」のずれが分かったら見直す（2026-11-01、目安は同じ人で 80 点台）。
+// 2026-11-19: 別の人がうまく真似しても、声の高さ・響き（体で決まる所）の幅が狭く、声の質がほぼ 0 点だった（運営の友人が試して「全然似てない」）。
+// 声の高さは ±1.5 → ±3 半音、F1・F2・フォルマントの間隔・重心の幅は前の 3 乗に広げた（読み上げの声 9 つで、別の声・同じ言葉の声の質 2 → 22 点）。
 // 同じ数字なら、どの端末でも同じ点数。
 import { FEATURE_BY_KEY, type FeatureKey, type Features } from '../voice/features.ts';
 import { lang, t } from '../i18n.ts';
@@ -13,12 +15,12 @@ export type ScoredKey = (typeof SCORED_KEYS)[number];
 
 /** 近いと見るずれの幅。log の項目（Hz）は比で（例: 1.5 半音 = 2^(1.5/12)） */
 export const TOLERANCE: Record<ScoredKey, number> = {
-  pitch: 2 ** (1.5 / 12),
+  pitch: 2 ** (3 / 12),
   pitchRange: 1.5,
-  f1: 1.08,
-  f2: 1.06,
-  formantSpacing: 1.04,
-  centroid: 1.08,
+  f1: 1.08 ** 3,
+  f2: 1.06 ** 3,
+  formantSpacing: 1.04 ** 3,
+  centroid: 1.08 ** 3,
   hnr: 3,
   h1h2: 3,
   tilt: 3,

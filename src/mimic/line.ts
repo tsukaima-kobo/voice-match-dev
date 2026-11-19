@@ -1,6 +1,6 @@
 // セリフ真似: お手本の 1 つのセリフと、同じセリフを真似した声を、高さの動き（抑揚）と言うタイミングで比べる。DOM なし・乱数なし。
 // 1. 2 つの動き（measure.ts の Contour）を、大きさの形と、自分の真ん中からの高さの動きで、時間を伸び縮みさせてそろえる（DTW）。
-// 2. 抑揚: そろえた所どうしの「自分の真ん中からの高さ」のずれ（半音）の二乗平均から 100·exp(−(rms/2)²)。
+// 2. 抑揚: そろえた所どうしの「自分の真ん中からの高さ」のずれ（半音、6 で止める）の二乗平均から 100·exp(−(rms/2.5)²)。
 //    声の高さそのもの（高い・低い）は、声の質の点（mimic.ts）で見る。ここでは上がり下がりの形だけ。
 // 3. タイミング: 全体の長さの比と、途中の伸び縮みのずれから。
 // 4. 直し方: 出だし・真ん中・語尾のどこで、上げすぎ・下げすぎか。長さが違えば、速く・ゆっくり。
@@ -10,8 +10,10 @@ import { t } from '../i18n.ts';
 
 /** セリフとして比べる長さの上限（話しはじめから話し終わりまで、秒）。これより長いお手本は声全体で比べる */
 export const LINE_MAX_SECONDS = 12;
-/** 抑揚の点の幅（半音） */
-export const INTONATION_WIDTH = 2;
+/** 抑揚の点の幅（半音）。2026-11-19 に 2 → 2.5 */
+export const INTONATION_WIDTH = 2.5;
+/** 抑揚の点で、1 つの所のずれをここで止める（半音。高さを 1 オクターブ違えて測った所が、点を大きく下げないように） */
+export const INTONATION_CLIP = 6;
 /** タイミングの点の幅: 長さの比（log）と、途中のずれ（全体に対する割合） */
 export const LENGTH_WIDTH = 0.5;
 export const DRIFT_WIDTH = 0.08;
@@ -133,7 +135,7 @@ export function compareLines(ref: Contour, mine: Contour): LineResult | null {
     if (finite(p) && c) {
       // +: ここで、あなたの方がお手本より高い（どちらも自分の真ん中から見て）
       const d = warped[i]! - rb - (p - ra);
-      sq += d * d;
+      sq += Math.min(Math.abs(d), INTONATION_CLIP) ** 2;
       pairs++;
       diffs.push({ at: i / Math.max(1, n - 1), d });
     }
@@ -168,13 +170,17 @@ export function compareLines(ref: Contour, mine: Contour): LineResult | null {
   return { intonation, timing, warped, refSeconds, mineSeconds, tips };
 }
 
-/** セリフ真似の点数: 抑揚 4・タイミング 2.5・声の質 3.5 の重み（声の質が出なければ、残りで） */
+/**
+ * セリフ真似の点数: 抑揚 4.5・タイミング 3・声の質 2.5 の重み（2026-11-19 に 4・2.5・3.5 から）。
+ * 声の質が無い時（逆再生チャレンジ・短くて測れない時）は、抑揚 6・タイミング 4 になる。
+ * 逆再生チャレンジは、言葉が戻ってくるかを見る遊びなので、声の質を渡さない（別の人が真似しても点が出るように）
+ */
 export function lineScore(line: Pick<LineResult, 'intonation' | 'timing'>, voice: number | null): number {
   const parts: [number, number][] = [
-    [line.intonation, 0.4],
-    [line.timing, 0.25],
+    [line.intonation, 0.45],
+    [line.timing, 0.3],
   ];
-  if (voice !== null) parts.push([voice, 0.35]);
+  if (voice !== null) parts.push([voice, 0.25]);
   const w = parts.reduce((a, [, x]) => a + x, 0);
   return Math.round(parts.reduce((a, [v, x]) => a + v * x, 0) / w);
 }
